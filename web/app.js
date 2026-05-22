@@ -1,19 +1,99 @@
+import {
+  createAnnotationExport,
+  createBookmark,
+  createHighlight,
+  createTextNote,
+  updateTextNoteBody
+} from "../src/core/annotations.js";
 import { createBookRecord, updateBookSettings, updateLastLocation } from "../src/core/books.js";
-import { createBookmark } from "../src/core/annotations.js";
+import {
+  getBookRecord,
+  parseLibraryState,
+  serializeLibraryState,
+  upsertBookRecord
+} from "../src/core/library.js";
 import { applyZoomIntent, getWheelIntent } from "../src/core/readerControls.js";
 import { DEFAULT_READING_SETTINGS, mergeReadingSettings } from "../src/core/settings.js";
+import { buildTextOnlyCss } from "../src/core/textOnly.js";
+
+const STORAGE_KEY = "minsepubviewer.library";
+
+function formatError(error) {
+  if (!error) {
+    return null;
+  }
+
+  return {
+    name: error.name || "Error",
+    message: error.message || String(error),
+    stack: error.stack || ""
+  };
+}
+
+function logClient(event, details = {}) {
+  const payload = {
+    event,
+    details,
+    location: window.location.href,
+    userAgent: navigator.userAgent
+  };
+
+  fetch("/__client-log", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  }).catch(() => {
+    // Logging must never break the reader.
+  });
+}
+
+window.addEventListener("error", (event) => {
+  logClient("window.error", {
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    error: formatError(event.error)
+  });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  logClient("window.unhandledrejection", {
+    reason: formatError(event.reason) || String(event.reason)
+  });
+});
+
+function loadLibrary() {
+  return parseLibraryState(localStorage.getItem(STORAGE_KEY));
+}
+
+function saveLibrary(library) {
+  localStorage.setItem(STORAGE_KEY, serializeLibraryState(library));
+}
 
 const state = {
+  library: loadLibrary(),
   book: createBookRecord({
     bookId: "sample-book",
     title: "Minse EPUB Viewer",
     settings: DEFAULT_READING_SETTINGS
   }),
+  epubBook: null,
+  rendition: null,
+  toc: [],
+  currentHref: "",
+  selectedRange: "",
+  selectedQuote: "",
+  editingNoteId: "",
   page: 1,
-  pageCount: 5
+  pageCount: 5,
+  progressLabel: ""
 };
 
 const elements = {
+  openBookButton: document.querySelector("#openBookButton"),
   bookInput: document.querySelector("#bookInput"),
   bookTitle: document.querySelector("#bookTitle"),
   bookMeta: document.querySelector("#bookMeta"),
@@ -21,6 +101,7 @@ const elements = {
   fontFamily: document.querySelector("#fontFamily"),
   fontSize: document.querySelector("#fontSize"),
   lineHeight: document.querySelector("#lineHeight"),
+  margin: document.querySelector("#margin"),
   theme: document.querySelector("#theme"),
   textOnly: document.querySelector("#textOnly"),
   zoomLabel: document.querySelector("#zoomLabel"),
@@ -29,17 +110,431 @@ const elements = {
   prevButton: document.querySelector("#prevButton"),
   nextButton: document.querySelector("#nextButton"),
   bookmarkButton: document.querySelector("#bookmarkButton"),
-  bookmarkList: document.querySelector("#bookmarkList")
+  bookmarkList: document.querySelector("#bookmarkList"),
+  tocList: document.querySelector("#tocList"),
+  selectionStatus: document.querySelector("#selectionStatus"),
+  highlightColor: document.querySelector("#highlightColor"),
+  highlightButton: document.querySelector("#highlightButton"),
+  noteBody: document.querySelector("#noteBody"),
+  noteButton: document.querySelector("#noteButton"),
+  exportAnnotationsButton: document.querySelector("#exportAnnotationsButton"),
+  annotationList: document.querySelector("#annotationList")
 };
+
+const activeBook = getBookRecord(state.library, state.library.activeBookId);
+if (activeBook) {
+  state.book = activeBook;
+  state.page = Number(activeBook.lastLocation.replace("page-", "")) || 1;
+}
+
+function persistBook() {
+  state.library = upsertBookRecord(state.library, state.book);
+  saveLibrary(state.library);
+}
+
+function getReaderTheme(settings) {
+  if (settings.theme === "dark") {
+    return { background: "#17191b", color: "#eef1f3" };
+  }
+
+  if (settings.theme === "sepia") {
+    return { background: "#fff9ea", color: "#2b2925" };
+  }
+
+  return { background: "#fffdf8", color: "#202327" };
+}
+
+function getReaderFont(settings) {
+  const fontMap = {
+    system: '"Segoe UI", system-ui, sans-serif',
+    serif: 'Georgia, "Times New Roman", serif',
+    "sans-serif": '"Segoe UI", Arial, sans-serif',
+    monospace: '"Cascadia Mono", Consolas, monospace'
+  };
+
+  return fontMap[settings.fontFamily] || fontMap.system;
+}
+
+function getHighlightStyle(color) {
+  const fills = {
+    yellow: "#f8d94a",
+    green: "#8edb8e",
+    pink: "#f4a3be",
+    blue: "#8ec5f4"
+  };
+
+  return {
+    fill: fills[color] || fills.yellow,
+    "fill-opacity": "0.38",
+    "mix-blend-mode": "multiply"
+  };
+}
+
+function getReaderCss(settings) {
+  const theme = getReaderTheme(settings);
+  const textOnlyCss = settings.textOnly
+    ? buildTextOnlyCss({
+        keepCaptions: settings.keepCaptionsInTextOnly,
+        hideCover: settings.hideCoverInTextOnly
+      })
+    : "";
+
+  return `
+    html,
+    body {
+      min-height: 100% !important;
+      background-color: ${theme.background} !important;
+      color: ${theme.color} !important;
+      font-family: ${getReaderFont(settings)} !important;
+      font-size: ${settings.fontSize}px !important;
+      line-height: ${settings.lineHeight} !important;
+      margin: ${settings.margin}px !important;
+    }
+
+    body * {
+      font-family: inherit !important;
+    }
+
+    img {
+      max-width: 100% !important;
+    }
+
+    ${textOnlyCss}
+  `;
+}
+
+function applyContentSettings(contents) {
+  const document = contents?.document;
+
+  if (!document?.head) {
+    return;
+  }
+
+  const settings = mergeReadingSettings(state.book.settings, {});
+  const styleId = "minse-reader-style";
+  const existing = document.getElementById(styleId);
+  const style = existing || document.createElement("style");
+
+  style.id = styleId;
+  style.dataset.minseReader = "true";
+  style.textContent = getReaderCss(settings);
+
+  if (!existing) {
+    document.head.appendChild(style);
+  }
+}
+
+function applyRenditionSettings() {
+  if (!state.rendition) {
+    return;
+  }
+
+  const settings = mergeReadingSettings(state.book.settings, {});
+
+  state.rendition.themes.register("minse-reader", {
+    body: {
+      "font-family": `${getReaderFont(settings)} !important`,
+      "font-size": `${settings.fontSize}px !important`,
+      "line-height": `${settings.lineHeight} !important`,
+      margin: `${settings.margin}px !important`
+    }
+  });
+  state.rendition.themes.select("minse-reader");
+
+  state.rendition.themes.fontSize(`${Math.round(settings.zoom * 100)}%`);
+
+  for (const contents of state.rendition.getContents?.() || []) {
+    applyContentSettings(contents);
+  }
+}
+
+function applyStoredAnnotations() {
+  if (!state.rendition) {
+    return;
+  }
+
+  for (const highlight of state.book.highlights) {
+    state.rendition.annotations.highlight(
+      highlight.range,
+      { id: highlight.id },
+      null,
+      "minse-highlight",
+      getHighlightStyle(highlight.color)
+    );
+  }
+
+  for (const note of state.book.notes) {
+    state.rendition.annotations.highlight(
+      note.range,
+      { id: note.id },
+      null,
+      "minse-note-highlight",
+      getHighlightStyle("blue")
+    );
+  }
+}
+
+function installContentHooks() {
+  if (!state.rendition) {
+    return;
+  }
+
+  state.rendition.hooks.content.register((contents) => {
+    applyContentSettings(contents);
+    installContentWheelHandler(contents);
+  });
+}
+
+async function destroyEpub() {
+  if (state.rendition) {
+    state.rendition.destroy();
+  }
+
+  if (state.epubBook) {
+    state.epubBook.destroy();
+  }
+
+  state.rendition = null;
+  state.epubBook = null;
+  state.progressLabel = "";
+  state.toc = [];
+  state.currentHref = "";
+  state.selectedRange = "";
+  state.selectedQuote = "";
+  state.editingNoteId = "";
+}
+
+function showReaderMessage(message) {
+  elements.reader.classList.remove("epub-loaded");
+  elements.reader.replaceChildren();
+  const paragraph = document.createElement("p");
+  paragraph.textContent = message;
+  elements.reader.appendChild(paragraph);
+}
+
+function isEpubCfi(location) {
+  return typeof location === "string" && location.startsWith("epubcfi(");
+}
+
+async function openEpub(file, arrayBuffer) {
+  try {
+    logClient("epub.open.start", {
+      name: file.name,
+      size: file.size,
+      hasEpubGlobal: typeof window.ePub === "function",
+      hasJsZipGlobal: typeof window.JSZip === "function",
+      savedLocation: state.book.lastLocation || ""
+    });
+
+    await destroyEpub();
+    showReaderMessage("Opening EPUB...");
+    elements.reader.classList.add("epub-loaded");
+    elements.reader.replaceChildren();
+
+    if (typeof window.ePub !== "function") {
+      throw new Error("epubjs was not loaded");
+    }
+
+    if (typeof window.JSZip !== "function") {
+      throw new Error("JSZip was not loaded");
+    }
+
+    state.epubBook = window.ePub(arrayBuffer.slice(0));
+    logClient("epub.book.created", {
+      name: file.name
+    });
+
+    state.rendition = state.epubBook.renderTo(elements.reader, {
+      width: "100%",
+      height: "100%",
+      flow: "paginated",
+      spread: "none"
+    });
+    logClient("epub.rendition.created", {
+      name: file.name
+    });
+
+    installContentHooks();
+    applyRenditionSettings();
+
+    state.rendition.on("relocated", (location) => {
+      const cfi = location?.start?.cfi;
+      if (!cfi) {
+        return;
+      }
+
+      state.currentHref = location?.start?.href || "";
+      state.book = updateLastLocation(state.book, cfi);
+
+      const percentage = state.epubBook.locations?.percentageFromCfi?.(cfi);
+      state.progressLabel = Number.isFinite(percentage)
+        ? `${Math.max(1, Math.round(percentage * 100))}%`
+        : "EPUB";
+
+      persistBook();
+      render();
+    });
+
+    state.rendition.on("selected", (cfiRange, contents) => {
+      const quote = contents?.window?.getSelection?.().toString().trim() || "";
+      state.selectedRange = cfiRange;
+      state.selectedQuote = quote;
+      logClient("epub.selection.changed", {
+        quoteLength: quote.length
+      });
+      render();
+    });
+
+    await state.epubBook.ready;
+    logClient("epub.book.ready", {
+      name: file.name
+    });
+
+    const metadata = await state.epubBook.loaded.metadata.catch(() => null);
+    if (metadata?.title) {
+      state.book = {
+        ...state.book,
+        title: metadata.title
+      };
+      persistBook();
+    }
+
+    const navigation = await state.epubBook.loaded.navigation.catch(() => null);
+    state.toc = Array.isArray(navigation?.toc) ? navigation.toc : [];
+    logClient("epub.navigation.loaded", {
+      name: file.name,
+      itemCount: state.toc.length
+    });
+    render();
+
+    await state.rendition.display(isEpubCfi(state.book.lastLocation) ? state.book.lastLocation : undefined);
+    applyStoredAnnotations();
+    logClient("epub.display.done", {
+      name: file.name
+    });
+
+    state.epubBook.locations.generate(1000).then(() => {
+      logClient("epub.locations.done", {
+        name: file.name
+      });
+      render();
+    }).catch((error) => {
+      logClient("epub.locations.failed", {
+        name: file.name,
+        error: formatError(error)
+      });
+      console.warn("EPUB progress generation failed", error);
+    });
+  } catch (error) {
+    state.rendition = null;
+    state.epubBook = null;
+    state.toc = [];
+    state.currentHref = "";
+    state.selectedRange = "";
+    state.selectedQuote = "";
+    state.editingNoteId = "";
+    showReaderMessage("Could not open this EPUB. Try another file, or check the browser console for details.");
+    elements.bookMeta.textContent = `${file.name} - open failed`;
+    logClient("epub.open.failed", {
+      name: file.name,
+      size: file.size,
+      error: formatError(error)
+    });
+    console.error(error);
+  }
+}
 
 function setPage(nextPage) {
   state.page = Math.min(state.pageCount, Math.max(1, nextPage));
   state.book = updateLastLocation(state.book, `page-${state.page}`);
+  persistBook();
   render();
+}
+
+async function goToBookmark(bookmark) {
+  if (state.rendition && isEpubCfi(bookmark.location)) {
+    await state.rendition.display(bookmark.location);
+    return;
+  }
+
+  const page = Number(bookmark.location.replace("page-", ""));
+  if (Number.isFinite(page)) {
+    setPage(page);
+  }
+}
+
+async function goToTocItem(item) {
+  if (!state.rendition || !item?.href) {
+    return;
+  }
+
+  await state.rendition.display(item.href);
+}
+
+async function goPrevious() {
+  if (state.rendition) {
+    await state.rendition.prev();
+    return;
+  }
+
+  setPage(state.page - 1);
+}
+
+async function goNext() {
+  if (state.rendition) {
+    await state.rendition.next();
+    return;
+  }
+
+  setPage(state.page + 1);
+}
+
+function handleWheelEvent(event) {
+  const intent = getWheelIntent(event);
+
+  if (intent.type === "none") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (intent.type === "zoom") {
+    state.book = {
+      ...state.book,
+      settings: applyZoomIntent(state.book.settings, intent)
+    };
+    persistBook();
+    applyRenditionSettings();
+    render();
+    return;
+  }
+
+  if (intent.direction === "next") {
+    goNext();
+  } else {
+    goPrevious();
+  }
+}
+
+function installContentWheelHandler(contents) {
+  const win = contents?.window;
+
+  if (!win || win.__minseWheelHandlerInstalled) {
+    return;
+  }
+
+  win.__minseWheelHandlerInstalled = true;
+  win.addEventListener("wheel", handleWheelEvent, { passive: false });
 }
 
 function updateSettings(patch) {
   state.book = updateBookSettings(state.book, patch);
+  persistBook();
+  applyRenditionSettings();
+  if (state.rendition) {
+    state.rendition.display(isEpubCfi(state.book.lastLocation) ? state.book.lastLocation : undefined);
+  }
   render();
 }
 
@@ -48,7 +543,7 @@ function renderBookmarks() {
 
   if (!bookmarks.length) {
     elements.bookmarkList.className = "empty";
-    elements.bookmarkList.textContent = "아직 북마크가 없습니다.";
+    elements.bookmarkList.textContent = "No bookmarks yet.";
     return;
   }
 
@@ -60,10 +555,362 @@ function renderBookmarks() {
       button.type = "button";
       button.textContent = bookmark.label || bookmark.location;
       button.addEventListener("click", () => {
-        const page = Number(bookmark.location.replace("page-", ""));
-        if (Number.isFinite(page)) {
-          setPage(page);
-        }
+        goToBookmark(bookmark);
+      });
+      return button;
+    })
+  );
+}
+
+function addCurrentHighlight() {
+  if (!state.selectedRange || !state.selectedQuote) {
+    return;
+  }
+
+  const color = elements.highlightColor.value;
+  const highlight = createHighlight({
+    bookId: state.book.bookId,
+    location: state.selectedRange,
+    range: state.selectedRange,
+    quote: state.selectedQuote,
+    color
+  });
+
+  state.book = {
+    ...state.book,
+    highlights: [...state.book.highlights, highlight]
+  };
+  persistBook();
+
+  if (state.rendition) {
+    state.rendition.annotations.highlight(
+      highlight.range,
+      { id: highlight.id },
+      null,
+      "minse-highlight",
+      getHighlightStyle(color)
+    );
+  }
+
+  render();
+}
+
+function addCurrentNote() {
+  if (!state.selectedRange || !state.selectedQuote || !elements.noteBody.value.trim()) {
+    return;
+  }
+
+  const note = createTextNote({
+    bookId: state.book.bookId,
+    location: state.selectedRange,
+    range: state.selectedRange,
+    quote: state.selectedQuote,
+    body: elements.noteBody.value
+  });
+
+  state.book = {
+    ...state.book,
+    notes: [...state.book.notes, note]
+  };
+  elements.noteBody.value = "";
+  persistBook();
+
+  if (state.rendition) {
+    state.rendition.annotations.highlight(
+      note.range,
+      { id: note.id },
+      null,
+      "minse-note-highlight",
+      getHighlightStyle("blue")
+    );
+  }
+
+  render();
+}
+
+async function goToAnnotation(annotation) {
+  if (state.rendition && isEpubCfi(annotation.range)) {
+    await state.rendition.display(annotation.range);
+  }
+}
+
+function removeAnnotation(annotation) {
+  if (annotation.type === "highlight") {
+    state.book = {
+      ...state.book,
+      highlights: state.book.highlights.filter((item) => item.id !== annotation.id)
+    };
+  }
+
+  if (annotation.type === "note") {
+    state.book = {
+      ...state.book,
+      notes: state.book.notes.filter((item) => item.id !== annotation.id)
+    };
+  }
+
+  if (state.rendition && isEpubCfi(annotation.range)) {
+    state.rendition.annotations.remove(annotation.range, "highlight");
+    applyStoredAnnotations();
+  }
+
+  persistBook();
+  render();
+}
+
+function startEditingNote(note) {
+  state.editingNoteId = note.id;
+  render();
+}
+
+function cancelEditingNote() {
+  state.editingNoteId = "";
+  render();
+}
+
+function saveEditedNote(note, textarea) {
+  const nextBody = textarea.value.trim();
+
+  if (!nextBody) {
+    textarea.focus();
+    return;
+  }
+
+  const updatedNote = updateTextNoteBody(note, nextBody);
+
+  state.book = {
+    ...state.book,
+    notes: state.book.notes.map((item) => (
+      item.id === note.id ? updatedNote : item
+    ))
+  };
+  state.editingNoteId = "";
+  persistBook();
+  render();
+}
+
+function createExportFileName(book) {
+  const base = (book.title || "annotations")
+    .replace(/[^\p{L}\p{N}-]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "annotations";
+
+  return `${base}-annotations.json`;
+}
+
+function exportAnnotations() {
+  const exported = createAnnotationExport(state.book);
+  const blob = new Blob([JSON.stringify(exported, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = createExportFileName(state.book);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  logClient("annotations.exported", {
+    highlights: exported.highlights.length,
+    notes: exported.notes.length
+  });
+}
+
+async function readFileArrayBuffer(fileLike) {
+  if (fileLike.bytes instanceof ArrayBuffer) {
+    return fileLike.bytes;
+  }
+
+  if (ArrayBuffer.isView(fileLike.bytes)) {
+    return fileLike.bytes.buffer.slice(
+      fileLike.bytes.byteOffset,
+      fileLike.bytes.byteOffset + fileLike.bytes.byteLength
+    );
+  }
+
+  if (typeof fileLike.arrayBuffer === "function") {
+    return fileLike.arrayBuffer();
+  }
+
+  if (typeof fileLike.bytes === "function") {
+    const bytes = await fileLike.bytes();
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+
+  throw new Error("Unsupported EPUB file payload");
+}
+
+async function loadSelectedFile(fileLike) {
+  if (!fileLike) {
+    logClient("epub.file.empty");
+    return;
+  }
+
+  logClient("epub.file.selected", {
+    name: fileLike.name,
+    size: fileLike.size,
+    type: fileLike.type,
+    source: fileLike.path ? "desktop" : "browser"
+  });
+
+  const arrayBuffer = await readFileArrayBuffer(fileLike);
+  const content = new Uint8Array(arrayBuffer);
+  state.book = createBookRecord({
+    content,
+    title: fileLike.name.replace(/\.epub$/i, ""),
+    filePath: fileLike.path || fileLike.name,
+    settings: state.book.settings
+  });
+
+  const savedBook = getBookRecord(state.library, state.book.bookId);
+  if (savedBook) {
+    state.book = {
+      ...savedBook,
+      filePath: fileLike.path || fileLike.name,
+      title: state.book.title
+    };
+  }
+
+  state.page = Number(state.book.lastLocation.replace("page-", "")) || 1;
+  elements.bookMeta.textContent = `${fileLike.name} - ${(fileLike.size / 1024 / 1024).toFixed(2)} MB`;
+  persistBook();
+  render();
+  await openEpub(fileLike, arrayBuffer);
+}
+
+function renderAnnotations() {
+  const annotations = [
+    ...state.book.highlights,
+    ...state.book.notes
+  ].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+
+  elements.selectionStatus.className = state.selectedRange ? "selection-status" : "empty";
+  elements.selectionStatus.textContent = state.selectedRange
+    ? `Selected: ${state.selectedQuote.slice(0, 80)}`
+    : "Select text in the book.";
+  elements.highlightButton.disabled = !state.selectedRange || !state.selectedQuote;
+  elements.noteButton.disabled = !state.selectedRange || !state.selectedQuote || !elements.noteBody.value.trim();
+  elements.exportAnnotationsButton.disabled = annotations.length === 0;
+
+  if (!annotations.length) {
+    elements.annotationList.className = "annotation-list empty";
+    elements.annotationList.textContent = "No annotations yet.";
+    return;
+  }
+
+  elements.annotationList.className = "annotation-list";
+  elements.annotationList.replaceChildren(
+    ...annotations.map((annotation) => {
+      const item = document.createElement("div");
+      item.className = "annotation-item";
+
+      const quote = document.createElement("button");
+      quote.className = "annotation-quote";
+      quote.type = "button";
+      quote.textContent = annotation.quote || annotation.range;
+      quote.addEventListener("click", () => {
+        goToAnnotation(annotation);
+      });
+
+      const meta = document.createElement("small");
+      meta.textContent = annotation.type === "note"
+        ? annotation.body
+        : `Highlight - ${annotation.color}`;
+
+      if (annotation.type === "note" && state.editingNoteId === annotation.id) {
+        const textarea = document.createElement("textarea");
+        textarea.className = "annotation-edit-input";
+        textarea.value = annotation.body;
+        textarea.rows = 3;
+
+        const actions = document.createElement("div");
+        actions.className = "annotation-actions";
+
+        const save = document.createElement("button");
+        save.className = "annotation-remove";
+        save.type = "button";
+        save.textContent = "Save";
+        save.addEventListener("click", () => {
+          saveEditedNote(annotation, textarea);
+        });
+
+        const cancel = document.createElement("button");
+        cancel.className = "annotation-remove";
+        cancel.type = "button";
+        cancel.textContent = "Cancel";
+        cancel.addEventListener("click", () => {
+          cancelEditingNote();
+        });
+
+        actions.replaceChildren(save, cancel);
+        item.replaceChildren(quote, textarea, actions);
+        return item;
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "annotation-actions";
+
+      if (annotation.type === "note") {
+        const edit = document.createElement("button");
+        edit.className = "annotation-remove";
+        edit.type = "button";
+        edit.textContent = "Edit";
+        edit.addEventListener("click", () => {
+          startEditingNote(annotation);
+        });
+        actions.appendChild(edit);
+      }
+
+      const remove = document.createElement("button");
+      remove.className = "annotation-remove";
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        removeAnnotation(annotation);
+      });
+      actions.appendChild(remove);
+
+      item.replaceChildren(quote, meta, actions);
+      return item;
+    })
+  );
+}
+
+function flattenToc(items, depth = 0) {
+  return items.flatMap((item) => [
+    { item, depth },
+    ...flattenToc(Array.isArray(item.subitems) ? item.subitems : [], depth + 1)
+  ]);
+}
+
+function renderToc() {
+  const items = flattenToc(state.toc);
+
+  if (!items.length) {
+    elements.tocList.className = "empty";
+    elements.tocList.textContent = state.rendition
+      ? "This EPUB has no table of contents."
+      : "Open an EPUB to load its contents.";
+    return;
+  }
+
+  elements.tocList.className = "toc-list";
+  elements.tocList.replaceChildren(
+    ...items.map(({ item, depth }) => {
+      const button = document.createElement("button");
+      const href = item.href || "";
+      button.className = href && state.currentHref && state.currentHref.includes(href.split("#")[0])
+        ? "list-item active"
+        : "list-item";
+      button.type = "button";
+      button.style.setProperty("--toc-depth", depth);
+      button.textContent = item.label || href || "Untitled";
+      button.disabled = !href;
+      button.addEventListener("click", () => {
+        goToTocItem(item);
       });
       return button;
     })
@@ -72,27 +919,27 @@ function renderBookmarks() {
 
 function render() {
   const settings = mergeReadingSettings(state.book.settings, {});
-  const fontMap = {
-    system: '"Segoe UI", system-ui, sans-serif',
-    serif: 'Georgia, "Times New Roman", serif',
-    "sans-serif": '"Segoe UI", Arial, sans-serif',
-    monospace: '"Cascadia Mono", Consolas, monospace'
-  };
 
   elements.bookTitle.textContent = state.book.title;
-  elements.pageLabel.textContent = `${state.page} / ${state.pageCount}`;
-  elements.locationLabel.textContent = state.book.lastLocation || "page-1";
+  elements.pageLabel.textContent = state.rendition
+    ? state.progressLabel || "EPUB"
+    : `${state.page} / ${state.pageCount}`;
+  elements.locationLabel.textContent = state.rendition
+    ? state.progressLabel || "Saved"
+    : state.book.lastLocation || "page-1";
   elements.zoomLabel.textContent = `${Math.round(settings.zoom * 100)}%`;
 
   elements.fontFamily.value = settings.fontFamily;
   elements.fontSize.value = String(settings.fontSize);
   elements.lineHeight.value = String(settings.lineHeight);
+  elements.margin.value = String(settings.margin);
   elements.theme.value = settings.theme;
   elements.textOnly.checked = settings.textOnly;
 
-  elements.reader.style.setProperty("--reader-font", fontMap[settings.fontFamily] || fontMap.system);
+  elements.reader.style.setProperty("--reader-font", getReaderFont(settings));
   elements.reader.style.setProperty("--reader-font-size", settings.fontSize);
   elements.reader.style.setProperty("--reader-line-height", settings.lineHeight);
+  elements.reader.style.setProperty("--reader-margin", settings.margin);
   elements.reader.style.setProperty("--reader-zoom", settings.zoom);
 
   document.body.classList.toggle("theme-dark", settings.theme === "dark");
@@ -100,53 +947,38 @@ function render() {
   document.body.classList.toggle("text-only", settings.textOnly);
 
   renderBookmarks();
+  renderToc();
+  renderAnnotations();
 }
 
 elements.bookInput.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
 
-  if (!file) {
-    return;
-  }
-
-  const content = new Uint8Array(await file.arrayBuffer());
-  state.book = createBookRecord({
-    content,
-    title: file.name.replace(/\.epub$/i, ""),
-    filePath: file.name,
-    settings: state.book.settings
-  });
-  state.page = 1;
-  elements.bookMeta.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
-  render();
+  await loadSelectedFile(file);
+  elements.bookInput.value = "";
 });
 
-elements.reader.addEventListener("wheel", (event) => {
-  const intent = getWheelIntent(event);
-
-  if (intent.type === "none") {
+elements.openBookButton.addEventListener("click", async (event) => {
+  if (!window.minseDesktop?.openEpubFile) {
     return;
   }
 
   event.preventDefault();
+  const file = await window.minseDesktop.openEpubFile();
+  await loadSelectedFile(file);
+});
 
-  if (intent.type === "zoom") {
-    state.book = {
-      ...state.book,
-      settings: applyZoomIntent(state.book.settings, intent)
-    };
-    render();
-    return;
-  }
+elements.reader.addEventListener("wheel", handleWheelEvent, { passive: false });
 
-  setPage(intent.direction === "next" ? state.page + 1 : state.page - 1);
-}, { passive: false });
-
-elements.prevButton.addEventListener("click", () => setPage(state.page - 1));
-elements.nextButton.addEventListener("click", () => setPage(state.page + 1));
+elements.prevButton.addEventListener("click", () => {
+  goPrevious();
+});
+elements.nextButton.addEventListener("click", () => {
+  goNext();
+});
 
 elements.bookmarkButton.addEventListener("click", () => {
-  const location = `page-${state.page}`;
+  const location = state.book.lastLocation || `page-${state.page}`;
   const exists = state.book.bookmarks.some((bookmark) => bookmark.location === location);
 
   if (exists) {
@@ -162,30 +994,45 @@ elements.bookmarkButton.addEventListener("click", () => {
         createBookmark({
           bookId: state.book.bookId,
           location,
-          label: `${state.page} 페이지`
+          label: state.rendition
+            ? `${state.progressLabel || "EPUB"} location`
+            : `${state.page} page`
         })
       ]
     };
   }
 
+  persistBook();
   render();
 });
 
+elements.highlightButton.addEventListener("click", () => {
+  addCurrentHighlight();
+});
+elements.noteButton.addEventListener("click", () => {
+  addCurrentNote();
+});
+elements.exportAnnotationsButton.addEventListener("click", () => {
+  exportAnnotations();
+});
+elements.noteBody.addEventListener("input", () => {
+  renderAnnotations();
+});
 elements.fontFamily.addEventListener("change", () => updateSettings({ fontFamily: elements.fontFamily.value }));
 elements.fontSize.addEventListener("input", () => updateSettings({ fontSize: Number(elements.fontSize.value) }));
 elements.lineHeight.addEventListener("input", () => updateSettings({ lineHeight: Number(elements.lineHeight.value) }));
+elements.margin.addEventListener("input", () => updateSettings({ margin: Number(elements.margin.value) }));
 elements.theme.addEventListener("change", () => updateSettings({ theme: elements.theme.value }));
 elements.textOnly.addEventListener("change", () => updateSettings({ textOnly: elements.textOnly.checked }));
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "ArrowRight") {
-    setPage(state.page + 1);
+    goNext();
   }
 
   if (event.key === "ArrowLeft") {
-    setPage(state.page - 1);
+    goPrevious();
   }
 });
 
 render();
-

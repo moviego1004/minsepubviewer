@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 
 const root = resolve(process.cwd());
@@ -12,6 +12,29 @@ const mimeTypes = new Map([
   [".json", "application/json; charset=utf-8"],
   [".svg", "image/svg+xml"]
 ]);
+
+async function readRequestBody(request) {
+  const chunks = [];
+
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function writeClientLog(request, response) {
+  const body = await readRequestBody(request);
+  const line = `${new Date().toISOString()} ${body}\n`;
+
+  await mkdir(join(root, "logs"), { recursive: true });
+  await appendFile(join(root, "logs", "app.log"), line, "utf8");
+
+  response.writeHead(204, {
+    "Cache-Control": "no-store"
+  });
+  response.end();
+}
 
 function resolveRequestPath(url) {
   const pathname = new URL(url, `http://localhost:${port}`).pathname;
@@ -26,6 +49,17 @@ function resolveRequestPath(url) {
 }
 
 const server = createServer(async (request, response) => {
+  if (request.method === "POST" && request.url === "/__client-log") {
+    try {
+      await writeClientLog(request, response);
+    } catch (error) {
+      console.error("Failed to write client log", error);
+      response.writeHead(500);
+      response.end("Log write failed");
+    }
+    return;
+  }
+
   const filePath = resolveRequestPath(request.url);
 
   if (!filePath) {
@@ -37,7 +71,8 @@ const server = createServer(async (request, response) => {
   try {
     const content = await readFile(filePath);
     response.writeHead(200, {
-      "Content-Type": mimeTypes.get(extname(filePath)) || "application/octet-stream"
+      "Content-Type": mimeTypes.get(extname(filePath)) || "application/octet-stream",
+      "Cache-Control": "no-store"
     });
     response.end(content);
   } catch {

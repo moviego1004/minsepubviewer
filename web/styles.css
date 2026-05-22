@@ -27,7 +27,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -104,18 +105,32 @@ select {
 .list-item {
   width: 100%;
   padding: 10px 12px;
+  padding-left: calc(12px + var(--toc-depth, 0) * 14px);
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .list-item.active,
 .list-item:hover {
   background: var(--accent-soft);
   border-color: #b6dce5;
+}
+
+.list-item:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.toc-list {
+  display: grid;
+  max-height: 34vh;
+  gap: 4px;
+  overflow: auto;
 }
 
 .empty {
@@ -195,7 +210,7 @@ select {
   margin: 28px auto;
   width: min(760px, calc(100% - 56px));
   min-height: calc(100vh - 122px);
-  padding: 48px;
+  padding: calc(var(--reader-margin, 24) * 1px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--reader-bg);
@@ -207,6 +222,16 @@ select {
   outline: none;
   transform: scale(var(--reader-zoom, 1));
   transform-origin: top center;
+}
+
+.reader.epub-loaded {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+}
+
+.reader.epub-loaded iframe {
+  background: var(--reader-bg);
 }
 
 .reader h1 {
@@ -252,8 +277,117 @@ select {
 }
 
 .settings select,
-.settings input[type="range"] {
+.settings input[type="range"],
+.settings textarea {
   width: 100%;
+}
+
+.settings textarea {
+  min-height: 82px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.annotation-tools {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.action-button,
+.secondary-button {
+  min-height: 36px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.action-button {
+  background: var(--accent);
+  color: white;
+}
+
+.secondary-button {
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.action-button:disabled,
+.secondary-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.selection-status {
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.annotation-list {
+  display: grid;
+  max-height: 30vh;
+  gap: 8px;
+  overflow: auto;
+}
+
+.annotation-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.annotation-quote {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.annotation-item small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.annotation-remove {
+  justify-self: start;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.annotation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.annotation-edit-input {
+  min-height: 64px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .toggle-row {

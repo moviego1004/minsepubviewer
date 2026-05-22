@@ -17,35 +17,34 @@
           </div>
         </div>
 
-        <label class="file-button">
-          EPUB 열기
+        <label id="openBookButton" class="file-button">
+          Open EPUB
           <input id="bookInput" type="file" accept=".epub,application/epub+zip">
         </label>
 
         <section class="panel">
-          <h2>목차</h2>
-          <button class="list-item active" type="button">시작 위치</button>
-          <button class="list-item" type="button">챕터 미리보기</button>
+          <h2>Contents</h2>
+          <div id="tocList" class="empty">Open an EPUB to load its contents.</div>
         </section>
 
         <section class="panel">
-          <h2>북마크</h2>
-          <div id="bookmarkList" class="empty">아직 북마크가 없습니다.</div>
+          <h2>Bookmarks</h2>
+          <div id="bookmarkList" class="empty">No bookmarks yet.</div>
         </section>
       </aside>
 
       <main class="reader-shell">
         <header class="toolbar">
           <div class="book-title">
-            <span id="bookTitle">책을 열어주세요</span>
-            <small id="bookMeta">EPUB 파일을 선택하면 PC 뷰어 셸에서 읽기 설정을 테스트할 수 있습니다.</small>
+            <span id="bookTitle">Open a book</span>
+            <small id="bookMeta">Choose an EPUB file to render the book body.</small>
           </div>
 
           <div class="toolbar-actions">
-            <button id="bookmarkButton" class="icon-button" type="button" title="북마크">☆</button>
-            <button id="prevButton" class="icon-button" type="button" title="이전 페이지">‹</button>
+            <button id="bookmarkButton" class="icon-button" type="button" title="Bookmark">*</button>
+            <button id="prevButton" class="icon-button" type="button" title="Previous page">&lt;</button>
             <span id="pageLabel" class="page-label">1 / 5</span>
-            <button id="nextButton" class="icon-button" type="button" title="다음 페이지">›</button>
+            <button id="nextButton" class="icon-button" type="button" title="Next page">&gt;</button>
           </div>
         </header>
 
@@ -54,25 +53,24 @@
             <div class="sample-image" aria-hidden="true"></div>
             <h1>Minse EPUB Viewer</h1>
             <p>
-              PC 버전 EPUB 뷰어의 첫 실행 셸입니다. 이 화면에서는 마우스 휠 페이지 넘김,
-              Ctrl+휠 확대 축소, 폰트 변경, 텍스트만 보기 모드를 먼저 검증합니다.
+              Open an EPUB file and the actual book body will render here.
             </p>
             <p>
-              실제 EPUB 렌더링은 다음 단계에서 붙이고, 현재는 읽기 경험과 데이터 모델을
-              테스트 주도 방식으로 단단히 고정하는 중입니다.
+              Use the mouse wheel or arrow keys to turn pages. Use Ctrl + wheel to zoom.
+              Settings, bookmarks, and the last reading position are saved per book.
             </p>
             <blockquote>
-              텍스트만 보기 모드를 켜면 이미지와 배경 장식이 사라지고 본문 중심으로 표시됩니다.
+              Text-only mode hides images and background styling so the body text stays central.
             </blockquote>
           </article>
 
           <aside class="settings">
-            <h2>보기 설정</h2>
+            <h2>View Settings</h2>
 
             <label>
-              폰트
+              Font
               <select id="fontFamily">
-                <option value="system">시스템</option>
+                <option value="system">System</option>
                 <option value="serif">Serif</option>
                 <option value="sans-serif">Sans Serif</option>
                 <option value="monospace">Monospace</option>
@@ -80,17 +78,22 @@
             </label>
 
             <label>
-              글자 크기
+              Font size
               <input id="fontSize" type="range" min="10" max="42" value="18">
             </label>
 
             <label>
-              줄 간격
+              Line height
               <input id="lineHeight" type="range" min="1.1" max="2.4" step="0.1" value="1.6">
             </label>
 
             <label>
-              테마
+              Margin
+              <input id="margin" type="range" min="0" max="96" value="24">
+            </label>
+
+            <label>
+              Theme
               <select id="theme">
                 <option value="light">Light</option>
                 <option value="sepia">Sepia</option>
@@ -100,25 +103,55 @@
 
             <label class="toggle-row">
               <input id="textOnly" type="checkbox">
-              텍스트만 보기
+              Text only
             </label>
 
             <dl class="status-grid">
               <div>
-                <dt>확대</dt>
+                <dt>Zoom</dt>
                 <dd id="zoomLabel">100%</dd>
               </div>
               <div>
-                <dt>위치</dt>
+                <dt>Location</dt>
                 <dd id="locationLabel">page-1</dd>
               </div>
             </dl>
+
+            <section class="annotation-tools">
+              <h2>Annotations</h2>
+
+              <p id="selectionStatus" class="empty">Select text in the book.</p>
+
+              <label>
+                Highlight color
+                <select id="highlightColor">
+                  <option value="yellow">Yellow</option>
+                  <option value="green">Green</option>
+                  <option value="pink">Pink</option>
+                  <option value="blue">Blue</option>
+                </select>
+              </label>
+
+              <button id="highlightButton" class="action-button" type="button" disabled>Add highlight</button>
+
+              <label>
+                Note
+                <textarea id="noteBody" rows="4" placeholder="Write a note for the selected text"></textarea>
+              </label>
+
+              <button id="noteButton" class="action-button" type="button" disabled>Add note</button>
+
+              <button id="exportAnnotationsButton" class="secondary-button" type="button" disabled>Export annotations</button>
+
+              <div id="annotationList" class="annotation-list empty">No annotations yet.</div>
+            </section>
           </aside>
         </section>
       </main>
     </div>
 
+    <script src="/node_modules/jszip/dist/jszip.min.js"></script>
+    <script src="/node_modules/epubjs/dist/epub.min.js"></script>
     <script type="module" src="/web/app.js"></script>
   </body>
 </html>
-

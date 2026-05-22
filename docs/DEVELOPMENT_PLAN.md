@@ -132,6 +132,22 @@ Use test-driven development for the reusable core:
 
 ## Milestones
 
+## Current Progress
+
+- Milestone 1 core foundation is in place with passing unit tests.
+- Added a reusable library state module for book records, active book tracking, and safe JSON persistence.
+- Wired the web prototype to persist last location, settings, zoom, and bookmarks through localStorage.
+- Added `epubjs` to render real EPUB files in the web prototype.
+- Added table of contents navigation from EPUB navigation data.
+- Added highlight and text note capture from selected EPUB text.
+- Added annotation export as a JSON file.
+- Added text note editing.
+- Added Electron desktop shell with a native EPUB file-open dialog.
+- Added reader margin controls across the web prototype and EPUB renderer.
+- Hardened annotation deletion, empty note edits, and Korean-safe annotation export filenames.
+- Milestone 1, Milestone 2, Milestone 3, and Milestone 4 are complete at prototype level.
+- Next recommended task: start Milestone 5 stabilization with larger and multilingual EPUB files.
+
 ### Milestone 1: Core Foundation
 
 - Project skeleton.
@@ -152,7 +168,7 @@ Use test-driven development for the reusable core:
 - EPUB rendering.
 - Wheel page turning.
 - `Ctrl + Wheel` zoom.
-- Font and theme controls.
+- Font, line height, margin, and theme controls.
 - Last location save/restore.
 
 ### Milestone 4: Personal Data

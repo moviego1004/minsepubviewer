@@ -1,9 +1,11 @@
 import { normalizeReadingSettings } from "./settings.js";
 
 export function computeBookId(content) {
+  const hasBuffer = typeof Buffer !== "undefined";
+
   if (
     typeof content !== "string" &&
-    !Buffer.isBuffer(content) &&
+    !(hasBuffer && Buffer.isBuffer(content)) &&
     !(content instanceof Uint8Array)
   ) {
     throw new TypeError("content must be a string, Buffer, or Uint8Array");
