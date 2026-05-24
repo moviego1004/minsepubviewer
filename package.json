@@ -1,10 +1,13 @@
 {
   "name": "minsepubviewer",
   "version": "0.1.0",
+  "description": "PC EPUB viewer prototype built with Electron.",
+  "author": "Mins",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
+    "build": "electron-builder --win dir",
     "dev": "node scripts/dev-server.js",
     "desktop": "electron .",
     "test": "node --test"
@@ -16,6 +19,30 @@
     "epubjs": "^0.3.93"
   },
   "devDependencies": {
-    "electron": "^42.2.0"
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.mins.epubviewer",
+    "productName": "Mins EPUB Viewer",
+    "asar": true,
+    "directories": {
+      "output": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "web/**/*",
+      "src/**/*",
+      "node_modules/epubjs/**/*",
+      "node_modules/jszip/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "dir"
+      ],
+      "artifactName": "MinsEPUBViewer-${version}.${ext}"
+    }
   }
 }

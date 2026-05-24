@@ -7,8 +7,10 @@ import {
 } from "../../src/core/settings.js";
 
 test("default reading settings are valid", () => {
+  assert.equal(DEFAULT_READING_SETTINGS.fontFamily, "original");
   assert.equal(DEFAULT_READING_SETTINGS.fontSize, 18);
   assert.equal(DEFAULT_READING_SETTINGS.theme, "light");
+  assert.equal(DEFAULT_READING_SETTINGS.viewMode, "paginated");
   assert.equal(DEFAULT_READING_SETTINGS.textOnly, false);
 });
 
@@ -35,10 +37,26 @@ test("invalid numeric settings are clamped", () => {
 });
 
 test("invalid enum and empty font values fall back to defaults", () => {
-  const settings = normalizeReadingSettings({ fontFamily: "   ", theme: "blue" });
+  const settings = normalizeReadingSettings({
+    fontFamily: "   ",
+    theme: "blue",
+    viewMode: "spread"
+  });
 
-  assert.equal(settings.fontFamily, "system");
+  assert.equal(settings.fontFamily, "original");
   assert.equal(settings.theme, "light");
+  assert.equal(settings.viewMode, "paginated");
+});
+
+test("view mode accepts paginated and continuous values", () => {
+  assert.equal(normalizeReadingSettings({ viewMode: "paginated" }).viewMode, "paginated");
+  assert.equal(normalizeReadingSettings({ viewMode: "continuous" }).viewMode, "continuous");
+});
+
+test("legacy font family values migrate to recommended Korean fonts", () => {
+  assert.equal(normalizeReadingSettings({ fontFamily: "serif" }).fontFamily, "noto-serif-kr");
+  assert.equal(normalizeReadingSettings({ fontFamily: "sans-serif" }).fontFamily, "noto-sans-kr");
+  assert.equal(normalizeReadingSettings({ fontFamily: "monospace" }).fontFamily, "system");
 });
 
 test("mergeReadingSettings applies a patch over current settings", () => {

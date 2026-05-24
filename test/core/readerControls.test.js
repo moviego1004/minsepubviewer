@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyZoomIntent, getWheelIntent } from "../../src/core/readerControls.js";
+import {
+  applyZoomIntent,
+  getScrollBoundaryIntent,
+  getWheelIntent
+} from "../../src/core/readerControls.js";
 
 test("wheel without Ctrl goes to the next page when scrolling down", () => {
   assert.deepEqual(getWheelIntent({ deltaY: 120, ctrlKey: false }), {
@@ -41,6 +45,30 @@ test("applyZoomIntent updates and clamps zoom", () => {
   assert.equal(
     applyZoomIntent({ zoom: 0.61 }, { type: "zoom", direction: "out" }).zoom,
     0.6
+  );
+});
+
+test("scroll boundary intent scrolls before moving to the next page", () => {
+  assert.equal(
+    getScrollBoundaryIntent({ scrollTop: 100, scrollHeight: 1200, clientHeight: 600 }, "next"),
+    "scroll"
+  );
+
+  assert.equal(
+    getScrollBoundaryIntent({ scrollTop: 600, scrollHeight: 1200, clientHeight: 600 }, "next"),
+    "page"
+  );
+});
+
+test("scroll boundary intent scrolls before moving to the previous page", () => {
+  assert.equal(
+    getScrollBoundaryIntent({ scrollTop: 100, scrollHeight: 1200, clientHeight: 600 }, "previous"),
+    "scroll"
+  );
+
+  assert.equal(
+    getScrollBoundaryIntent({ scrollTop: 0, scrollHeight: 1200, clientHeight: 600 }, "previous"),
+    "page"
   );
 });
 

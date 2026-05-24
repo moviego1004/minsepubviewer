@@ -51,6 +51,38 @@ test("highlight creation defaults to yellow", () => {
   assert.equal(highlight.color, "yellow");
 });
 
+test("highlight creation accepts orange and underline styles", () => {
+  const orange = createHighlight({
+    bookId: "book-1",
+    location: "loc",
+    range: "range",
+    quote: "Selected text",
+    color: "orange"
+  });
+  const underline = createHighlight({
+    bookId: "book-1",
+    location: "loc",
+    range: "range",
+    quote: "Selected text",
+    color: "underline"
+  });
+
+  assert.equal(orange.color, "orange");
+  assert.equal(underline.color, "underline");
+});
+
+test("highlight creation rejects unknown styles to yellow", () => {
+  const highlight = createHighlight({
+    bookId: "book-1",
+    location: "loc",
+    range: "range",
+    quote: "Selected text",
+    color: "purple"
+  });
+
+  assert.equal(highlight.color, "yellow");
+});
+
 test("text note creation requires body", () => {
   assert.throws(
     () => createTextNote({

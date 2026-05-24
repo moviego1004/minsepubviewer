@@ -14,6 +14,8 @@ function createId() {
   return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const HIGHLIGHT_STYLES = new Set(["yellow", "orange", "green", "pink", "blue", "underline"]);
+
 function createBaseAnnotation(type, input) {
   return {
     id: input.id || createId(),
@@ -33,13 +35,15 @@ export function createBookmark(input) {
 }
 
 export function createHighlight(input) {
+  const color = typeof input.color === "string" && input.color.trim()
+    ? input.color.trim()
+    : "yellow";
+
   return {
     ...createBaseAnnotation("highlight", input),
     range: requireNonEmptyString(input.range, "range"),
     quote: requireNonEmptyString(input.quote, "quote"),
-    color: typeof input.color === "string" && input.color.trim()
-      ? input.color.trim()
-      : "yellow"
+    color: HIGHLIGHT_STYLES.has(color) ? color : "yellow"
   };
 }
 

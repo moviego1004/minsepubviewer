@@ -8,47 +8,102 @@
   </head>
   <body>
     <div id="app" class="app">
-      <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-mark">M</span>
-          <div>
-            <strong>Minse EPUB</strong>
-            <small>PC Reader</small>
+      <header class="toolbar">
+        <div class="toolbar-tools" aria-label="Reader tools">
+          <label id="openBookButton" class="icon-button file-icon-button" title="Open EPUB" aria-label="Open EPUB">
+            <span class="folder-icon" aria-hidden="true"></span>
+            <input id="bookInput" type="file" accept=".epub,application/epub+zip">
+          </label>
+
+          <button id="leftPanelToggle" class="icon-button panel-toggle" type="button" title="Toggle contents panel" aria-label="Toggle contents panel" aria-pressed="true">
+            <span class="panel-icon panel-icon-left" aria-hidden="true"></span>
+          </button>
+
+          <button id="rightPanelToggle" class="icon-button panel-toggle" type="button" title="Toggle view settings" aria-label="Toggle view settings" aria-pressed="true">
+            <span class="panel-icon panel-icon-right" aria-hidden="true"></span>
+          </button>
+
+          <span class="toolbar-separator" aria-hidden="true"></span>
+
+          <button id="prevButton" class="icon-button" type="button" title="Previous page" aria-label="Previous page">
+            <span class="chevron-icon chevron-left" aria-hidden="true"></span>
+          </button>
+          <span id="pageLabel" class="page-label">1 / 5</span>
+          <button id="nextButton" class="icon-button" type="button" title="Next page" aria-label="Next page">
+            <span class="chevron-icon chevron-right" aria-hidden="true"></span>
+          </button>
+
+          <button id="bookmarkButton" class="icon-button" type="button" title="Bookmark" aria-label="Bookmark">
+            <span class="bookmark-icon" aria-hidden="true"></span>
+          </button>
+
+          <span class="toolbar-separator" aria-hidden="true"></span>
+
+          <button id="prevSearchResultButton" class="icon-button search-nav-button" type="button" title="Previous search result" aria-label="Previous search result">
+            <span class="search-step-icon search-step-up" aria-hidden="true"></span>
+          </button>
+          <button id="nextSearchResultButton" class="icon-button search-nav-button" type="button" title="Next search result" aria-label="Next search result">
+            <span class="search-step-icon search-step-down" aria-hidden="true"></span>
+          </button>
+
+          <span class="toolbar-separator" aria-hidden="true"></span>
+
+          <div class="view-mode-toggle" role="group" aria-label="Reading mode">
+            <button id="paginatedModeButton" class="view-mode-button" type="button">Page</button>
+            <button id="continuousModeButton" class="view-mode-button" type="button">Scroll</button>
           </div>
         </div>
 
-        <label id="openBookButton" class="file-button">
-          Open EPUB
-          <input id="bookInput" type="file" accept=".epub,application/epub+zip">
-        </label>
+        <div class="book-title">
+          <span id="bookTitle">Open a book</span>
+          <small id="bookMeta">Choose an EPUB file to render the book body.</small>
+        </div>
+      </header>
 
-        <section class="panel">
-          <h2>Contents</h2>
-          <div id="tocList" class="empty">Open an EPUB to load its contents.</div>
-        </section>
-
-        <section class="panel">
-          <h2>Bookmarks</h2>
-          <div id="bookmarkList" class="empty">No bookmarks yet.</div>
-        </section>
-      </aside>
-
-      <main class="reader-shell">
-        <header class="toolbar">
-          <div class="book-title">
-            <span id="bookTitle">Open a book</span>
-            <small id="bookMeta">Choose an EPUB file to render the book body.</small>
+      <section class="workspace">
+        <aside class="sidebar">
+          <div class="brand">
+            <span class="brand-mark">M</span>
+            <div>
+              <strong>Minse EPUB</strong>
+              <small>PC Reader</small>
+            </div>
           </div>
 
-          <div class="toolbar-actions">
-            <button id="bookmarkButton" class="icon-button" type="button" title="Bookmark">*</button>
-            <button id="prevButton" class="icon-button" type="button" title="Previous page">&lt;</button>
-            <span id="pageLabel" class="page-label">1 / 5</span>
-            <button id="nextButton" class="icon-button" type="button" title="Next page">&gt;</button>
+          <div class="sidebar-tabs" role="tablist" aria-label="Book panels">
+            <button id="tocTab" class="sidebar-tab" type="button" role="tab" aria-controls="tocPanel">목차</button>
+            <button id="searchTab" class="sidebar-tab" type="button" role="tab" aria-controls="searchPanel">검색</button>
+            <button id="bookmarksTab" class="sidebar-tab" type="button" role="tab" aria-controls="bookmarksPanel">북마크</button>
           </div>
-        </header>
 
-        <section class="content-row">
+          <section id="tocPanel" class="panel sidebar-tab-panel" role="tabpanel" aria-labelledby="tocTab">
+            <h2>Contents</h2>
+            <div id="tocList" class="empty">Open an EPUB to load its contents.</div>
+          </section>
+
+          <section id="searchPanel" class="panel sidebar-tab-panel search-panel" role="tabpanel" aria-labelledby="searchTab">
+            <h2>Search</h2>
+            <form id="searchForm" class="search-form">
+              <input id="searchInput" type="search" placeholder="Find in book" autocomplete="off">
+              <button id="searchButton" class="secondary-button" type="submit">Search</button>
+            </form>
+            <div id="searchStatus" class="empty">Open an EPUB to search.</div>
+            <div id="searchResults" class="search-results"></div>
+          </section>
+
+          <section id="bookmarksPanel" class="panel sidebar-tab-panel" role="tabpanel" aria-labelledby="bookmarksTab">
+            <h2>Bookmarks</h2>
+            <div id="bookmarkList" class="empty">No bookmarks yet.</div>
+          </section>
+        </aside>
+
+        <main class="reader-shell">
+        <section id="contentRow" class="content-row">
+          <div id="selectionToolbar" class="selection-toolbar" hidden>
+            <button id="yellowSelectionButton" class="selection-tool-button swatch-yellow" type="button" title="Yellow highlight" aria-label="Yellow highlight"></button>
+            <button id="orangeSelectionButton" class="selection-tool-button swatch-orange" type="button" title="Orange highlight" aria-label="Orange highlight"></button>
+            <button id="underlineSelectionButton" class="selection-tool-button underline-tool" type="button" title="Underline" aria-label="Underline"></button>
+          </div>
           <article id="reader" class="reader" tabindex="0">
             <div class="sample-image" aria-hidden="true"></div>
             <h1>Minse EPUB Viewer</h1>
@@ -70,11 +125,16 @@
             <label>
               Font
               <select id="fontFamily">
+                <option value="original">Original</option>
                 <option value="system">System</option>
-                <option value="serif">Serif</option>
-                <option value="sans-serif">Sans Serif</option>
-                <option value="monospace">Monospace</option>
+                <option value="kopub-batang">KoPubWorld Batang</option>
+                <option value="kopub-dotum">KoPubWorld Dotum</option>
+                <option value="noto-serif-kr">Noto Serif KR</option>
+                <option value="noto-sans-kr">Noto Sans KR</option>
+                <option value="nanum-myeongjo">Nanum Myeongjo</option>
+                <option value="nanum-gothic">Nanum Gothic</option>
               </select>
+              <small id="fontStatus" class="font-status"></small>
             </label>
 
             <label>
@@ -126,9 +186,11 @@
                 Highlight color
                 <select id="highlightColor">
                   <option value="yellow">Yellow</option>
+                  <option value="orange">Orange</option>
                   <option value="green">Green</option>
                   <option value="pink">Pink</option>
                   <option value="blue">Blue</option>
+                  <option value="underline">Underline</option>
                 </select>
               </label>
 
@@ -147,7 +209,8 @@
             </section>
           </aside>
         </section>
-      </main>
+        </main>
+      </section>
     </div>
 
     <script src="/node_modules/jszip/dist/jszip.min.js"></script>

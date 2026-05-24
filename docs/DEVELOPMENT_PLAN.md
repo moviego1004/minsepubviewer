@@ -146,7 +146,9 @@ Use test-driven development for the reusable core:
 - Added reader margin controls across the web prototype and EPUB renderer.
 - Hardened annotation deletion, empty note edits, and Korean-safe annotation export filenames.
 - Milestone 1, Milestone 2, Milestone 3, and Milestone 4 are complete at prototype level.
-- Next recommended task: start Milestone 5 stabilization with larger and multilingual EPUB files.
+- Milestone 5 stabilization has started with file validation, EPUB open failure classification, content diagnostics, and reading mode fixes.
+- Milestone 6 search has started with sidebar EPUB search and CFI result navigation.
+- Next recommended task: refine search result highlighting and run larger/multilingual EPUB stabilization checks.
 
 ### Milestone 1: Core Foundation
 
@@ -185,6 +187,14 @@ Use test-driven development for the reusable core:
 - Image-heavy EPUB testing.
 - Error handling.
 - Backup and recovery for local reading data.
+
+### Milestone 6: Search
+
+- Sidebar search input.
+- Search across EPUB spine sections.
+- Show result excerpts with chapter labels.
+- Jump to result CFI.
+- Add result highlighting and previous/next navigation.
 
 ## Test Case Plan
 

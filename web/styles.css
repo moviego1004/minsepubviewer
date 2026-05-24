@@ -16,10 +16,15 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   min-width: 980px;
-  min-height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -34,17 +39,35 @@ textarea {
 
 .app {
   display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  min-height: 0;
+}
+
+.workspace {
+  display: grid;
   grid-template-columns: 280px minmax(700px, 1fr);
-  min-height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.sidebar-collapsed .workspace {
+  grid-template-columns: minmax(700px, 1fr);
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
   padding: 20px;
   border-right: 1px solid var(--line);
   background: var(--surface);
+  overflow: hidden;
+}
+
+body.sidebar-collapsed .sidebar {
+  display: none;
 }
 
 .brand {
@@ -90,9 +113,64 @@ textarea {
   pointer-events: none;
 }
 
+.file-icon-button input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .panel {
   display: grid;
   gap: 8px;
+}
+
+.sidebar-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.sidebar-tab {
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.sidebar-tab:last-child {
+  border-right: 0;
+}
+
+.sidebar-tab.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.sidebar-tab-panel[hidden] {
+  display: none;
+}
+
+.sidebar-tab-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-tab-panel:not([hidden]) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .panel h2,
@@ -115,6 +193,16 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.toc-list .list-item {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 .list-item.active,
 .list-item:hover {
   background: var(--accent-soft);
@@ -128,9 +216,49 @@ textarea {
 
 .toc-list {
   display: grid;
-  max-height: 34vh;
-  gap: 4px;
+  gap: 2px;
+  min-height: 0;
   overflow: auto;
+}
+
+.search-panel {
+  gap: 10px;
+}
+
+.search-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.search-form input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.search-results {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.search-result {
+  display: grid;
+  gap: 4px;
+}
+
+.search-result.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.search-result small {
+  color: var(--muted);
 }
 
 .empty {
@@ -143,22 +271,35 @@ textarea {
 
 .reader-shell {
   display: grid;
-  grid-template-rows: auto 1fr;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 18px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
 
+.toolbar-tools,
 .book-title {
   min-width: 0;
+}
+
+.toolbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.book-title {
+  flex: 1 1 auto;
 }
 
 .book-title span {
@@ -169,13 +310,8 @@ textarea {
   white-space: nowrap;
 }
 
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .icon-button {
+  position: relative;
   display: grid;
   width: 36px;
   height: 36px;
@@ -189,8 +325,197 @@ textarea {
   line-height: 1;
 }
 
+.file-icon-button {
+  overflow: hidden;
+}
+
 .icon-button:hover {
   border-color: var(--accent);
+}
+
+.icon-button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.icon-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.panel-toggle {
+  font-size: 0;
+}
+
+.chevron-icon {
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+}
+
+.chevron-left {
+  transform: translateX(2px) rotate(-45deg);
+}
+
+.chevron-right {
+  transform: translateX(-2px) rotate(135deg);
+}
+
+.bookmark-icon {
+  position: relative;
+  width: 14px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  border-radius: 3px 3px 1px 1px;
+}
+
+.bookmark-icon::after {
+  position: absolute;
+  right: -2px;
+  bottom: -6px;
+  left: -2px;
+  height: 10px;
+  background:
+    linear-gradient(135deg, transparent 0 50%, currentColor 51% 64%, transparent 65%),
+    linear-gradient(225deg, transparent 0 50%, currentColor 51% 64%, transparent 65%);
+  content: "";
+}
+
+.icon-button.is-active .bookmark-icon {
+  background: currentColor;
+}
+
+.icon-button.is-active .bookmark-icon::after {
+  background:
+    linear-gradient(135deg, transparent 0 50%, currentColor 51% 64%, transparent 65%),
+    linear-gradient(225deg, transparent 0 50%, currentColor 51% 64%, transparent 65%);
+}
+
+.search-step-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+
+.search-step-icon::before {
+  position: absolute;
+  inset: 3px 3px auto auto;
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  content: "";
+}
+
+.search-step-icon::after {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 6px;
+  height: 6px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  content: "";
+}
+
+.search-step-up::before {
+  transform: rotate(45deg);
+}
+
+.search-step-down::before {
+  top: 6px;
+  transform: rotate(225deg);
+}
+
+.folder-icon {
+  position: relative;
+  width: 18px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+
+.folder-icon::before {
+  position: absolute;
+  top: -5px;
+  left: 1px;
+  width: 8px;
+  height: 5px;
+  border: 1.5px solid currentColor;
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  content: "";
+}
+
+.panel-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+}
+
+.panel-icon::before {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 4px;
+  border-radius: 2px;
+  background: currentColor;
+  content: "";
+}
+
+.panel-icon-left::before {
+  left: 2px;
+}
+
+.panel-icon-right::before {
+  right: 2px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  margin: 0 2px;
+  background: var(--line);
+}
+
+.view-mode-toggle {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.view-mode-button {
+  min-width: 56px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.view-mode-button:last-child {
+  border-right: 0;
+}
+
+.view-mode-button:hover {
+  color: var(--accent);
+}
+
+.view-mode-button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .page-label {
@@ -200,16 +525,83 @@ textarea {
 }
 
 .content-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(440px, 1fr) 280px;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
+}
+
+.selection-toolbar {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(32, 35, 39, 0.18);
+  transform: translate(-50%, -100%);
+}
+
+.selection-toolbar[hidden] {
+  display: none;
+}
+
+.selection-tool-button {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+}
+
+.selection-tool-button:hover {
+  border-color: var(--accent);
+}
+
+.swatch-yellow {
+  background: #f8d94a;
+}
+
+.swatch-orange {
+  background: #ff9f1c;
+}
+
+.underline-tool {
+  border-radius: 6px;
+}
+
+.underline-tool::after {
+  position: absolute;
+  right: 6px;
+  bottom: 7px;
+  left: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: #1c5d99;
+  content: "";
+}
+
+body.settings-collapsed .content-row {
+  grid-template-columns: minmax(440px, 1fr);
+}
+
+body.settings-collapsed .settings {
+  display: none;
 }
 
 .reader {
   align-self: stretch;
   margin: 28px auto;
-  width: min(760px, calc(100% - 56px));
-  min-height: calc(100vh - 122px);
+  width: calc(100% - 56px);
+  height: calc(100% - 56px);
+  min-height: 0;
   padding: calc(var(--reader-margin, 24) * 1px);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -220,8 +612,6 @@ textarea {
   font-size: calc(var(--reader-font-size, 18) * 1px);
   line-height: var(--reader-line-height, 1.6);
   outline: none;
-  transform: scale(var(--reader-zoom, 1));
-  transform-origin: top center;
 }
 
 .reader.epub-loaded {
@@ -230,7 +620,14 @@ textarea {
   padding: 0;
 }
 
+.reader.epub-loaded.reader-continuous {
+  overflow: auto;
+}
+
 .reader.epub-loaded iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
   background: var(--reader-bg);
 }
 
@@ -264,9 +661,11 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
   padding: 20px;
   border-left: 1px solid var(--line);
   background: var(--surface);
+  overflow: auto;
 }
 
 .settings label {
@@ -280,6 +679,17 @@ textarea {
 .settings input[type="range"],
 .settings textarea {
   width: 100%;
+}
+
+.font-status {
+  min-height: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.font-status.is-warning {
+  color: #8a5b00;
 }
 
 .settings textarea {

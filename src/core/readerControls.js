@@ -33,3 +33,23 @@ export function applyZoomIntent(settings, intent, step = 0.1) {
   return mergeReadingSettings(settings, { zoom: Number(nextZoom.toFixed(2)) });
 }
 
+export function getScrollBoundaryIntent(metrics, direction, threshold = 2) {
+  const scrollTop = Number(metrics?.scrollTop) || 0;
+  const scrollHeight = Number(metrics?.scrollHeight) || 0;
+  const clientHeight = Number(metrics?.clientHeight) || 0;
+
+  if (scrollHeight <= clientHeight + threshold) {
+    return "page";
+  }
+
+  if (direction === "next") {
+    return scrollTop + clientHeight >= scrollHeight - threshold ? "page" : "scroll";
+  }
+
+  if (direction === "previous") {
+    return scrollTop <= threshold ? "page" : "scroll";
+  }
+
+  return "page";
+}
+
