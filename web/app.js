@@ -19,7 +19,6 @@ import {
 import { assertOpenableEpub, describeEpubOpenFailure } from "../src/core/epubValidation.js";
 import {
   applyZoomIntent,
-  getScrollBoundaryIntent,
   getWheelIntent
 } from "../src/core/readerControls.js";
 import {
@@ -613,41 +612,6 @@ function applySearchHighlights() {
   }
 }
 
-function installContentScrollBoundaryHandler(contents) {
-  const win = contents?.window;
-
-  if (!win || win.__minseScrollBoundaryInstalled) {
-    return;
-  }
-
-  win.__minseScrollBoundaryInstalled = true;
-
-  win.addEventListener("scroll", () => {
-    const settings = mergeReadingSettings(state.book.settings, {});
-
-    // Only handle boundaries manually in paginated mode.
-    // In continuous mode, the native manager handles this.
-    if (!state.rendition || settings.viewMode !== "paginated" || wheelNavLock) {
-      return;
-    }
-
-    const doc = win.document;
-    const scrollHeight = Math.max(doc?.documentElement?.scrollHeight || 0, doc?.body?.scrollHeight || 0);
-    const clientHeight = win.innerHeight || doc?.documentElement?.clientHeight || 0;
-    const scrollTop = win.scrollY || doc?.documentElement?.scrollTop || 0;
-
-    const metrics = { scrollTop, scrollHeight, clientHeight };
-
-    if (getScrollBoundaryIntent(metrics, "next", 2) === "page") {
-      wheelNavLock = true;
-      setTimeout(() => { wheelNavLock = false; }, 1000);
-      goNext();
-    }
-    // We don't auto-trigger goPrevious on scroll to top to avoid jumping loops,
-    // we rely on the wheel intent for manual backward navigation.
-  }, { passive: true });
-}
-
 function installContentHooks() {
   if (!state.rendition) {
     return;
@@ -658,12 +622,6 @@ function installContentHooks() {
     sampleRenderedContent(contents);
     updateContentDiagnostics();
     installContentWheelHandler(contents);
-    
-    // Only install manual boundary handler for paginated mode if it might have internal scroll
-    const settings = mergeReadingSettings(state.book.settings, {});
-    if (settings.viewMode === "paginated") {
-      installContentScrollBoundaryHandler(contents);
-    }
 
     if (state.__minsePendingScroll) {
       const win = contents?.window;
@@ -965,32 +923,12 @@ function handleWheelEvent(event) {
 
   const settings = mergeReadingSettings(state.book.settings, {});
 
-  // Continuous mode: let epub.js native continuous manager handle it.
+  // Continuous mode: let epub.js handle normal scrolling and section loading.
   if (state.rendition && settings.viewMode === "continuous") {
     return;
   }
 
-  // Paginated mode:
-  // We handle the wheel event ourselves to allow internal scrolling within a page
-  // before transitioning to the next/previous page.
-  const threshold = 2;
-  const targets = getScrollableTargets(event);
-  const scrollableTarget = targets.find((candidate) => (
-    getScrollBoundaryIntent(candidate.metrics, intent.direction, threshold) === "scroll"
-  ));
-
-  if (scrollableTarget) {
-    // If we have room to scroll internally, do so and stop propagation.
-    // We call preventDefault to take full control of the scroll timing.
-    event.preventDefault();
-    event.stopPropagation();
-
-    const delta = Number(event.deltaY) || (intent.direction === "next" ? 100 : -100);
-    scrollableTarget.scrollBy(delta);
-    return;
-  }
-
-  // At boundary: move to next/previous page.
+  // Paginated mode: one wheel gesture turns one page, matching common EPUB readers.
   event.preventDefault();
   event.stopPropagation();
 
@@ -1017,59 +955,6 @@ function installContentWheelHandler(contents) {
   win.__minseWheelHandlerInstalled = true;
   win.addEventListener("wheel", handleWheelEvent, { passive: false });
 }
-
-function getScrollableTargets(event) {
-  const currentTarget = event?.currentTarget;
-  const document = currentTarget?.document || currentTarget?.ownerDocument;
-
-  if (!document) {
-    return [{
-      metrics: {
-        scrollTop: elements.reader.scrollTop,
-        scrollHeight: elements.reader.scrollHeight,
-        clientHeight: elements.reader.clientHeight
-      },
-      scrollBy: (top) => elements.reader.scrollBy({ top, behavior: "auto" })
-    }];
-  }
-
-  const win = document.defaultView || currentTarget;
-  const maxScrollHeight = Math.max(
-    document.documentElement?.scrollHeight || 0,
-    document.body?.scrollHeight || 0
-  );
-  const targets = [];
-
-  if (win?.scrollBy) {
-    targets.push({
-      metrics: {
-        scrollTop: win.scrollY || document.documentElement?.scrollTop || document.body?.scrollTop || 0,
-        scrollHeight: maxScrollHeight,
-        clientHeight: win.innerHeight || document.documentElement?.clientHeight || document.body?.clientHeight || 0
-      },
-      scrollBy: (top) => win.scrollBy({ top, behavior: "auto" })
-    });
-  }
-
-  for (const element of [
-    document.scrollingElement,
-    document.documentElement,
-    document.body
-  ].filter(Boolean)) {
-    targets.push({
-      metrics: {
-        scrollTop: element.scrollTop,
-        scrollHeight: element.scrollHeight,
-        clientHeight: element.clientHeight
-      },
-      scrollBy: (top) => element.scrollBy({ top, behavior: "auto" })
-    });
-  }
-
-  return targets;
-}
-
-
 
 async function rebuildRenditionForViewMode() {
   if (!state.epubBook || !state.rendition) {
@@ -1823,30 +1708,6 @@ elements.reader.addEventListener("wheel", handleWheelEvent, { passive: false });
 elements.reader.addEventListener("mousedown", () => {
   hideSelectionToolbar();
 });
-
-document.addEventListener("scroll", (event) => {
-  const settings = mergeReadingSettings(state.book.settings, {});
-
-  if (!state.rendition || settings.viewMode !== "continuous" || wheelNavLock) {
-    return;
-  }
-
-  const target = event.target;
-
-  if (target !== elements.reader && !elements.reader.contains(target)) {
-    return;
-  }
-
-  if (getScrollBoundaryIntent({
-    scrollTop: target.scrollTop,
-    scrollHeight: target.scrollHeight,
-    clientHeight: target.clientHeight
-  }, "next", 10) === "page") {
-    wheelNavLock = true;
-    setTimeout(() => { wheelNavLock = false; }, 1000);
-    goNext();
-  }
-}, true);
 
 elements.searchForm.addEventListener("submit", (event) => {
   event.preventDefault();

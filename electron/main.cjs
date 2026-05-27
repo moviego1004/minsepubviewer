@@ -1,4 +1,5 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
+const fsSync = require("node:fs");
 const { appendFile, mkdir, readFile } = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
@@ -6,6 +7,11 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const port = Number(process.env.PORT) || 5173;
 const appUrl = `http://localhost:${port}`;
+const windowStateFile = "window-state.json";
+const defaultWindowState = Object.freeze({
+  width: 1280,
+  height: 840
+});
 let server = null;
 
 const mimeTypes = new Map([
@@ -101,6 +107,117 @@ function checkServer() {
   });
 }
 
+function getWindowStatePath() {
+  return path.join(app.getPath("userData"), windowStateFile);
+}
+
+function intersects(rect, bounds) {
+  return (
+    rect.x < bounds.x + bounds.width &&
+    rect.x + rect.width > bounds.x &&
+    rect.y < bounds.y + bounds.height &&
+    rect.y + rect.height > bounds.y
+  );
+}
+
+function isRestorableWindowState(state) {
+  if (!state || typeof state !== "object") {
+    return false;
+  }
+
+  if (!Number.isInteger(state.width) || !Number.isInteger(state.height)) {
+    return false;
+  }
+
+  if (state.width < 980 || state.height < 680) {
+    return false;
+  }
+
+  if (!Number.isInteger(state.x) || !Number.isInteger(state.y)) {
+    return true;
+  }
+
+  return screen.getAllDisplays().some((display) => (
+    intersects({
+      x: state.x,
+      y: state.y,
+      width: state.width,
+      height: state.height
+    }, display.workArea)
+  ));
+}
+
+function loadWindowState() {
+  try {
+    const state = JSON.parse(fsSync.readFileSync(getWindowStatePath(), "utf8"));
+
+    return isRestorableWindowState(state)
+      ? state
+      : defaultWindowState;
+  } catch {
+    return defaultWindowState;
+  }
+}
+
+function getWindowState(window) {
+  const bounds = window.getBounds();
+
+  return {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    maximized: window.isMaximized()
+  };
+}
+
+function saveWindowState(window) {
+  if (!window || window.isDestroyed() || window.isMinimized()) {
+    return;
+  }
+
+  fsSync.mkdirSync(app.getPath("userData"), { recursive: true });
+  fsSync.writeFileSync(
+    getWindowStatePath(),
+    JSON.stringify(getWindowState(window), null, 2),
+    "utf8"
+  );
+}
+
+function installWindowStatePersistence(window) {
+  let saveTimer = null;
+
+  const scheduleSave = () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+    }
+
+    saveTimer = setTimeout(() => {
+      try {
+        saveWindowState(window);
+      } catch (error) {
+        console.warn("Failed to save window state", error);
+      }
+    }, 300);
+  };
+
+  window.on("resize", scheduleSave);
+  window.on("move", scheduleSave);
+  window.on("maximize", scheduleSave);
+  window.on("unmaximize", scheduleSave);
+  window.on("close", () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+    }
+
+    try {
+      saveWindowState(window);
+    } catch (error) {
+      console.warn("Failed to save window state", error);
+    }
+  });
+}
+
 async function ensureServer() {
   if (await checkServer()) {
     return;
@@ -128,17 +245,30 @@ async function ensureServer() {
 async function createWindow() {
   await ensureServer();
 
+  const windowState = loadWindowState();
   const window = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    x: windowState.x,
+    y: windowState.y,
+    width: windowState.width,
+    height: windowState.height,
     minWidth: 980,
     minHeight: 680,
+    show: false,
     title: "Minse EPUB Viewer",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, "preload.cjs")
     }
+  });
+
+  installWindowStatePersistence(window);
+  window.once("ready-to-show", () => {
+    if (windowState.maximized) {
+      window.maximize();
+    }
+
+    window.show();
   });
 
   await window.loadURL(appUrl);
