@@ -1,4 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
+const { randomUUID } = require("node:crypto");
 const fsSync = require("node:fs");
 const { appendFile, mkdir, readFile } = require("node:fs/promises");
 const http = require("node:http");
@@ -13,6 +14,7 @@ const defaultWindowState = Object.freeze({
   height: 840
 });
 let server = null;
+const imageViewerPayloads = new Map();
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -59,6 +61,8 @@ function resolveRequestPath(url) {
 
 function createStaticServer() {
   return http.createServer(async (request, response) => {
+    const requestUrl = new URL(request.url, appUrl);
+
     if (request.method === "POST" && request.url === "/__client-log") {
       try {
         await writeClientLog(request, response);
@@ -67,6 +71,27 @@ function createStaticServer() {
         response.writeHead(500);
         response.end("Log write failed");
       }
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/__image-viewer-state") {
+      const id = requestUrl.searchParams.get("id") || "";
+      const payload = imageViewerPayloads.get(id);
+
+      if (!payload) {
+        response.writeHead(404, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store"
+        });
+        response.end(JSON.stringify({ error: "Image not found" }));
+        return;
+      }
+
+      response.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      });
+      response.end(JSON.stringify(payload));
       return;
     }
 
@@ -218,6 +243,61 @@ function installWindowStatePersistence(window) {
   });
 }
 
+function sanitizeImageViewerPayload(payload = {}) {
+  const src = typeof payload.src === "string" ? payload.src : "";
+
+  if (!src) {
+    return null;
+  }
+
+  return {
+    src,
+    alt: typeof payload.alt === "string" ? payload.alt.slice(0, 300) : "",
+    title: typeof payload.title === "string" ? payload.title.slice(0, 300) : "Image"
+  };
+}
+
+async function openImageWindow(payload) {
+  const safePayload = sanitizeImageViewerPayload(payload);
+
+  if (!safePayload) {
+    return { ok: false };
+  }
+
+  const id = randomUUID();
+  const currentWindow = BrowserWindow.getFocusedWindow();
+  const bounds = currentWindow?.getBounds?.() || defaultWindowState;
+  imageViewerPayloads.set(id, safePayload);
+
+  const imageWindow = new BrowserWindow({
+    x: bounds.x + 48,
+    y: bounds.y + 48,
+    width: 900,
+    height: 720,
+    minWidth: 420,
+    minHeight: 320,
+    show: false,
+    title: safePayload.title || "Image",
+    backgroundColor: "#111111",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  imageWindow.setMenuBarVisibility(false);
+  imageWindow.once("ready-to-show", () => {
+    imageWindow.showInactive();
+  });
+  imageWindow.once("closed", () => {
+    imageViewerPayloads.delete(id);
+  });
+
+  await imageWindow.loadURL(`${appUrl}/web/image-viewer.html?id=${encodeURIComponent(id)}`);
+
+  return { ok: true };
+}
+
 async function ensureServer() {
   if (await checkServer()) {
     return;
@@ -299,6 +379,8 @@ ipcMain.handle("book:open", async () => {
     bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
   };
 });
+
+ipcMain.handle("image:open", async (_event, payload) => openImageWindow(payload));
 
 app.whenReady().then(createWindow);
 

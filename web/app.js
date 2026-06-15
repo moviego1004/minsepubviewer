@@ -18,6 +18,15 @@ import {
 } from "../src/core/library.js";
 import { assertOpenableEpub, describeEpubOpenFailure } from "../src/core/epubValidation.js";
 import {
+  getPublicationLayoutMode,
+  shouldApplyReaderReflowStyles
+} from "../src/core/renditionLayout.js";
+import {
+  createMarkdownDocument,
+  createMarkdownFileName,
+  documentToMarkdown
+} from "../src/core/markdownExport.js";
+import {
   applyZoomIntent,
   getWheelIntent
 } from "../src/core/readerControls.js";
@@ -142,6 +151,7 @@ const state = {
   epubBook: null,
   rendition: null,
   renditionEventsInstalled: false,
+  publicationLayoutMode: "reflowable",
   toc: [],
   currentHref: "",
   selectedRange: "",
@@ -150,6 +160,7 @@ const state = {
   page: 1,
   pageCount: 5,
   progressLabel: "",
+  bookMeta: "Choose an EPUB file to render the book body.",
   contentSamples: new Map(),
   contentWarning: "",
   searchQuery: "",
@@ -158,6 +169,7 @@ const state = {
   activeSearchResultIndex: -1,
   searchStatus: "",
   searching: false,
+  markdownExporting: false,
   activeSidebarTab: "toc",
   ui: loadUiState()
 };
@@ -194,6 +206,7 @@ const elements = {
   paginatedModeButton: document.querySelector("#paginatedModeButton"),
   continuousModeButton: document.querySelector("#continuousModeButton"),
   textOnlyToolbarButton: document.querySelector("#textOnlyToolbarButton"),
+  exportMarkdownButton: document.querySelector("#exportMarkdownButton"),
   tocTab: document.querySelector("#tocTab"),
   searchTab: document.querySelector("#searchTab"),
   bookmarksTab: document.querySelector("#bookmarksTab"),
@@ -326,6 +339,10 @@ function getRenditionFlow(settings) {
   return settings.viewMode === "continuous" ? "scrolled-doc" : "paginated";
 }
 
+function isPrePaginatedMode() {
+  return state.publicationLayoutMode === "pre-paginated";
+}
+
 function getRenditionGap(settings) {
   return Math.max(0, Number(settings.margin) || 0) * 2;
 }
@@ -426,6 +443,7 @@ function getReaderCss(settings) {
 
     img {
       max-width: 100% !important;
+      cursor: zoom-in !important;
     }
 
     ${textOnlyCss}
@@ -447,10 +465,22 @@ function applyContentMargin(contents, settings) {
   body.style.setProperty("padding-left", margin, "important");
 }
 
+function clearReaderStyleOverrides(contents) {
+  const document = contents?.document;
+
+  document?.getElementById("minse-reader-style")?.remove();
+  document?.getElementById("epubjs-inserted-css-minse-reader")?.remove();
+}
+
 function applyContentSettings(contents) {
   const document = contents?.document;
 
   if (!document?.head) {
+    return;
+  }
+
+  if (!shouldApplyReaderReflowStyles(state.epubBook)) {
+    clearReaderStyleOverrides(contents);
     return;
   }
 
@@ -485,6 +515,19 @@ function applyRenditionSettings() {
 
   if (typeof state.rendition.flow === "function") {
     state.rendition.flow(getRenditionFlow(settings));
+  }
+
+  if (!shouldApplyReaderReflowStyles(state.epubBook)) {
+    if (state.rendition.themes?._themes?.["minse-reader"]) {
+      state.rendition.themes._themes["minse-reader"] = { rules: {} };
+    }
+    if (state.rendition.themes) {
+      state.rendition.themes._current = "default";
+    }
+    for (const contents of state.rendition.getContents?.() || []) {
+      clearReaderStyleOverrides(contents);
+    }
+    return;
   }
 
   const bodyTheme = {
@@ -657,6 +700,7 @@ function installContentHooks() {
     sampleRenderedContent(contents);
     updateContentDiagnostics();
     installContentWheelHandler(contents);
+    installContentImageHandler(contents);
 
     if (state.__minsePendingScroll) {
       const win = contents?.window;
@@ -680,6 +724,68 @@ function installContentHooks() {
   });
 }
 
+function getImageSource(img) {
+  const rawSource = img?.currentSrc || img?.src || img?.getAttribute?.("src") || "";
+
+  if (!rawSource) {
+    return "";
+  }
+
+  try {
+    return new URL(rawSource, img.ownerDocument?.baseURI || window.location.href).toString();
+  } catch {
+    return rawSource;
+  }
+}
+
+function openImagePreview(img) {
+  const src = getImageSource(img);
+
+  if (!src) {
+    return;
+  }
+
+  const alt = img.getAttribute?.("alt") || "";
+  const title = alt || state.book.title || "Image";
+  const payload = {
+    src,
+    alt,
+    title
+  };
+
+  if (window.minseDesktop?.openImageWindow) {
+    window.minseDesktop.openImageWindow(payload).catch((error) => {
+      logClient("epub.image.open.failed", {
+        error: formatError(error)
+      });
+    });
+    return;
+  }
+
+  window.open(src, "_blank", "noopener,noreferrer");
+}
+
+function installContentImageHandler(contents) {
+  const document = contents?.document;
+
+  if (!document || document.__minseImageHandlerInstalled) {
+    return;
+  }
+
+  document.__minseImageHandlerInstalled = true;
+  document.addEventListener("click", (event) => {
+    const img = event.target?.closest?.("img");
+
+    if (!img) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    openImagePreview(img);
+  });
+}
+
 async function destroyEpub() {
   if (state.rendition) {
     state.rendition.destroy();
@@ -693,6 +799,7 @@ async function destroyEpub() {
   state.epubBook = null;
   state.renditionEventsInstalled = false;
   state.progressLabel = "";
+  state.publicationLayoutMode = "reflowable";
   state.toc = [];
   state.currentHref = "";
   state.selectedRange = "";
@@ -719,9 +826,10 @@ function showFileOpenProblem(fileLike, error) {
   const message = error?.message || "Could not open this EPUB.";
 
   showReaderMessage(message);
-  elements.bookMeta.textContent = fileLike?.name
+  state.bookMeta = fileLike?.name
     ? `${fileLike.name} - ${message}`
     : message;
+  elements.bookMeta.textContent = state.bookMeta;
   logClient("epub.file.rejected", {
     name: fileLike?.name || "",
     size: fileLike?.size || 0,
@@ -832,8 +940,11 @@ async function openEpub(file, arrayBuffer) {
     });
 
     await state.epubBook.ready;
+    state.publicationLayoutMode = getPublicationLayoutMode(state.epubBook);
+    applyRenditionSettings();
     logClient("epub.book.ready", {
-      name: file.name
+      name: file.name,
+      publicationLayoutMode: state.publicationLayoutMode
     });
 
     const metadata = await state.epubBook.loaded.metadata.catch(() => null);
@@ -891,7 +1002,8 @@ async function openEpub(file, arrayBuffer) {
     state.searchStatus = "";
     state.searching = false;
     showReaderMessage(failure.message);
-    elements.bookMeta.textContent = `${file.name} - ${failure.message}`;
+    state.bookMeta = `${file.name} - ${failure.message}`;
+    elements.bookMeta.textContent = state.bookMeta;
     logClient("epub.open.failed", {
       name: file.name,
       size: file.size,
@@ -938,7 +1050,7 @@ async function goPrevious() {
   if (state.rendition) {
     const settings = mergeReadingSettings(state.book.settings, {});
     // Signal to land at bottom only in paginated mode when navigating back
-    if (settings.viewMode === "paginated") {
+    if (settings.viewMode === "paginated" && !isPrePaginatedMode()) {
       state.__minsePendingScroll = "bottom";
     }
     await state.rendition.prev();
@@ -954,7 +1066,7 @@ async function goNext() {
   if (state.rendition) {
     const settings = mergeReadingSettings(state.book.settings, {});
     // Signal to land at top in paginated mode
-    if (settings.viewMode === "paginated") {
+    if (settings.viewMode === "paginated" && !isPrePaginatedMode()) {
       state.__minsePendingScroll = "top";
     }
     await state.rendition.next();
@@ -1501,25 +1613,97 @@ function createExportFileName(book) {
   return `${base}-annotations.json`;
 }
 
-function exportAnnotations() {
-  const exported = createAnnotationExport(state.book);
-  const blob = new Blob([JSON.stringify(exported, null, 2)], {
-    type: "application/json"
-  });
+function downloadTextFile({ content, fileName, type }) {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
 
   link.href = url;
-  link.download = createExportFileName(state.book);
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function exportAnnotations() {
+  const exported = createAnnotationExport(state.book);
+
+  downloadTextFile({
+    content: JSON.stringify(exported, null, 2),
+    fileName: createExportFileName(state.book),
+    type: "application/json"
+  });
 
   logClient("annotations.exported", {
     highlights: exported.highlights.length,
     notes: exported.notes.length
   });
+}
+
+async function createMarkdownSection(section) {
+  const wasLoaded = Boolean(section.contents);
+
+  await section.load(state.epubBook.load.bind(state.epubBook));
+
+  const markdown = documentToMarkdown(section.document, {
+    title: getTocLabelByHref(section.href)
+  });
+
+  if (!wasLoaded && typeof section.unload === "function") {
+    section.unload();
+  }
+
+  return markdown;
+}
+
+async function exportMarkdown() {
+  if (!state.epubBook || state.markdownExporting) {
+    return;
+  }
+
+  state.markdownExporting = true;
+  render();
+
+  try {
+    const sections = state.epubBook.spine?.spineItems || [];
+    const markdownSections = [];
+
+    for (const section of sections) {
+      if (!section.linear) {
+        continue;
+      }
+
+      const markdown = await createMarkdownSection(section);
+      if (markdown) {
+        markdownSections.push(markdown);
+      }
+    }
+
+    const markdown = createMarkdownDocument({
+      title: state.book.title,
+      sections: markdownSections
+    });
+
+    downloadTextFile({
+      content: `${markdown}\n`,
+      fileName: createMarkdownFileName(state.book.title),
+      type: "text/markdown;charset=utf-8"
+    });
+
+    logClient("epub.markdown.exported", {
+      sections: markdownSections.length,
+      characters: markdown.length
+    });
+  } catch (error) {
+    logClient("epub.markdown.export.failed", {
+      error: formatError(error)
+    });
+    console.error(error);
+  } finally {
+    state.markdownExporting = false;
+    render();
+  }
 }
 
 async function readFileArrayBuffer(fileLike) {
@@ -1582,7 +1766,7 @@ async function loadSelectedFile(fileLike) {
     }
 
     state.page = Number(state.book.lastLocation.replace("page-", "")) || 1;
-    elements.bookMeta.textContent = `${fileLike.name} - ${(fileLike.size / 1024 / 1024).toFixed(2)} MB`;
+    state.bookMeta = `${fileLike.name} - ${(fileLike.size / 1024 / 1024).toFixed(2)} MB`;
     persistBook();
     render();
     await openEpub(fileLike, arrayBuffer);
@@ -1802,8 +1986,12 @@ function render() {
   const settings = mergeReadingSettings(state.book.settings, {});
 
   elements.bookTitle.textContent = state.book.title;
-  if (state.contentWarning) {
+  if (state.markdownExporting) {
+    elements.bookMeta.textContent = "Converting EPUB to Markdown...";
+  } else if (state.contentWarning) {
     elements.bookMeta.textContent = state.contentWarning;
+  } else {
+    elements.bookMeta.textContent = state.bookMeta;
   }
   elements.pageLabel.textContent = state.rendition
     ? state.progressLabel || "EPUB"
@@ -1836,6 +2024,8 @@ function render() {
   elements.bookmarkButton.setAttribute("aria-pressed", String(hasBookmarkAtCurrentLocation()));
   elements.prevSearchResultButton.disabled = !state.searchResults.length || state.searching;
   elements.nextSearchResultButton.disabled = !state.searchResults.length || state.searching;
+  elements.exportMarkdownButton.disabled = !state.epubBook || state.markdownExporting;
+  elements.exportMarkdownButton.textContent = state.markdownExporting ? "변환 중..." : "md 파일 변환";
   elements.paginatedModeButton.classList.toggle("is-active", settings.viewMode === "paginated");
   elements.continuousModeButton.classList.toggle("is-active", settings.viewMode === "continuous");
   elements.textOnlyToolbarButton.classList.toggle("is-active", settings.textOnly);
@@ -1961,6 +2151,9 @@ elements.continuousModeButton.addEventListener("click", () => {
 elements.textOnlyToolbarButton.addEventListener("click", () => {
   const settings = mergeReadingSettings(state.book.settings, {});
   updateSettings({ textOnly: !settings.textOnly });
+});
+elements.exportMarkdownButton.addEventListener("click", () => {
+  exportMarkdown();
 });
 
 elements.highlightButton.addEventListener("click", () => {

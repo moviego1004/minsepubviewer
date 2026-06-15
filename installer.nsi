@@ -1,11 +1,32 @@
-﻿!define APP_NAME      "Mins EPUB Viewer"
-!define APP_VERSION   "0.1.0"
-!define APP_ID        "com.mins.epubviewer"
-!define APP_EXE       "Mins EPUB Viewer.exe"
-!define OUT_FILE      "MinsEPUBViewer-${APP_VERSION}-setup.exe"
+!ifndef APP_NAME
+  !define APP_NAME      "Mins EPUB Viewer"
+!endif
+!ifndef APP_VERSION
+  !define APP_VERSION   "0.1.0"
+!endif
+!ifndef APP_ID
+  !define APP_ID        "com.mins.epubviewer"
+!endif
+!ifndef APP_EXE
+  !define APP_EXE       "Mins EPUB Viewer.exe"
+!endif
+!ifndef BUILD_NUMBER
+  !define BUILD_NUMBER  "local"
+!endif
+!ifndef DISPLAY_NAME
+  !define DISPLAY_NAME  "MinsEpubViewer"
+!endif
+!ifndef DISPLAY_VERSION
+  !define DISPLAY_VERSION "${APP_VERSION}.${BUILD_NUMBER}"
+!endif
+!ifndef OUT_FILE
+  !define OUT_FILE      "MinsEpubViewer-${DISPLAY_VERSION}-setup.exe"
+!endif
+!ifndef SOURCE_DIR
+  !define SOURCE_DIR    "build\win-unpacked"
+!endif
 !define INSTALL_DIR   "$PROGRAMFILES64\${APP_NAME}"
 !define REG_UNINSTALL "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
-!define SOURCE_DIR    "build\win-unpacked"
 
 ; --- Metadata ---------------------------------------------------------------
 Name              "${APP_NAME}"
@@ -41,23 +62,24 @@ Section "MainSection" SEC_MAIN
   SetOutPath "$INSTDIR"
   SetOverwrite on
 
-  ; Electron 바이너리 및 리소스 복사
+  ; Electron binaries and resources
   File /r "${SOURCE_DIR}\*.*"
 
-  ; 언인스톨러 생성
+  ; Uninstaller
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-  ; 시작 메뉴 바로 가기
+  ; Start menu shortcuts
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
 
-  ; 바탕화면 바로 가기
+  ; Desktop shortcut
   CreateShortcut  "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
 
-  ; 프로그램 추가/제거 등록
-  WriteRegStr   HKLM "${REG_UNINSTALL}" "DisplayName"      "${APP_NAME}"
-  WriteRegStr   HKLM "${REG_UNINSTALL}" "DisplayVersion"   "${APP_VERSION}"
+  ; Add/Remove Programs registration
+  WriteRegStr   HKLM "${REG_UNINSTALL}" "DisplayName"      "${DISPLAY_NAME}"
+  WriteRegStr   HKLM "${REG_UNINSTALL}" "DisplayVersion"   "${DISPLAY_VERSION}"
+  WriteRegStr   HKLM "${REG_UNINSTALL}" "DisplayIcon"      "$INSTDIR\${APP_EXE},0"
   WriteRegStr   HKLM "${REG_UNINSTALL}" "Publisher"        "Mins"
   WriteRegStr   HKLM "${REG_UNINSTALL}" "InstallLocation"  "$INSTDIR"
   WriteRegStr   HKLM "${REG_UNINSTALL}" "UninstallString"  '"$INSTDIR\Uninstall.exe"'
@@ -65,7 +87,7 @@ Section "MainSection" SEC_MAIN
   WriteRegDWORD HKLM "${REG_UNINSTALL}" "NoModify"         1
   WriteRegDWORD HKLM "${REG_UNINSTALL}" "NoRepair"         1
 
-  ; 설치 크기 계산 후 기록
+  ; Store installed size
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   IntFmt $0 "0x%08X" $0
   WriteRegDWORD HKLM "${REG_UNINSTALL}" "EstimatedSize" "$0"
@@ -75,13 +97,13 @@ SectionEnd
 ; --- Uninstall --------------------------------------------------------------
 Section "Uninstall"
 
-  ; 바로 가기 삭제
+  ; Remove shortcuts
   Delete "$DESKTOP\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk"
   RMDir  "$SMPROGRAMS\${APP_NAME}"
 
-  ; 설치 폴더 삭제 (logs 등 사용자 데이터는 유지)
+  ; Remove install folder; user data stored elsewhere is preserved
   RMDir /r "$INSTDIR\locales"
   RMDir /r "$INSTDIR\resources"
   Delete "$INSTDIR\*.dll"
@@ -95,8 +117,7 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir  "$INSTDIR"
 
-  ; 레지스트리 정리
+  ; Remove registry entries
   DeleteRegKey HKLM "${REG_UNINSTALL}"
 
 SectionEnd
-

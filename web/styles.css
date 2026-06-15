@@ -344,6 +344,29 @@ body.sidebar-collapsed .sidebar {
   opacity: 0.42;
 }
 
+.toolbar-action-button {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.toolbar-action-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.toolbar-action-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
 .panel-toggle {
   font-size: 0;
 }
