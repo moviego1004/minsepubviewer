@@ -69,12 +69,12 @@ if exist "%BUILD_DIR%" (
 
 if not exist "node_modules\.bin\electron-builder.cmd" (
   echo Installing dependencies...
-  npm.cmd ci
+  call npm.cmd ci
   if errorlevel 1 exit /b 1
 )
 
 echo Building Electron package...
-npm.cmd run build
+call npm.cmd run build
 if errorlevel 1 exit /b 1
 
 if not exist "%BUILD_DIR%\win-unpacked\Mins EPUB Viewer.exe" (
