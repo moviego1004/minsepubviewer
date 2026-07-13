@@ -367,6 +367,36 @@ body.sidebar-collapsed .sidebar {
   opacity: 0.42;
 }
 
+.toolbar-action-button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.markdown-file-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.markdown-file-button input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.markdown-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.markdown-actions[hidden] {
+  display: none;
+}
+
 .panel-toggle {
   font-size: 0;
 }
@@ -586,6 +616,79 @@ body.sidebar-collapsed .sidebar {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.markdown-workspace {
+  height: 100%;
+  min-height: 0;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.content-row[hidden] {
+  display: none;
+}
+
+.markdown-workspace[hidden] {
+  display: none;
+}
+
+.markdown-editor,
+.markdown-viewer {
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 16px 48px rgba(32, 35, 39, 0.08);
+  overflow: hidden;
+}
+
+.markdown-viewer {
+  padding: 24px 34px;
+  overflow: auto;
+}
+
+.markdown-editor[hidden],
+.markdown-viewer[hidden] {
+  display: none;
+}
+
+.markdown-editor .toastui-editor-defaultUI {
+  height: 100% !important;
+  border: 0;
+}
+
+.markdown-viewer .toastui-editor-contents {
+  max-width: 920px;
+  margin: 0 auto;
+  font-size: 16px;
+}
+
+body.markdown-mode .workspace {
+  grid-template-columns: minmax(700px, 1fr);
+}
+
+body.markdown-mode .sidebar {
+  display: none;
+}
+
+body.markdown-mode #leftPanelToggle,
+body.markdown-mode #rightPanelToggle,
+body.markdown-mode #prevButton,
+body.markdown-mode #nextButton,
+body.markdown-mode #pageLabel,
+body.markdown-mode #bookmarkButton,
+body.markdown-mode #prevSearchResultButton,
+body.markdown-mode #nextSearchResultButton,
+body.markdown-mode .view-mode-toggle,
+body.markdown-mode #textOnlyToolbarButton,
+body.markdown-mode #exportMarkdownButton {
+  display: none;
+}
+
+body.markdown-mode .toolbar-separator {
+  display: none;
 }
 
 .selection-toolbar {

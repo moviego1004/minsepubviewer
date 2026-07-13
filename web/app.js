@@ -170,6 +170,18 @@ const state = {
   searchStatus: "",
   searching: false,
   markdownExporting: false,
+  mode: "epub",
+  markdown: {
+    name: "",
+    path: "",
+    content: "",
+    savedContent: "",
+    dirty: false,
+    viewMode: "edit",
+    saving: false
+  },
+  markdownEditor: null,
+  markdownViewer: null,
   activeSidebarTab: "toc",
   ui: loadUiState()
 };
@@ -185,6 +197,18 @@ const elements = {
   underlineSelectionButton: document.querySelector("#underlineSelectionButton"),
   openBookButton: document.querySelector("#openBookButton"),
   bookInput: document.querySelector("#bookInput"),
+  newMarkdownButton: document.querySelector("#newMarkdownButton"),
+  openMarkdownButton: document.querySelector("#openMarkdownButton"),
+  markdownInput: document.querySelector("#markdownInput"),
+  markdownActions: document.querySelector("#markdownActions"),
+  markdownEditButton: document.querySelector("#markdownEditButton"),
+  markdownViewButton: document.querySelector("#markdownViewButton"),
+  saveMarkdownButton: document.querySelector("#saveMarkdownButton"),
+  saveMarkdownAsButton: document.querySelector("#saveMarkdownAsButton"),
+  closeMarkdownButton: document.querySelector("#closeMarkdownButton"),
+  markdownWorkspace: document.querySelector("#markdownWorkspace"),
+  markdownEditor: document.querySelector("#markdownEditor"),
+  markdownViewer: document.querySelector("#markdownViewer"),
   bookTitle: document.querySelector("#bookTitle"),
   bookMeta: document.querySelector("#bookMeta"),
   reader: document.querySelector("#reader"),
@@ -1626,6 +1650,163 @@ function downloadTextFile({ content, fileName, type }) {
   URL.revokeObjectURL(url);
 }
 
+function getMarkdownContent() {
+  if (state.markdownEditor) {
+    return state.markdownEditor.getMarkdown();
+  }
+
+  return state.markdown.content;
+}
+
+function updateMarkdownDocumentState() {
+  const content = getMarkdownContent();
+  state.markdown.content = content;
+  state.markdown.dirty = content !== state.markdown.savedContent;
+  renderMarkdownChrome();
+}
+
+function destroyMarkdownInstances() {
+  state.markdownEditor?.destroy();
+  state.markdownViewer?.destroy();
+  state.markdownEditor = null;
+  state.markdownViewer = null;
+  elements.markdownEditor.replaceChildren();
+  elements.markdownViewer.replaceChildren();
+}
+
+function createMarkdownEditor() {
+  const Editor = window.toastui?.Editor;
+
+  if (!Editor) {
+    throw new Error("TOAST UI Editor failed to load");
+  }
+
+  state.markdownEditor = new Editor({
+    el: elements.markdownEditor,
+    height: "100%",
+    initialEditType: "markdown",
+    previewStyle: "vertical",
+    initialValue: state.markdown.content,
+    language: "ko-KR",
+    usageStatistics: false,
+    autofocus: false,
+    events: {
+      change: updateMarkdownDocumentState
+    }
+  });
+}
+
+function activateMarkdownDocument(document, options = {}) {
+  destroyMarkdownInstances();
+
+  const content = typeof document.content === "string" ? document.content : "";
+  state.mode = "markdown";
+  state.markdown = {
+    name: document.name || "document.md",
+    path: document.path || "",
+    content,
+    savedContent: options.dirty ? "" : content,
+    dirty: Boolean(options.dirty && content),
+    viewMode: "edit",
+    saving: false
+  };
+
+  render();
+  createMarkdownEditor();
+  updateMarkdownDocumentState();
+}
+
+function confirmDiscardMarkdownChanges() {
+  return !state.markdown.dirty || window.confirm("저장하지 않은 Markdown 변경 내용을 버릴까요?");
+}
+
+function showMarkdownEditMode() {
+  state.markdown.viewMode = "edit";
+  state.markdownViewer?.destroy();
+  state.markdownViewer = null;
+  elements.markdownViewer.replaceChildren();
+  renderMarkdownChrome();
+  state.markdownEditor?.focus();
+}
+
+function showMarkdownViewMode() {
+  const Editor = window.toastui?.Editor;
+  const content = getMarkdownContent();
+
+  state.markdown.content = content;
+  state.markdown.viewMode = "view";
+  state.markdownViewer?.destroy();
+  elements.markdownViewer.replaceChildren();
+  renderMarkdownChrome();
+
+  state.markdownViewer = Editor.factory({
+    el: elements.markdownViewer,
+    viewer: true,
+    initialValue: content,
+    usageStatistics: false
+  });
+}
+
+async function saveMarkdown(saveAs = false) {
+  if (state.mode !== "markdown" || state.markdown.saving) {
+    return;
+  }
+
+  const content = getMarkdownContent();
+  state.markdown.content = content;
+  state.markdown.saving = true;
+  renderMarkdownChrome();
+
+  try {
+    if (!window.minseDesktop?.saveMarkdownFile) {
+      downloadTextFile({
+        content,
+        fileName: state.markdown.name || "document.md",
+        type: "text/markdown;charset=utf-8"
+      });
+      state.markdown.savedContent = content;
+      state.markdown.dirty = false;
+      return;
+    }
+
+    const result = await window.minseDesktop.saveMarkdownFile({
+      content,
+      path: state.markdown.path,
+      saveAs,
+      suggestedName: state.markdown.name || "document.md"
+    });
+
+    if (!result) {
+      return;
+    }
+
+    state.markdown.name = result.name;
+    state.markdown.path = result.path;
+    state.markdown.savedContent = content;
+    state.markdown.dirty = false;
+    logClient("markdown.saved", {
+      path: result.path,
+      characters: content.length
+    });
+  } catch (error) {
+    logClient("markdown.save.failed", { error: formatError(error) });
+    window.alert(`Markdown 저장에 실패했습니다.\n${error.message || error}`);
+  } finally {
+    state.markdown.saving = false;
+    renderMarkdownChrome();
+  }
+}
+
+function closeMarkdown() {
+  if (!confirmDiscardMarkdownChanges()) {
+    return;
+  }
+
+  destroyMarkdownInstances();
+  state.mode = "epub";
+  render();
+}
+
 function exportAnnotations() {
   const exported = createAnnotationExport(state.book);
 
@@ -1695,6 +1876,10 @@ async function exportMarkdown() {
       sections: markdownSections.length,
       characters: markdown.length
     });
+    activateMarkdownDocument({
+      name: createMarkdownFileName(state.book.title),
+      content: `${markdown}\n`
+    }, { dirty: true });
   } catch (error) {
     logClient("epub.markdown.export.failed", {
       error: formatError(error)
@@ -2037,6 +2222,8 @@ function render() {
   document.body.classList.toggle("theme-sepia", settings.theme === "sepia");
   document.body.classList.toggle("text-only", settings.textOnly);
 
+  renderMarkdownChrome();
+
   renderBookmarks();
   renderToc();
   renderSearch();
@@ -2044,10 +2231,41 @@ function render() {
   renderAnnotations();
 }
 
+function renderMarkdownChrome() {
+  const active = state.mode === "markdown";
+  const viewing = state.markdown.viewMode === "view";
+
+  document.body.classList.toggle("markdown-mode", active);
+  elements.contentRow.hidden = active;
+  elements.markdownWorkspace.hidden = !active;
+  elements.markdownActions.hidden = !active;
+  elements.markdownEditor.hidden = !active || viewing;
+  elements.markdownViewer.hidden = !active || !viewing;
+
+  if (!active) {
+    return;
+  }
+
+  elements.bookTitle.textContent = `${state.markdown.name || "document.md"}${state.markdown.dirty ? " *" : ""}`;
+  elements.bookMeta.textContent = state.markdown.saving
+    ? "Markdown 저장 중..."
+    : state.markdown.path || "아직 저장되지 않은 Markdown 문서";
+  elements.markdownEditButton.classList.toggle("is-active", !viewing);
+  elements.markdownViewButton.classList.toggle("is-active", viewing);
+  elements.saveMarkdownButton.disabled = state.markdown.saving || (!state.markdown.dirty && Boolean(state.markdown.path));
+  elements.saveMarkdownAsButton.disabled = state.markdown.saving;
+}
+
 elements.bookInput.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
 
+  if (state.mode === "markdown" && !confirmDiscardMarkdownChanges()) {
+    elements.bookInput.value = "";
+    return;
+  }
+
   await loadSelectedFile(file);
+  state.mode = "epub";
   elements.bookInput.value = "";
 });
 
@@ -2056,10 +2274,71 @@ elements.openBookButton.addEventListener("click", async (event) => {
     return;
   }
 
+  if (state.mode === "markdown" && !confirmDiscardMarkdownChanges()) {
+    event.preventDefault();
+    return;
+  }
+
   event.preventDefault();
   const file = await window.minseDesktop.openEpubFile();
-  await loadSelectedFile(file);
+  if (file) {
+    await loadSelectedFile(file);
+    state.mode = "epub";
+    render();
+  }
 });
+
+elements.openMarkdownButton.addEventListener("click", async (event) => {
+  if (!window.minseDesktop?.openMarkdownFile) {
+    return;
+  }
+
+  event.preventDefault();
+  if (!confirmDiscardMarkdownChanges()) {
+    return;
+  }
+
+  try {
+    const document = await window.minseDesktop.openMarkdownFile();
+    if (document) {
+      activateMarkdownDocument(document);
+    }
+  } catch (error) {
+    logClient("markdown.open.failed", { error: formatError(error) });
+    window.alert(`Markdown 파일을 열지 못했습니다.\n${error.message || error}`);
+  }
+});
+
+elements.newMarkdownButton.addEventListener("click", () => {
+  if (!confirmDiscardMarkdownChanges()) {
+    return;
+  }
+
+  activateMarkdownDocument({
+    name: "untitled.md",
+    content: "# 새 Markdown 문서\n\n"
+  }, { dirty: true });
+});
+
+elements.markdownInput.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  elements.markdownInput.value = "";
+
+  if (!file || !confirmDiscardMarkdownChanges()) {
+    return;
+  }
+
+  activateMarkdownDocument({
+    name: file.name,
+    content: await file.text()
+  });
+});
+
+elements.markdownEditButton.addEventListener("click", showMarkdownEditMode);
+elements.markdownViewButton.addEventListener("click", showMarkdownViewMode);
+elements.saveMarkdownButton.addEventListener("click", () => saveMarkdown(false));
+elements.saveMarkdownAsButton.addEventListener("click", () => saveMarkdown(true));
+elements.closeMarkdownButton.addEventListener("click", closeMarkdown);
 
 elements.reader.addEventListener("wheel", handleWheelEvent, { passive: false });
 elements.reader.addEventListener("mousedown", () => {
@@ -2197,12 +2476,29 @@ elements.textOnly.addEventListener("change", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (state.mode === "markdown" && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    saveMarkdown(false);
+    return;
+  }
+
+  if (state.mode === "markdown") {
+    return;
+  }
+
   if (event.key === "ArrowRight") {
     goNext();
   }
 
   if (event.key === "ArrowLeft") {
     goPrevious();
+  }
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (state.markdown.dirty) {
+    event.preventDefault();
+    event.returnValue = "";
   }
 });
 

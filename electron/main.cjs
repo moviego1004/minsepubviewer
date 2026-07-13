@@ -1,7 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const { randomUUID } = require("node:crypto");
 const fsSync = require("node:fs");
-const { appendFile, mkdir, readFile } = require("node:fs/promises");
+const { appendFile, mkdir, readFile, writeFile } = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
 
@@ -377,6 +377,63 @@ ipcMain.handle("book:open", async () => {
     size: bytes.byteLength,
     type: "application/epub+zip",
     bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  };
+});
+
+ipcMain.handle("markdown:open", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Markdown 파일 열기",
+    properties: ["openFile"],
+    filters: [
+      { name: "Markdown", extensions: ["md", "markdown"] },
+      { name: "텍스트 파일", extensions: ["txt"] },
+      { name: "모든 파일", extensions: ["*"] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const filePath = result.filePaths[0];
+  const content = await readFile(filePath, "utf8");
+
+  return {
+    name: path.basename(filePath),
+    path: filePath,
+    content
+  };
+});
+
+ipcMain.handle("markdown:save", async (_event, payload = {}) => {
+  const content = typeof payload.content === "string" ? payload.content : "";
+  const saveAs = Boolean(payload.saveAs);
+  let filePath = !saveAs && typeof payload.path === "string" ? payload.path : "";
+
+  if (!filePath) {
+    const result = await dialog.showSaveDialog({
+      title: "Markdown 파일 저장",
+      defaultPath: typeof payload.suggestedName === "string" && payload.suggestedName
+        ? payload.suggestedName
+        : "document.md",
+      filters: [
+        { name: "Markdown", extensions: ["md"] },
+        { name: "모든 파일", extensions: ["*"] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return null;
+    }
+
+    filePath = path.extname(result.filePath) ? result.filePath : `${result.filePath}.md`;
+  }
+
+  await writeFile(filePath, content, "utf8");
+
+  return {
+    name: path.basename(filePath),
+    path: filePath
   };
 });
 

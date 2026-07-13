@@ -1,0 +1,9 @@
+Bundled license information:
+
+@toast-ui/editor/dist/toastui-editor.css:
+  /*!
+   * @toast-ui/editor
+   * @version 3.2.2 | Fri Feb 17 2023
+   * @author NHN Cloud FE Development Lab <dl_javascript@nhn.com>
+   * @license MIT
+   */

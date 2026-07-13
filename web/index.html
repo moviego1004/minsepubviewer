@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Minse EPUB Viewer</title>
+    <link rel="stylesheet" href="/web/vendor/toastui-editor-bundle.css">
     <link rel="stylesheet" href="/web/styles.css">
   </head>
   <body>
@@ -13,6 +14,12 @@
           <label id="openBookButton" class="icon-button file-icon-button" title="Open EPUB" aria-label="Open EPUB">
             <span class="folder-icon" aria-hidden="true"></span>
             <input id="bookInput" type="file" accept=".epub,application/epub+zip">
+          </label>
+
+          <button id="newMarkdownButton" class="toolbar-action-button" type="button" title="새 Markdown 문서 만들기">새 MD</button>
+          <label id="openMarkdownButton" class="toolbar-action-button markdown-file-button" title="Markdown 파일 열기">
+            MD 열기
+            <input id="markdownInput" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain">
           </label>
 
           <button id="leftPanelToggle" class="icon-button panel-toggle" type="button" title="Toggle contents panel" aria-label="Toggle contents panel" aria-pressed="true">
@@ -58,6 +65,13 @@
           </button>
 
           <button id="exportMarkdownButton" class="toolbar-action-button" type="button" title="EPUB 내용을 Markdown 파일로 변환" disabled>md 파일 변환</button>
+          <div id="markdownActions" class="markdown-actions" hidden>
+            <button id="markdownEditButton" class="toolbar-action-button is-active" type="button">편집</button>
+            <button id="markdownViewButton" class="toolbar-action-button" type="button">보기</button>
+            <button id="saveMarkdownButton" class="toolbar-action-button" type="button">저장</button>
+            <button id="saveMarkdownAsButton" class="toolbar-action-button" type="button">다른 이름으로</button>
+            <button id="closeMarkdownButton" class="toolbar-action-button" type="button">EPUB 보기</button>
+          </div>
         </div>
 
         <div class="book-title">
@@ -104,6 +118,10 @@
         </aside>
 
         <main class="reader-shell">
+        <section id="markdownWorkspace" class="markdown-workspace" hidden>
+          <div id="markdownEditor" class="markdown-editor"></div>
+          <div id="markdownViewer" class="markdown-viewer" hidden></div>
+        </section>
         <section id="contentRow" class="content-row">
           <div id="selectionToolbar" class="selection-toolbar" hidden>
             <button id="yellowSelectionButton" class="selection-tool-button swatch-yellow" type="button" title="Yellow highlight" aria-label="Yellow highlight"></button>
@@ -221,6 +239,7 @@
 
     <script src="/node_modules/jszip/dist/jszip.min.js"></script>
     <script src="/node_modules/epubjs/dist/epub.min.js"></script>
+    <script src="/web/vendor/toastui-editor-bundle.js"></script>
     <script type="module" src="/web/app.js"></script>
   </body>
 </html>
