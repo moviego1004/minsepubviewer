@@ -4,10 +4,11 @@ const fsSync = require("node:fs");
 const { appendFile, mkdir, readFile, writeFile } = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
+const { listenWithPortFallback, normalizePort } = require("./local-server.cjs");
 
 const root = path.resolve(__dirname, "..");
-const port = Number(process.env.PORT) || 5173;
-const appUrl = `http://localhost:${port}`;
+const preferredPort = normalizePort(process.env.PORT, 9173);
+let appUrl = null;
 const windowStateFile = "window-state.json";
 const defaultWindowState = Object.freeze({
   width: 1280,
@@ -48,7 +49,7 @@ async function writeClientLog(request, response) {
 }
 
 function resolveRequestPath(url) {
-  const pathname = new URL(url, appUrl).pathname;
+  const pathname = new URL(url, "http://127.0.0.1").pathname;
   const relativePath = pathname === "/" ? "web/index.html" : pathname.slice(1);
   const filePath = path.normalize(path.join(root, relativePath));
 
@@ -61,7 +62,7 @@ function resolveRequestPath(url) {
 
 function createStaticServer() {
   return http.createServer(async (request, response) => {
-    const requestUrl = new URL(request.url, appUrl);
+    const requestUrl = new URL(request.url, "http://127.0.0.1");
 
     if (request.method === "POST" && request.url === "/__client-log") {
       try {
@@ -114,21 +115,6 @@ function createStaticServer() {
       response.writeHead(404);
       response.end("Not found");
     }
-  });
-}
-
-function checkServer() {
-  return new Promise((resolve) => {
-    const request = http.get(appUrl, (response) => {
-      response.resume();
-      resolve(response.statusCode === 200);
-    });
-
-    request.on("error", () => resolve(false));
-    request.setTimeout(500, () => {
-      request.destroy();
-      resolve(false);
-    });
   });
 }
 
@@ -299,27 +285,19 @@ async function openImageWindow(payload) {
 }
 
 async function ensureServer() {
-  if (await checkServer()) {
+  if (server?.listening && appUrl) {
     return;
   }
 
-  server = createStaticServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
+  const nextServer = createStaticServer();
+  const address = await listenWithPortFallback(nextServer, { preferredPort });
 
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (await checkServer()) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  server = nextServer;
+  appUrl = `http://${address.host}:${address.port}`;
+
+  if (address.usedFallback) {
+    console.warn(`Port ${preferredPort} is already in use; using ${address.port} instead.`);
   }
-
-  throw new Error("Development server did not start");
 }
 
 async function createWindow() {

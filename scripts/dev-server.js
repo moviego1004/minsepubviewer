@@ -1,9 +1,10 @@
 import { createServer } from "node:http";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
+import localServer from "../electron/local-server.cjs";
 
 const root = resolve(process.cwd());
-const port = Number(process.env.PORT) || 5173;
+const preferredPort = localServer.normalizePort(process.env.PORT, 5173);
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -37,7 +38,7 @@ async function writeClientLog(request, response) {
 }
 
 function resolveRequestPath(url) {
-  const pathname = new URL(url, `http://localhost:${port}`).pathname;
+  const pathname = new URL(url, "http://127.0.0.1").pathname;
   const relativePath = pathname === "/" ? "web/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 
@@ -81,7 +82,11 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`Minse EPUB Viewer dev server: http://localhost:${port}`);
-});
+const address = await localServer.listenWithPortFallback(server, { preferredPort });
+
+if (address.usedFallback) {
+  console.warn(`Port ${preferredPort} is already in use; using ${address.port} instead.`);
+}
+
+console.log(`Minse EPUB Viewer dev server: http://${address.host}:${address.port}`);
 
