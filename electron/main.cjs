@@ -5,6 +5,7 @@ const { appendFile, mkdir, readFile, writeFile } = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
 const { listenWithPortFallback, normalizePort } = require("./local-server.cjs");
+const { findSupportedFilePath, getSupportedFileKind } = require("./open-file.cjs");
 
 const root = path.resolve(__dirname, "..");
 const preferredPort = normalizePort(process.env.PORT, 9173);
@@ -15,7 +16,12 @@ const defaultWindowState = Object.freeze({
   height: 840
 });
 let server = null;
+let mainWindow = null;
+let rendererReadyForFiles = false;
+let flushingFilePaths = false;
+const pendingFilePaths = [];
 const imageViewerPayloads = new Map();
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -284,6 +290,99 @@ async function openImageWindow(payload) {
   return { ok: true };
 }
 
+function isOpenableFilePath(filePath) {
+  if (!getSupportedFileKind(filePath)) {
+    return false;
+  }
+
+  try {
+    return fsSync.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function createOpenFilePayload(filePath) {
+  const kind = getSupportedFileKind(filePath);
+
+  if (kind === "epub") {
+    const bytes = await readFile(filePath);
+    return {
+      kind,
+      file: {
+        name: path.basename(filePath),
+        path: filePath,
+        size: bytes.byteLength,
+        type: "application/epub+zip",
+        bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+      }
+    };
+  }
+
+  if (kind === "markdown") {
+    return {
+      kind,
+      document: {
+        name: path.basename(filePath),
+        path: filePath,
+        content: await readFile(filePath, "utf8")
+      }
+    };
+  }
+
+  throw new Error("지원하지 않는 파일 형식입니다.");
+}
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+async function flushPendingFilePaths() {
+  if (flushingFilePaths || !rendererReadyForFiles || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  flushingFilePaths = true;
+  try {
+    while (pendingFilePaths.length > 0) {
+      const filePath = pendingFilePaths.shift();
+
+      try {
+        mainWindow.webContents.send("file:open", await createOpenFilePayload(filePath));
+      } catch (error) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("file:open-error", {
+            name: path.basename(filePath),
+            message: error?.message || String(error)
+          });
+        }
+      }
+    }
+  } finally {
+    flushingFilePaths = false;
+  }
+}
+
+function queueFilePath(filePath) {
+  if (!isOpenableFilePath(filePath)) {
+    return false;
+  }
+
+  pendingFilePaths.push(filePath);
+  focusMainWindow();
+  void flushPendingFilePaths();
+  return true;
+}
+
 async function ensureServer() {
   if (server?.listening && appUrl) {
     return;
@@ -320,6 +419,15 @@ async function createWindow() {
     }
   });
 
+  mainWindow = window;
+  rendererReadyForFiles = false;
+  window.once("closed", () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+      rendererReadyForFiles = false;
+    }
+  });
+
   installWindowStatePersistence(window);
   window.once("ready-to-show", () => {
     if (windowState.maximized) {
@@ -346,16 +454,7 @@ ipcMain.handle("book:open", async () => {
     return null;
   }
 
-  const filePath = result.filePaths[0];
-  const bytes = await readFile(filePath);
-
-  return {
-    name: path.basename(filePath),
-    path: filePath,
-    size: bytes.byteLength,
-    type: "application/epub+zip",
-    bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-  };
+  return (await createOpenFilePayload(result.filePaths[0])).file;
 });
 
 ipcMain.handle("markdown:open", async () => {
@@ -374,12 +473,10 @@ ipcMain.handle("markdown:open", async () => {
   }
 
   const filePath = result.filePaths[0];
-  const content = await readFile(filePath, "utf8");
-
   return {
     name: path.basename(filePath),
     path: filePath,
-    content
+    content: await readFile(filePath, "utf8")
   };
 });
 
@@ -416,8 +513,37 @@ ipcMain.handle("markdown:save", async (_event, payload = {}) => {
 });
 
 ipcMain.handle("image:open", async (_event, payload) => openImageWindow(payload));
+ipcMain.on("file:ready", (event) => {
+  if (mainWindow && event.sender === mainWindow.webContents) {
+    rendererReadyForFiles = true;
+    void flushPendingFilePaths();
+  }
+});
 
-app.whenReady().then(createWindow);
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  const initialFilePath = findSupportedFilePath(process.argv, process.cwd());
+  if (initialFilePath && isOpenableFilePath(initialFilePath)) {
+    pendingFilePaths.push(initialFilePath);
+  }
+
+  app.on("second-instance", (_event, commandLine, workingDirectory) => {
+    const filePath = findSupportedFilePath(commandLine, workingDirectory);
+    if (filePath) {
+      queueFilePath(filePath);
+    } else {
+      focusMainWindow();
+    }
+  });
+
+  app.on("open-file", (event, filePath) => {
+    event.preventDefault();
+    queueFilePath(filePath);
+  });
+
+  app.whenReady().then(createWindow);
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

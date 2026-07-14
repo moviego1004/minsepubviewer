@@ -200,6 +200,7 @@ const elements = {
   newMarkdownButton: document.querySelector("#newMarkdownButton"),
   openMarkdownButton: document.querySelector("#openMarkdownButton"),
   markdownInput: document.querySelector("#markdownInput"),
+  fileDropOverlay: document.querySelector("#fileDropOverlay"),
   markdownActions: document.querySelector("#markdownActions"),
   markdownEditButton: document.querySelector("#markdownEditButton"),
   markdownViewButton: document.querySelector("#markdownViewButton"),
@@ -725,6 +726,7 @@ function installContentHooks() {
     updateContentDiagnostics();
     installContentWheelHandler(contents);
     installContentImageHandler(contents);
+    installFileDropHandlers(contents?.document);
 
     if (state.__minsePendingScroll) {
       const win = contents?.window;
@@ -1720,6 +1722,142 @@ function confirmDiscardMarkdownChanges() {
   return !state.markdown.dirty || window.confirm("저장하지 않은 Markdown 변경 내용을 버릴까요?");
 }
 
+function getOpenFileKind(name) {
+  const extension = String(name || "").toLowerCase();
+
+  if (extension.endsWith(".epub")) {
+    return "epub";
+  }
+
+  if (extension.endsWith(".md") || extension.endsWith(".markdown")) {
+    return "markdown";
+  }
+
+  return null;
+}
+
+async function openFilePayload(payload) {
+  if (!payload || !confirmDiscardMarkdownChanges()) {
+    return;
+  }
+
+  if (payload.kind === "epub" && payload.file) {
+    await loadSelectedFile(payload.file);
+    state.mode = "epub";
+    render();
+    return;
+  }
+
+  if (payload.kind === "markdown" && payload.document) {
+    activateMarkdownDocument(payload.document);
+  }
+}
+
+function getDroppedFilePath(file) {
+  try {
+    return window.minseDesktop?.getPathForFile?.(file) || "";
+  } catch {
+    return "";
+  }
+}
+
+async function openDroppedFile(file) {
+  const kind = getOpenFileKind(file?.name);
+
+  if (!kind) {
+    window.alert("EPUB 또는 Markdown 파일(.epub, .md, .markdown)만 열 수 있습니다.");
+    return;
+  }
+
+  if (!confirmDiscardMarkdownChanges()) {
+    return;
+  }
+
+  try {
+    const filePath = getDroppedFilePath(file);
+
+    if (kind === "epub") {
+      await loadSelectedFile({
+        name: file.name,
+        path: filePath,
+        size: file.size,
+        type: file.type || "application/epub+zip",
+        arrayBuffer: () => file.arrayBuffer()
+      });
+      state.mode = "epub";
+      render();
+      return;
+    }
+
+    activateMarkdownDocument({
+      name: file.name,
+      path: filePath,
+      content: await file.text()
+    });
+  } catch (error) {
+    logClient("file.drop.failed", { error: formatError(error) });
+    window.alert(`${file.name} 파일을 열지 못했습니다.\n${error.message || error}`);
+  }
+}
+
+let hideFileDropOverlayTimer = null;
+
+function showFileDropOverlay(visible) {
+  if (hideFileDropOverlayTimer) {
+    clearTimeout(hideFileDropOverlayTimer);
+    hideFileDropOverlayTimer = null;
+  }
+
+  elements.fileDropOverlay.hidden = !visible;
+}
+
+function isFileDrag(event) {
+  return Array.from(event?.dataTransfer?.types || []).includes("Files");
+}
+
+function installFileDropHandlers(target) {
+  if (!target || target.__minseFileDropInstalled) {
+    return;
+  }
+
+  target.__minseFileDropInstalled = true;
+  target.addEventListener("dragenter", (event) => {
+    if (isFileDrag(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      showFileDropOverlay(true);
+    }
+  }, true);
+  target.addEventListener("dragover", (event) => {
+    if (isFileDrag(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      showFileDropOverlay(true);
+    }
+  }, true);
+  target.addEventListener("dragleave", () => {
+    hideFileDropOverlayTimer = setTimeout(() => showFileDropOverlay(false), 80);
+  }, true);
+  target.addEventListener("drop", (event) => {
+    if (!isFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    showFileDropOverlay(false);
+    const files = Array.from(event.dataTransfer?.files || []);
+    const file = files.find((candidate) => getOpenFileKind(candidate.name));
+
+    if (file) {
+      void openDroppedFile(file);
+    } else {
+      window.alert("EPUB 또는 Markdown 파일(.epub, .md, .markdown)만 열 수 있습니다.");
+    }
+  }, true);
+}
+
 function showMarkdownEditMode() {
   state.markdown.viewMode = "edit";
   state.markdownViewer?.destroy();
@@ -2501,6 +2639,15 @@ window.addEventListener("beforeunload", (event) => {
     event.returnValue = "";
   }
 });
+
+installFileDropHandlers(document);
+window.minseDesktop?.onOpenFile?.((payload) => {
+  void openFilePayload(payload);
+});
+window.minseDesktop?.onOpenFileError?.((payload) => {
+  window.alert(`${payload?.name || "파일"}을 열지 못했습니다.\n${payload?.message || "알 수 없는 오류"}`);
+});
+window.minseDesktop?.readyForOpenFiles?.();
 
 applyPanelState({ persist: false, refresh: false });
 render();

@@ -40,12 +40,32 @@
       "node_modules/jszip/**/*",
       "package.json"
     ],
+    "fileAssociations": [
+      {
+        "ext": "epub",
+        "name": "EPUB Book",
+        "description": "EPUB 전자책"
+      },
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Markdown Document",
+        "description": "Markdown 문서"
+      }
+    ],
     "win": {
       "signAndEditExecutable": false,
       "target": [
-        "dir"
+        "dir",
+        "nsis"
       ],
       "artifactName": "MinsEPUBViewer-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true
     }
   }
 }
