@@ -28,8 +28,12 @@ if not defined MAKENSIS (
   exit /b 1
 )
 
-for /f "usebackq delims=" %%V in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Content package.json -Raw | ConvertFrom-Json).version"`) do set "APP_VERSION=%%V"
-if not defined APP_VERSION set "APP_VERSION=0.1.0"
+set "APP_VERSION="
+for /f "usebackq delims=" %%V in (`node -p "require('./package.json').version"`) do set "APP_VERSION=%%V"
+if not defined APP_VERSION (
+  echo Failed to read the application version from package.json.
+  exit /b 1
+)
 
 for /f "usebackq delims=" %%D in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Date -Format yyyyMMdd"`) do set "BUILD_DATE=%%D"
 

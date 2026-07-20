@@ -24,7 +24,7 @@ body {
 
 body {
   margin: 0;
-  min-width: 980px;
+  min-width: 0;
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -39,20 +39,21 @@ textarea {
 
 .app {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   height: 100vh;
   min-height: 0;
 }
 
 .workspace {
+  position: relative;
   display: grid;
-  grid-template-columns: 280px minmax(700px, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
 
 body.sidebar-collapsed .workspace {
-  grid-template-columns: minmax(700px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sidebar {
@@ -270,6 +271,7 @@ body.sidebar-collapsed .sidebar {
 }
 
 .reader-shell {
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 0;
@@ -296,6 +298,8 @@ body.sidebar-collapsed .sidebar {
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .book-title {
@@ -372,6 +376,21 @@ body.sidebar-collapsed .sidebar {
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+.recent-menu-wrap { position: relative; }
+.recent-files-menu { position: absolute; z-index: 80; top: calc(100% + 8px); left: 0; width: min(360px, 70vw); padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 16px 40px rgba(32, 35, 39, 0.18); }
+.recent-files-menu[hidden] { display: none; }
+.recent-file-item { display: grid; width: 100%; padding: 9px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
+.recent-file-item:hover { background: var(--accent-soft); }
+.recent-file-item small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+
+.document-tabs { display: flex; gap: 3px; min-height: 39px; padding: 6px 10px 0; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--surface); }
+.document-tabs[hidden] { display: none; }
+.document-tab { display: flex; align-items: center; min-width: 130px; max-width: 240px; height: 32px; padding-left: 11px; border: 1px solid var(--line); border-bottom: 0; border-radius: 7px 7px 0 0; background: #f2f3f4; color: var(--muted); }
+.document-tab.is-active { background: var(--surface); color: var(--text); }
+.document-tab-label { flex: 1; overflow: hidden; cursor: pointer; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.document-tab-action { width: 27px; height: 27px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.document-tab-action:hover { color: var(--accent); }
 
 .markdown-file-button {
   position: relative;
@@ -612,13 +631,14 @@ body.sidebar-collapsed .sidebar {
 .content-row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(440px, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
 .markdown-workspace {
+  min-width: 0;
   height: 100%;
   min-height: 0;
   padding: 18px;
@@ -635,6 +655,7 @@ body.sidebar-collapsed .sidebar {
 
 .markdown-editor,
 .markdown-viewer {
+  min-width: 0;
   height: 100%;
   min-height: 0;
   border: 1px solid var(--line);
@@ -646,7 +667,24 @@ body.sidebar-collapsed .sidebar {
 
 .markdown-viewer {
   padding: 24px 34px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.markdown-viewer::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.markdown-viewer::-webkit-scrollbar-track {
+  background: var(--surface-muted);
+}
+
+.markdown-viewer::-webkit-scrollbar-thumb {
+  border: 3px solid var(--surface-muted);
+  border-radius: 999px;
+  background: var(--muted);
 }
 
 .markdown-editor[hidden],
@@ -662,23 +700,40 @@ body.sidebar-collapsed .sidebar {
 .markdown-viewer .toastui-editor-contents {
   max-width: 920px;
   margin: 0 auto;
-  font-size: 16px;
+  font-size: calc(16px * var(--markdown-zoom, 1));
+  overflow-wrap: anywhere;
 }
 
-body.markdown-mode .workspace {
-  grid-template-columns: minmax(700px, 1fr);
+.markdown-viewer .toastui-editor-contents h1 {
+  font-size: calc(24px * var(--markdown-zoom, 1));
+  line-height: calc(28px * var(--markdown-zoom, 1));
 }
 
-body.markdown-mode .sidebar {
-  display: none;
+.markdown-viewer .toastui-editor-contents h2 {
+  font-size: calc(22px * var(--markdown-zoom, 1));
+  line-height: calc(23px * var(--markdown-zoom, 1));
 }
 
-body.markdown-mode #leftPanelToggle,
+.markdown-viewer .toastui-editor-contents h3 {
+  font-size: calc(20px * var(--markdown-zoom, 1));
+}
+
+.markdown-viewer .toastui-editor-contents h4 {
+  font-size: calc(18px * var(--markdown-zoom, 1));
+}
+
+.markdown-viewer .toastui-editor-contents h5 {
+  font-size: calc(16px * var(--markdown-zoom, 1));
+}
+
+.markdown-viewer .toastui-editor-contents h6 {
+  font-size: calc(14px * var(--markdown-zoom, 1));
+}
+
 body.markdown-mode #rightPanelToggle,
 body.markdown-mode #prevButton,
 body.markdown-mode #nextButton,
 body.markdown-mode #pageLabel,
-body.markdown-mode #bookmarkButton,
 body.markdown-mode #prevSearchResultButton,
 body.markdown-mode #nextSearchResultButton,
 body.markdown-mode .view-mode-toggle,
@@ -686,6 +741,18 @@ body.markdown-mode #textOnlyToolbarButton,
 body.markdown-mode #exportMarkdownButton {
   display: none;
 }
+
+body.markdown-mode #tocTab,
+body.markdown-mode #searchTab { display: none; }
+
+.markdown-highlights { margin-top: 24px; }
+.markdown-highlight-item { display: grid; gap: 3px; }
+.markdown-highlight-item small { color: var(--muted); }
+
+.md-highlight { border-radius: 2px; padding: 0 1px; }
+.md-highlight-yellow { background: rgba(255, 222, 76, 0.62); }
+.md-highlight-orange { background: rgba(255, 157, 66, 0.5); }
+.md-highlight-underline { background: transparent; text-decoration: underline 3px #e59a23; text-underline-offset: 2px; }
 
 body.markdown-mode .toolbar-separator {
   display: none;
@@ -747,7 +814,7 @@ body.markdown-mode .toolbar-separator {
 }
 
 body.settings-collapsed .content-row {
-  grid-template-columns: minmax(440px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 body.settings-collapsed .settings {
@@ -1020,6 +1087,38 @@ body.text-only .sample-image {
 body.text-only .reader,
 body.text-only .reader * {
   background-image: none !important;
+}
+
+@media (max-width: 700px) {
+  .workspace,
+  body.sidebar-collapsed .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body:not(.sidebar-collapsed) .sidebar {
+    position: absolute;
+    z-index: 40;
+    inset: 0 auto 0 0;
+    width: min(280px, calc(100% - 48px));
+    box-shadow: 12px 0 32px rgba(32, 35, 39, 0.16);
+  }
+
+  .toolbar {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .book-title {
+    display: none;
+  }
+
+  .markdown-workspace {
+    padding: 8px;
+  }
+
+  .markdown-viewer {
+    padding: 16px;
+  }
 }
 
 .file-drop-overlay {

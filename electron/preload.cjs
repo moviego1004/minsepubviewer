@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 contextBridge.exposeInMainWorld("minseDesktop", {
   openEpubFile: () => ipcRenderer.invoke("book:open"),
   openMarkdownFile: () => ipcRenderer.invoke("markdown:open"),
+  openFiles: () => ipcRenderer.invoke("files:open"),
+  openRecentFile: (filePath) => ipcRenderer.invoke("recent:open", filePath),
+  getRecentFiles: () => ipcRenderer.invoke("recent:list"),
+  openFileInNewWindow: (filePath) => ipcRenderer.invoke("window:open-file", filePath),
   saveMarkdownFile: (payload) => ipcRenderer.invoke("markdown:save", payload),
   openImageWindow: (payload) => ipcRenderer.invoke("image:open", payload),
   getPathForFile: (file) => webUtils.getPathForFile(file),

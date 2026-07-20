@@ -27,6 +27,14 @@ import {
   documentToMarkdown
 } from "../src/core/markdownExport.js";
 import {
+  createMarkdownBookmark,
+  createMarkdownHighlight,
+  getMarkdownDocumentAnnotations,
+  lineRangeFromSource,
+  parseMarkdownAnnotationState,
+  updateMarkdownDocumentAnnotations
+} from "../src/core/markdownAnnotations.js";
+import {
   applyZoomIntent,
   getWheelIntent
 } from "../src/core/readerControls.js";
@@ -43,6 +51,7 @@ import { buildTextOnlyCss } from "../src/core/textOnly.js";
 const STORAGE_KEY = "minsepubviewer.library";
 const STORAGE_BACKUP_KEY = "minsepubviewer.library.backup";
 const UI_STORAGE_KEY = "minsepubviewer.ui";
+const MARKDOWN_ANNOTATIONS_KEY = "minsepubviewer.markdown-annotations";
 
 function formatError(error) {
   if (!error) {
@@ -142,6 +151,9 @@ function saveUiState(ui) {
 let wheelNavLock = false;
 
 const state = {
+  tabs: [],
+  activeTabId: "",
+  tabActivationSequence: 0,
   library: loadLibrary(),
   book: createBookRecord({
     bookId: "sample-book",
@@ -182,6 +194,9 @@ const state = {
   },
   markdownEditor: null,
   markdownViewer: null,
+  markdownAnnotations: parseMarkdownAnnotationState(localStorage.getItem(MARKDOWN_ANNOTATIONS_KEY)),
+  markdownSelection: null,
+  markdownCurrentLine: 1,
   activeSidebarTab: "toc",
   ui: loadUiState()
 };
@@ -196,6 +211,10 @@ const elements = {
   orangeSelectionButton: document.querySelector("#orangeSelectionButton"),
   underlineSelectionButton: document.querySelector("#underlineSelectionButton"),
   openBookButton: document.querySelector("#openBookButton"),
+  openFilesButton: document.querySelector("#openFilesButton"),
+  recentFilesButton: document.querySelector("#recentFilesButton"),
+  recentFilesMenu: document.querySelector("#recentFilesMenu"),
+  documentTabs: document.querySelector("#documentTabs"),
   bookInput: document.querySelector("#bookInput"),
   newMarkdownButton: document.querySelector("#newMarkdownButton"),
   openMarkdownButton: document.querySelector("#openMarkdownButton"),
@@ -244,6 +263,8 @@ const elements = {
   searchStatus: document.querySelector("#searchStatus"),
   searchResults: document.querySelector("#searchResults"),
   bookmarkList: document.querySelector("#bookmarkList"),
+  markdownHighlights: document.querySelector("#markdownHighlights"),
+  markdownHighlightList: document.querySelector("#markdownHighlightList"),
   tocList: document.querySelector("#tocList"),
   selectionStatus: document.querySelector("#selectionStatus"),
   highlightColor: document.querySelector("#highlightColor"),
@@ -270,6 +291,9 @@ function getCurrentBookmarkLocation() {
 }
 
 function hasBookmarkAtCurrentLocation() {
+  if (state.mode === "markdown") {
+    return getCurrentMarkdownAnnotations().bookmarks.some((bookmark) => bookmark.line === state.markdownCurrentLine);
+  }
   const location = getCurrentBookmarkLocation();
 
   return state.book.bookmarks.some((bookmark) => bookmark.location === location);
@@ -1162,6 +1186,14 @@ function handleWheelEvent(event) {
   }
 }
 
+function handleMarkdownWheelEvent(event) {
+  if (!event.ctrlKey) {
+    return;
+  }
+
+  handleWheelEvent(event);
+}
+
 function getContinuousScrollElement() {
   const candidates = [
     elements.reader,
@@ -1347,6 +1379,27 @@ function togglePanel(panel) {
 }
 
 function renderBookmarks() {
+  if (state.mode === "markdown") {
+    const annotations = getCurrentMarkdownAnnotations();
+    elements.markdownHighlights.hidden = false;
+    if (!annotations.bookmarks.length) {
+      elements.bookmarkList.className = "empty";
+      elements.bookmarkList.textContent = "북마크가 없습니다.";
+    } else {
+      elements.bookmarkList.className = "";
+      elements.bookmarkList.replaceChildren(...annotations.bookmarks.map((bookmark) => {
+        const button = document.createElement("button");
+        button.className = "list-item";
+        button.type = "button";
+        button.textContent = bookmark.label || `${bookmark.line}번 줄`;
+        button.addEventListener("click", () => goToMarkdownLine(bookmark.line));
+        return button;
+      }));
+    }
+    renderMarkdownHighlights(annotations.highlights);
+    return;
+  }
+  elements.markdownHighlights.hidden = true;
   const bookmarks = state.book.bookmarks;
 
   if (!bookmarks.length) {
@@ -1370,7 +1423,50 @@ function renderBookmarks() {
   );
 }
 
+function renderMarkdownHighlights(highlights) {
+  if (!highlights.length) {
+    elements.markdownHighlightList.className = "empty";
+    elements.markdownHighlightList.textContent = "형광펜이 없습니다.";
+    return;
+  }
+  elements.markdownHighlightList.className = "";
+  elements.markdownHighlightList.replaceChildren(...highlights.map((highlight) => {
+    const item = document.createElement("div");
+    item.className = "list-item markdown-highlight-item";
+    const quote = document.createElement("button");
+    quote.className = "annotation-quote";
+    quote.type = "button";
+    quote.textContent = highlight.quote;
+    quote.addEventListener("click", () => goToMarkdownLine(highlight.startLine));
+    const meta = document.createElement("small");
+    meta.textContent = `${highlight.startLine}${highlight.endLine !== highlight.startLine ? `–${highlight.endLine}` : ""}번 줄`;
+    const remove = document.createElement("button");
+    remove.className = "annotation-remove";
+    remove.type = "button";
+    remove.textContent = "삭제";
+    remove.addEventListener("click", () => {
+      const annotations = getCurrentMarkdownAnnotations();
+      saveCurrentMarkdownAnnotations({ ...annotations, highlights: annotations.highlights.filter((entry) => entry.id !== highlight.id) });
+      showMarkdownViewMode();
+      render();
+    });
+    item.replaceChildren(quote, meta, remove);
+    return item;
+  }));
+}
+
 function addCurrentHighlight(style = elements.highlightColor.value) {
+  if (state.mode === "markdown") {
+    if (!state.markdownSelection) return;
+    const annotations = getCurrentMarkdownAnnotations();
+    const highlight = createMarkdownHighlight({ ...state.markdownSelection, color: style });
+    saveCurrentMarkdownAnnotations({ ...annotations, highlights: [...annotations.highlights, highlight] });
+    state.markdownSelection = null;
+    hideSelectionToolbar();
+    showMarkdownViewMode();
+    render();
+    return;
+  }
   if (!state.selectedRange || !state.selectedQuote) {
     return;
   }
@@ -1664,10 +1760,184 @@ function updateMarkdownDocumentState() {
   const content = getMarkdownContent();
   state.markdown.content = content;
   state.markdown.dirty = content !== state.markdown.savedContent;
+  snapshotActiveTab();
   renderMarkdownChrome();
+  renderDocumentTabs();
+}
+
+function getMarkdownAnnotationKey() {
+  const tab = getActiveTab();
+  return tab ? `markdown:${(tab.path || tab.title).toLowerCase()}` : "";
+}
+
+function getCurrentMarkdownAnnotations() {
+  return getMarkdownDocumentAnnotations(state.markdownAnnotations, getMarkdownAnnotationKey());
+}
+
+function saveCurrentMarkdownAnnotations(annotations) {
+  const key = getMarkdownAnnotationKey();
+  if (!key) return;
+  state.markdownAnnotations = updateMarkdownDocumentAnnotations(state.markdownAnnotations, key, annotations);
+  localStorage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
+}
+
+function moveMarkdownAnnotations(previousKey, nextKey) {
+  if (!previousKey || !nextKey || previousKey === nextKey) return;
+  const annotations = getMarkdownDocumentAnnotations(state.markdownAnnotations, previousKey);
+  if (!annotations.bookmarks.length && !annotations.highlights.length) return;
+  const documents = { ...state.markdownAnnotations.documents };
+  delete documents[previousKey];
+  state.markdownAnnotations = updateMarkdownDocumentAnnotations({ ...state.markdownAnnotations, documents }, nextKey, annotations);
+  localStorage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
+}
+
+function normalizeMarkdownLine(value) {
+  return String(value || "")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^[\s#>*+`~-]+|[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function mapMarkdownBlocksToLines() {
+  const root = elements.markdownViewer.querySelector(".toastui-editor-contents");
+  if (!root) return;
+  const lines = state.markdown.content.split("\n");
+  let cursor = 0;
+  const blocks = root.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,pre,blockquote");
+  for (const block of blocks) {
+    const text = normalizeMarkdownLine(block.textContent).slice(0, 48);
+    if (!text) continue;
+    let found = -1;
+    for (let index = cursor; index < lines.length; index += 1) {
+      const source = normalizeMarkdownLine(lines[index]);
+      if (source && (source.includes(text) || text.includes(source.slice(0, 24)))) {
+        found = index;
+        break;
+      }
+    }
+    if (found < 0) {
+      for (let index = 0; index < lines.length; index += 1) {
+        if (normalizeMarkdownLine(lines[index]).includes(text.slice(0, 24))) { found = index; break; }
+      }
+    }
+    if (found >= 0) {
+      block.dataset.mdLine = String(found + 1);
+      cursor = found;
+    }
+  }
+}
+
+function findMarkdownBlockForLine(line) {
+  const blocks = [...elements.markdownViewer.querySelectorAll("[data-md-line]")];
+  return blocks.reduce((best, block) => {
+    const blockLine = Number(block.dataset.mdLine);
+    return blockLine <= line && (!best || blockLine > Number(best.dataset.mdLine)) ? block : best;
+  }, null) || blocks.find((block) => Number(block.dataset.mdLine) >= line) || null;
+}
+
+function goToMarkdownLine(line) {
+  if (state.markdown.viewMode !== "view") showMarkdownViewMode();
+  requestAnimationFrame(() => {
+    mapMarkdownBlocksToLines();
+    const block = findMarkdownBlockForLine(line);
+    if (block) block.scrollIntoView({ block: "center", behavior: "smooth" });
+    else {
+      const max = Math.max(1, state.markdown.content.split("\n").length);
+      elements.markdownViewer.scrollTop = (line - 1) / max * elements.markdownViewer.scrollHeight;
+    }
+    state.markdownCurrentLine = line;
+    render();
+  });
+}
+
+function wrapMarkdownQuote(quote, color, occurrence = 0) {
+  const root = elements.markdownViewer.querySelector(".toastui-editor-contents");
+  if (!root || !quote) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  let text = "";
+  while (walker.nextNode()) {
+    nodes.push({ node: walker.currentNode, start: text.length, end: text.length + walker.currentNode.data.length });
+    text += walker.currentNode.data;
+  }
+  let start = -1;
+  let cursor = 0;
+  for (let count = 0; count <= occurrence; count += 1) {
+    start = text.indexOf(quote, cursor);
+    if (start < 0) break;
+    cursor = start + quote.length;
+  }
+  if (start < 0) return;
+  const end = start + quote.length;
+  for (const item of nodes.reverse()) {
+    const from = Math.max(0, start - item.start);
+    const to = Math.min(item.node.data.length, end - item.start);
+    if (from >= to) continue;
+    const range = document.createRange();
+    range.setStart(item.node, from);
+    range.setEnd(item.node, to);
+    const mark = document.createElement("mark");
+    mark.className = `md-highlight md-highlight-${color}`;
+    range.surroundContents(mark);
+  }
+}
+
+function applyMarkdownHighlights() {
+  for (const highlight of getCurrentMarkdownAnnotations().highlights) {
+    wrapMarkdownQuote(highlight.quote, highlight.color, highlight.occurrence);
+  }
+}
+
+function prepareMarkdownViewer() {
+  mapMarkdownBlocksToLines();
+  applyMarkdownHighlights();
+  updateMarkdownCurrentLine();
+}
+
+function updateMarkdownCurrentLine() {
+  if (state.mode !== "markdown" || state.markdown.viewMode !== "view") return;
+  const viewerRect = elements.markdownViewer.getBoundingClientRect();
+  const blocks = [...elements.markdownViewer.querySelectorAll("[data-md-line]")];
+  const visible = blocks.find((block) => block.getBoundingClientRect().bottom >= viewerRect.top + 20);
+  if (visible) state.markdownCurrentLine = Number(visible.dataset.mdLine) || 1;
+}
+
+function captureMarkdownSelection() {
+  if (state.mode !== "markdown" || state.markdown.viewMode !== "view") return;
+  const selection = window.getSelection();
+  const quote = selection?.toString?.() || "";
+  if (!quote.trim() || !elements.markdownViewer.contains(selection.anchorNode)) {
+    state.markdownSelection = null;
+    hideSelectionToolbar();
+    return;
+  }
+  const root = elements.markdownViewer.querySelector(".toastui-editor-contents");
+  if (!root) return;
+  const range = selection.getRangeAt(0);
+  const before = document.createRange();
+  before.selectNodeContents(root);
+  before.setEnd(range.startContainer, range.startOffset);
+  const prefix = before.toString();
+  const occurrence = prefix.split(quote).length - 1;
+  const lineRange = lineRangeFromSource(state.markdown.content, quote, occurrence)
+    || lineRangeFromSource(state.markdown.content, quote.trim(), occurrence);
+  if (!lineRange) return;
+  state.markdownSelection = { ...lineRange, quote: quote.trim(), occurrence };
+  state.selectedRange = `line-${lineRange.startLine}:${lineRange.endLine}`;
+  state.selectedQuote = quote.trim();
+  const rect = range.getBoundingClientRect();
+  const shell = elements.markdownWorkspace.getBoundingClientRect();
+  elements.selectionToolbar.style.left = `${rect.left - shell.left + rect.width / 2}px`;
+  elements.selectionToolbar.style.top = `${rect.top - shell.top - 8}px`;
+  elements.selectionToolbar.hidden = false;
 }
 
 function destroyMarkdownInstances() {
+  hideSelectionToolbar();
+  state.markdownSelection = null;
   state.markdownEditor?.destroy();
   state.markdownViewer?.destroy();
   state.markdownEditor = null;
@@ -1707,19 +1977,144 @@ function activateMarkdownDocument(document, options = {}) {
     name: document.name || "document.md",
     path: document.path || "",
     content,
-    savedContent: options.dirty ? "" : content,
-    dirty: Boolean(options.dirty && content),
-    viewMode: "edit",
+    savedContent: typeof options.savedContent === "string" ? options.savedContent : (options.dirty ? "" : content),
+    dirty: Boolean(options.dirty),
+    viewMode: options.viewMode === "view" ? "view" : "edit",
     saving: false
   };
 
   render();
   createMarkdownEditor();
   updateMarkdownDocumentState();
+  if (state.markdown.viewMode === "view") showMarkdownViewMode();
 }
 
 function confirmDiscardMarkdownChanges() {
   return !state.markdown.dirty || window.confirm("저장하지 않은 Markdown 변경 내용을 버릴까요?");
+}
+
+function createTabId() {
+  return globalThis.crypto?.randomUUID?.() || `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function getActiveTab() {
+  return state.tabs.find((tab) => tab.id === state.activeTabId) || null;
+}
+
+function snapshotActiveTab() {
+  const tab = getActiveTab();
+  if (!tab || tab.kind !== "markdown" || state.mode !== "markdown") return;
+  const content = getMarkdownContent();
+  tab.title = state.markdown.name || tab.title;
+  tab.path = state.markdown.path || tab.path;
+  tab.markdown = { ...state.markdown, content, saving: false };
+}
+
+function renderDocumentTabs() {
+  elements.documentTabs.hidden = state.tabs.length === 0;
+  elements.documentTabs.replaceChildren(...state.tabs.map((tab) => {
+    const item = document.createElement("div");
+    item.className = `document-tab${tab.id === state.activeTabId ? " is-active" : ""}`;
+    item.setAttribute("role", "tab");
+
+    const label = document.createElement("span");
+    const dirty = tab.id === state.activeTabId && state.mode === "markdown" ? state.markdown.dirty : tab.markdown?.dirty;
+    label.className = "document-tab-label";
+    label.textContent = `${tab.title}${dirty ? " *" : ""}`;
+    label.title = tab.path || tab.title;
+    label.addEventListener("click", () => void activateDocumentTab(tab.id));
+
+    const detach = document.createElement("button");
+    detach.className = "document-tab-action";
+    detach.type = "button";
+    detach.textContent = "↗";
+    detach.title = "새 창에서 열기";
+    detach.hidden = !tab.path || Boolean(dirty) || !window.minseDesktop?.openFileInNewWindow;
+    detach.addEventListener("click", () => void window.minseDesktop.openFileInNewWindow(tab.path));
+
+    const close = document.createElement("button");
+    close.className = "document-tab-action";
+    close.type = "button";
+    close.textContent = "×";
+    close.title = "탭 닫기";
+    close.addEventListener("click", () => void closeDocumentTab(tab.id));
+    item.replaceChildren(label, detach, close);
+    return item;
+  }));
+}
+
+async function activateDocumentTab(tabId) {
+  if (tabId === state.activeTabId) return;
+  const tab = state.tabs.find((item) => item.id === tabId);
+  if (!tab) return;
+  const sequence = ++state.tabActivationSequence;
+  snapshotActiveTab();
+  destroyMarkdownInstances();
+  await destroyEpub();
+  if (sequence !== state.tabActivationSequence) return;
+  state.activeTabId = tab.id;
+  renderDocumentTabs();
+
+  if (tab.kind === "epub") {
+    state.mode = "epub";
+    await loadSelectedFile(tab.payload.file);
+    if (sequence === state.tabActivationSequence) renderDocumentTabs();
+    return;
+  }
+
+  activateMarkdownDocument(tab.markdown, {
+    savedContent: tab.markdown.savedContent,
+    dirty: tab.markdown.dirty,
+    viewMode: tab.markdown.viewMode
+  });
+  renderDocumentTabs();
+}
+
+async function addDocumentTab(payload) {
+  if (!payload) return;
+  const source = payload.kind === "epub" ? payload.file : payload.document;
+  if (!source) return;
+  const path = source.path || "";
+  const duplicate = path && state.tabs.find((tab) => tab.path.toLowerCase() === path.toLowerCase());
+  if (duplicate) {
+    await activateDocumentTab(duplicate.id);
+    return;
+  }
+  const tab = {
+    id: createTabId(), kind: payload.kind, title: source.name || "문서", path, payload,
+    markdown: payload.kind === "markdown" ? {
+      name: source.name || "document.md", path, content: source.content || "", savedContent: source.content || "", dirty: false,
+      viewMode: source.viewMode === "edit" ? "edit" : "view", saving: false
+    } : null
+  };
+  state.tabs.push(tab);
+  await activateDocumentTab(tab.id);
+}
+
+async function closeDocumentTab(tabId) {
+  snapshotActiveTab();
+  const index = state.tabs.findIndex((tab) => tab.id === tabId);
+  if (index < 0) return;
+  const tab = state.tabs[index];
+  if (tab.kind === "markdown" && tab.markdown?.dirty) {
+    const canClose = tab.id === state.activeTabId
+      ? confirmDiscardMarkdownChanges()
+      : window.confirm(`${tab.title}의 저장하지 않은 변경 내용을 버릴까요?`);
+    if (!canClose) return;
+  }
+  state.tabs.splice(index, 1);
+  if (tab.id !== state.activeTabId) { renderDocumentTabs(); return; }
+  state.activeTabId = "";
+  destroyMarkdownInstances();
+  await destroyEpub();
+  const next = state.tabs[Math.min(index, state.tabs.length - 1)];
+  if (next) await activateDocumentTab(next.id);
+  else {
+    state.mode = "epub";
+    showReaderMessage("EPUB 또는 Markdown 파일을 열어 주세요.");
+    render();
+    renderDocumentTabs();
+  }
 }
 
 function getOpenFileKind(name) {
@@ -1737,20 +2132,7 @@ function getOpenFileKind(name) {
 }
 
 async function openFilePayload(payload) {
-  if (!payload || !confirmDiscardMarkdownChanges()) {
-    return;
-  }
-
-  if (payload.kind === "epub" && payload.file) {
-    await loadSelectedFile(payload.file);
-    state.mode = "epub";
-    render();
-    return;
-  }
-
-  if (payload.kind === "markdown" && payload.document) {
-    activateMarkdownDocument(payload.document);
-  }
+  await addDocumentTab(payload);
 }
 
 function getDroppedFilePath(file) {
@@ -1769,31 +2151,25 @@ async function openDroppedFile(file) {
     return;
   }
 
-  if (!confirmDiscardMarkdownChanges()) {
-    return;
-  }
-
   try {
     const filePath = getDroppedFilePath(file);
 
     if (kind === "epub") {
-      await loadSelectedFile({
+      await addDocumentTab({ kind: "epub", file: {
         name: file.name,
         path: filePath,
         size: file.size,
         type: file.type || "application/epub+zip",
         arrayBuffer: () => file.arrayBuffer()
-      });
-      state.mode = "epub";
-      render();
+      }});
       return;
     }
 
-    activateMarkdownDocument({
+    await addDocumentTab({ kind: "markdown", document: {
       name: file.name,
       path: filePath,
       content: await file.text()
-    });
+    }});
   } catch (error) {
     logClient("file.drop.failed", { error: formatError(error) });
     window.alert(`${file.name} 파일을 열지 못했습니다.\n${error.message || error}`);
@@ -1848,10 +2224,10 @@ function installFileDropHandlers(target) {
     event.stopPropagation();
     showFileDropOverlay(false);
     const files = Array.from(event.dataTransfer?.files || []);
-    const file = files.find((candidate) => getOpenFileKind(candidate.name));
+    const supported = files.filter((candidate) => getOpenFileKind(candidate.name));
 
-    if (file) {
-      void openDroppedFile(file);
+    if (supported.length) {
+      void (async () => { for (const file of supported) await openDroppedFile(file); })();
     } else {
       window.alert("EPUB 또는 Markdown 파일(.epub, .md, .markdown)만 열 수 있습니다.");
     }
@@ -1859,6 +2235,8 @@ function installFileDropHandlers(target) {
 }
 
 function showMarkdownEditMode() {
+  hideSelectionToolbar();
+  state.markdownSelection = null;
   state.markdown.viewMode = "edit";
   state.markdownViewer?.destroy();
   state.markdownViewer = null;
@@ -1883,6 +2261,7 @@ function showMarkdownViewMode() {
     initialValue: content,
     usageStatistics: false
   });
+  requestAnimationFrame(prepareMarkdownViewer);
 }
 
 async function saveMarkdown(saveAs = false) {
@@ -1891,6 +2270,7 @@ async function saveMarkdown(saveAs = false) {
   }
 
   const content = getMarkdownContent();
+  const previousAnnotationKey = getMarkdownAnnotationKey();
   state.markdown.content = content;
   state.markdown.saving = true;
   renderMarkdownChrome();
@@ -1922,6 +2302,8 @@ async function saveMarkdown(saveAs = false) {
     state.markdown.path = result.path;
     state.markdown.savedContent = content;
     state.markdown.dirty = false;
+    snapshotActiveTab();
+    moveMarkdownAnnotations(previousAnnotationKey, getMarkdownAnnotationKey());
     logClient("markdown.saved", {
       path: result.path,
       characters: content.length
@@ -1936,13 +2318,7 @@ async function saveMarkdown(saveAs = false) {
 }
 
 function closeMarkdown() {
-  if (!confirmDiscardMarkdownChanges()) {
-    return;
-  }
-
-  destroyMarkdownInstances();
-  state.mode = "epub";
-  render();
+  void closeDocumentTab(state.activeTabId);
 }
 
 function exportAnnotations() {
@@ -2014,10 +2390,14 @@ async function exportMarkdown() {
       sections: markdownSections.length,
       characters: markdown.length
     });
-    activateMarkdownDocument({
+    await addDocumentTab({ kind: "markdown", document: {
       name: createMarkdownFileName(state.book.title),
-      content: `${markdown}\n`
-    }, { dirty: true });
+      content: `${markdown}\n`,
+      viewMode: "edit"
+    }});
+    state.markdown.savedContent = "";
+    state.markdown.dirty = true;
+    snapshotActiveTab();
   } catch (error) {
     logClient("epub.markdown.export.failed", {
       error: formatError(error)
@@ -2338,6 +2718,7 @@ function render() {
   elements.reader.style.setProperty("--reader-font-size", getZoomedFontSize(settings));
   elements.reader.style.setProperty("--reader-line-height", settings.lineHeight);
   elements.reader.style.setProperty("--reader-margin", settings.margin);
+  elements.markdownWorkspace.style.setProperty("--markdown-zoom", settings.zoom);
 
   elements.reader.classList.toggle("reader-continuous", settings.viewMode === "continuous");
   elements.reader.classList.toggle("reader-paginated", settings.viewMode === "paginated");
@@ -2367,6 +2748,7 @@ function render() {
   renderSearch();
   renderSidebarTabs();
   renderAnnotations();
+  renderDocumentTabs();
 }
 
 function renderMarkdownChrome() {
@@ -2384,6 +2766,8 @@ function renderMarkdownChrome() {
     return;
   }
 
+  state.activeSidebarTab = "bookmarks";
+
   elements.bookTitle.textContent = `${state.markdown.name || "document.md"}${state.markdown.dirty ? " *" : ""}`;
   elements.bookMeta.textContent = state.markdown.saving
     ? "Markdown 저장 중..."
@@ -2395,16 +2779,9 @@ function renderMarkdownChrome() {
 }
 
 elements.bookInput.addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-
-  if (state.mode === "markdown" && !confirmDiscardMarkdownChanges()) {
-    elements.bookInput.value = "";
-    return;
-  }
-
-  await loadSelectedFile(file);
-  state.mode = "epub";
+  const files = Array.from(event.target.files || []);
   elements.bookInput.value = "";
+  for (const file of files) await addDocumentTab({ kind: "epub", file });
 });
 
 elements.openBookButton.addEventListener("click", async (event) => {
@@ -2412,18 +2789,9 @@ elements.openBookButton.addEventListener("click", async (event) => {
     return;
   }
 
-  if (state.mode === "markdown" && !confirmDiscardMarkdownChanges()) {
-    event.preventDefault();
-    return;
-  }
-
   event.preventDefault();
   const file = await window.minseDesktop.openEpubFile();
-  if (file) {
-    await loadSelectedFile(file);
-    state.mode = "epub";
-    render();
-  }
+  if (file) await addDocumentTab({ kind: "epub", file });
 });
 
 elements.openMarkdownButton.addEventListener("click", async (event) => {
@@ -2432,45 +2800,70 @@ elements.openMarkdownButton.addEventListener("click", async (event) => {
   }
 
   event.preventDefault();
-  if (!confirmDiscardMarkdownChanges()) {
-    return;
-  }
-
   try {
     const document = await window.minseDesktop.openMarkdownFile();
-    if (document) {
-      activateMarkdownDocument(document);
-    }
+    if (document) await addDocumentTab({ kind: "markdown", document });
   } catch (error) {
     logClient("markdown.open.failed", { error: formatError(error) });
     window.alert(`Markdown 파일을 열지 못했습니다.\n${error.message || error}`);
   }
 });
 
-elements.newMarkdownButton.addEventListener("click", () => {
-  if (!confirmDiscardMarkdownChanges()) {
-    return;
-  }
-
-  activateMarkdownDocument({
+elements.newMarkdownButton.addEventListener("click", async () => {
+  await addDocumentTab({ kind: "markdown", document: {
     name: "untitled.md",
-    content: "# 새 Markdown 문서\n\n"
-  }, { dirty: true });
+    content: "# 새 Markdown 문서\n\n",
+    viewMode: "edit"
+  }});
+  state.markdown.savedContent = "";
+  state.markdown.dirty = true;
+  snapshotActiveTab();
+  render();
 });
 
 elements.markdownInput.addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
+  const files = Array.from(event.target.files || []);
   elements.markdownInput.value = "";
+  for (const file of files) await addDocumentTab({ kind: "markdown", document: { name: file.name, content: await file.text() } });
+});
 
-  if (!file || !confirmDiscardMarkdownChanges()) {
+elements.openFilesButton.addEventListener("click", async () => {
+  const payloads = await window.minseDesktop?.openFiles?.() || [];
+  for (const payload of payloads) await addDocumentTab(payload);
+});
+
+async function toggleRecentFilesMenu() {
+  const show = elements.recentFilesMenu.hidden;
+  elements.recentFilesMenu.hidden = !show;
+  elements.recentFilesButton.setAttribute("aria-expanded", String(show));
+  if (!show) return;
+  const recent = await window.minseDesktop?.getRecentFiles?.() || [];
+  if (!recent.length) {
+    const empty = document.createElement("span");
+    empty.className = "recent-file-item";
+    empty.textContent = "최근에 연 파일이 없습니다.";
+    elements.recentFilesMenu.replaceChildren(empty);
     return;
   }
+  elements.recentFilesMenu.replaceChildren(...recent.map((entry) => {
+    const button = document.createElement("button");
+    button.className = "recent-file-item";
+    button.type = "button";
+    const name = document.createElement("strong");
+    name.textContent = entry.name;
+    const location = document.createElement("small");
+    location.textContent = entry.path;
+    button.replaceChildren(name, location);
+    button.addEventListener("click", async () => {
+      elements.recentFilesMenu.hidden = true;
+      const payload = await window.minseDesktop.openRecentFile(entry.path);
+      if (payload) await addDocumentTab(payload);
+    });
+    return button;
+  }));
+}
 
-  activateMarkdownDocument({
-    name: file.name,
-    content: await file.text()
-  });
-});
+elements.recentFilesButton.addEventListener("click", () => void toggleRecentFilesMenu());
 
 elements.markdownEditButton.addEventListener("click", showMarkdownEditMode);
 elements.markdownViewButton.addEventListener("click", showMarkdownViewMode);
@@ -2479,9 +2872,19 @@ elements.saveMarkdownAsButton.addEventListener("click", () => saveMarkdown(true)
 elements.closeMarkdownButton.addEventListener("click", closeMarkdown);
 
 elements.reader.addEventListener("wheel", handleWheelEvent, { passive: false });
+elements.markdownWorkspace.addEventListener("wheel", handleMarkdownWheelEvent, { passive: false });
 elements.reader.addEventListener("mousedown", () => {
   hideSelectionToolbar();
 });
+
+elements.markdownViewer.addEventListener("mouseup", () => requestAnimationFrame(captureMarkdownSelection));
+elements.markdownViewer.addEventListener("mousedown", () => hideSelectionToolbar());
+elements.markdownViewer.addEventListener("scroll", () => {
+  updateMarkdownCurrentLine();
+  const active = hasBookmarkAtCurrentLocation();
+  elements.bookmarkButton.classList.toggle("is-active", active);
+  elements.bookmarkButton.setAttribute("aria-pressed", String(active));
+}, { passive: true });
 
 elements.searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -2514,6 +2917,18 @@ elements.nextButton.addEventListener("click", () => {
 });
 
 elements.bookmarkButton.addEventListener("click", () => {
+  if (state.mode === "markdown") {
+    updateMarkdownCurrentLine();
+    const line = state.markdownSelection?.startLine || state.markdownCurrentLine;
+    const annotations = getCurrentMarkdownAnnotations();
+    const exists = annotations.bookmarks.some((bookmark) => bookmark.line === line);
+    const bookmarks = exists
+      ? annotations.bookmarks.filter((bookmark) => bookmark.line !== line)
+      : [...annotations.bookmarks, createMarkdownBookmark(line)];
+    saveCurrentMarkdownAnnotations({ ...annotations, bookmarks });
+    render();
+    return;
+  }
   const location = getCurrentBookmarkLocation();
   const exists = state.book.bookmarks.some((bookmark) => bookmark.location === location);
 
@@ -2634,7 +3049,8 @@ window.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("beforeunload", (event) => {
-  if (state.markdown.dirty) {
+  snapshotActiveTab();
+  if (state.tabs.some((tab) => tab.kind === "markdown" && tab.markdown?.dirty)) {
     event.preventDefault();
     event.returnValue = "";
   }

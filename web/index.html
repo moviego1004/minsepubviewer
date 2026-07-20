@@ -13,14 +13,20 @@
         <div class="toolbar-tools" aria-label="Reader tools">
           <label id="openBookButton" class="icon-button file-icon-button" title="Open EPUB" aria-label="Open EPUB">
             <span class="folder-icon" aria-hidden="true"></span>
-            <input id="bookInput" type="file" accept=".epub,application/epub+zip">
+            <input id="bookInput" type="file" multiple accept=".epub,application/epub+zip">
           </label>
 
           <button id="newMarkdownButton" class="toolbar-action-button" type="button" title="새 Markdown 문서 만들기">새 MD</button>
           <label id="openMarkdownButton" class="toolbar-action-button markdown-file-button" title="Markdown 파일 열기">
             MD 열기
-            <input id="markdownInput" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain">
+            <input id="markdownInput" type="file" multiple accept=".md,.markdown,.txt,text/markdown,text/plain">
           </label>
+
+          <button id="openFilesButton" class="toolbar-action-button" type="button" title="여러 EPUB/Markdown 파일 열기">여러 파일</button>
+          <div class="recent-menu-wrap">
+            <button id="recentFilesButton" class="toolbar-action-button" type="button" aria-haspopup="menu" aria-expanded="false">최근 파일</button>
+            <div id="recentFilesMenu" class="recent-files-menu" role="menu" hidden></div>
+          </div>
 
           <button id="leftPanelToggle" class="icon-button panel-toggle" type="button" title="Toggle contents panel" aria-label="Toggle contents panel" aria-pressed="true">
             <span class="panel-icon panel-icon-left" aria-hidden="true"></span>
@@ -70,7 +76,7 @@
             <button id="markdownViewButton" class="toolbar-action-button" type="button">보기</button>
             <button id="saveMarkdownButton" class="toolbar-action-button" type="button">저장</button>
             <button id="saveMarkdownAsButton" class="toolbar-action-button" type="button">다른 이름으로</button>
-            <button id="closeMarkdownButton" class="toolbar-action-button" type="button">EPUB 보기</button>
+            <button id="closeMarkdownButton" class="toolbar-action-button" type="button">탭 닫기</button>
           </div>
         </div>
 
@@ -79,6 +85,8 @@
           <small id="bookMeta">Choose an EPUB file to render the book body.</small>
         </div>
       </header>
+
+      <nav id="documentTabs" class="document-tabs" aria-label="열린 문서" hidden></nav>
 
       <section class="workspace">
         <aside class="sidebar">
@@ -114,20 +122,24 @@
           <section id="bookmarksPanel" class="panel sidebar-tab-panel" role="tabpanel" aria-labelledby="bookmarksTab">
             <h2>Bookmarks</h2>
             <div id="bookmarkList" class="empty">No bookmarks yet.</div>
+            <div id="markdownHighlights" class="markdown-highlights" hidden>
+              <h2>Highlights</h2>
+              <div id="markdownHighlightList" class="empty">No highlights yet.</div>
+            </div>
           </section>
         </aside>
 
         <main class="reader-shell">
+        <div id="selectionToolbar" class="selection-toolbar" hidden>
+          <button id="yellowSelectionButton" class="selection-tool-button swatch-yellow" type="button" title="Yellow highlight" aria-label="Yellow highlight"></button>
+          <button id="orangeSelectionButton" class="selection-tool-button swatch-orange" type="button" title="Orange highlight" aria-label="Orange highlight"></button>
+          <button id="underlineSelectionButton" class="selection-tool-button underline-tool" type="button" title="Underline" aria-label="Underline"></button>
+        </div>
         <section id="markdownWorkspace" class="markdown-workspace" hidden>
           <div id="markdownEditor" class="markdown-editor"></div>
           <div id="markdownViewer" class="markdown-viewer" hidden></div>
         </section>
         <section id="contentRow" class="content-row">
-          <div id="selectionToolbar" class="selection-toolbar" hidden>
-            <button id="yellowSelectionButton" class="selection-tool-button swatch-yellow" type="button" title="Yellow highlight" aria-label="Yellow highlight"></button>
-            <button id="orangeSelectionButton" class="selection-tool-button swatch-orange" type="button" title="Orange highlight" aria-label="Orange highlight"></button>
-            <button id="underlineSelectionButton" class="selection-tool-button underline-tool" type="button" title="Underline" aria-label="Underline"></button>
-          </div>
           <article id="reader" class="reader" tabindex="0">
             <div class="sample-image" aria-hidden="true"></div>
             <h1>Minse EPUB Viewer</h1>

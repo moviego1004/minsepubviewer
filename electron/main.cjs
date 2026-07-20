@@ -11,6 +11,8 @@ const root = path.resolve(__dirname, "..");
 const preferredPort = normalizePort(process.env.PORT, 9173);
 let appUrl = null;
 const windowStateFile = "window-state.json";
+const mainWindowMinimum = Object.freeze({ width: 360, height: 300 });
+const recentFilesName = "recent-files.json";
 const defaultWindowState = Object.freeze({
   width: 1280,
   height: 840
@@ -21,6 +23,9 @@ let rendererReadyForFiles = false;
 let flushingFilePaths = false;
 const pendingFilePaths = [];
 const imageViewerPayloads = new Map();
+const readerWindows = new Set();
+const readyReaderWindows = new Set();
+const pendingPathsByWindow = new Map();
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const mimeTypes = new Map([
@@ -146,7 +151,7 @@ function isRestorableWindowState(state) {
     return false;
   }
 
-  if (state.width < 980 || state.height < 680) {
+  if (state.width < mainWindowMinimum.width || state.height < mainWindowMinimum.height) {
     return false;
   }
 
@@ -333,6 +338,36 @@ async function createOpenFilePayload(filePath) {
   throw new Error("지원하지 않는 파일 형식입니다.");
 }
 
+function getRecentFilesPath() {
+  return path.join(app.getPath("userData"), recentFilesName);
+}
+
+function loadRecentFiles() {
+  try {
+    const entries = JSON.parse(fsSync.readFileSync(getRecentFilesPath(), "utf8"));
+    return Array.isArray(entries) ? entries.filter((entry) => isOpenableFilePath(entry.path)).slice(0, 12) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecentFile(filePath) {
+  if (!isOpenableFilePath(filePath)) return;
+  const entry = { path: filePath, name: path.basename(filePath), kind: getSupportedFileKind(filePath), openedAt: new Date().toISOString() };
+  const entries = [entry, ...loadRecentFiles().filter((item) => item.path.toLowerCase() !== filePath.toLowerCase())].slice(0, 12);
+  fsSync.mkdirSync(app.getPath("userData"), { recursive: true });
+  fsSync.writeFileSync(getRecentFilesPath(), JSON.stringify(entries, null, 2), "utf8");
+}
+
+async function sendFilePathToWindow(window, filePath) {
+  try {
+    rememberRecentFile(filePath);
+    window.webContents.send("file:open", await createOpenFilePayload(filePath));
+  } catch (error) {
+    window.webContents.send("file:open-error", { name: path.basename(filePath), message: error?.message || String(error) });
+  }
+}
+
 function focusMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
@@ -357,6 +392,7 @@ async function flushPendingFilePaths() {
       const filePath = pendingFilePaths.shift();
 
       try {
+        rememberRecentFile(filePath);
         mainWindow.webContents.send("file:open", await createOpenFilePayload(filePath));
       } catch (error) {
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -399,7 +435,7 @@ async function ensureServer() {
   }
 }
 
-async function createWindow() {
+async function createWindow({ filePaths = [] } = {}) {
   await ensureServer();
 
   const windowState = loadWindowState();
@@ -408,8 +444,8 @@ async function createWindow() {
     y: windowState.y,
     width: windowState.width,
     height: windowState.height,
-    minWidth: 980,
-    minHeight: 680,
+    minWidth: mainWindowMinimum.width,
+    minHeight: mainWindowMinimum.height,
     show: false,
     title: "Minse EPUB Viewer",
     webPreferences: {
@@ -420,11 +456,16 @@ async function createWindow() {
   });
 
   mainWindow = window;
+  readerWindows.add(window);
+  pendingPathsByWindow.set(window, filePaths.filter(isOpenableFilePath));
   rendererReadyForFiles = false;
   window.once("closed", () => {
+    readerWindows.delete(window);
+    readyReaderWindows.delete(window);
+    pendingPathsByWindow.delete(window);
     if (mainWindow === window) {
-      mainWindow = null;
-      rendererReadyForFiles = false;
+      mainWindow = readerWindows.values().next().value || null;
+      rendererReadyForFiles = Boolean(mainWindow && readyReaderWindows.has(mainWindow));
     }
   });
 
@@ -438,6 +479,18 @@ async function createWindow() {
   });
 
   await window.loadURL(appUrl);
+  return window;
+}
+
+async function createReaderWindow(filePath) {
+  const previousMain = mainWindow;
+  const previousRendererReady = rendererReadyForFiles;
+  const window = await createWindow({ filePaths: filePath ? [filePath] : [] });
+  if (previousMain && !previousMain.isDestroyed()) {
+    mainWindow = previousMain;
+    rendererReadyForFiles = previousRendererReady;
+  }
+  return window;
 }
 
 ipcMain.handle("book:open", async () => {
@@ -453,7 +506,7 @@ ipcMain.handle("book:open", async () => {
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
-
+  rememberRecentFile(result.filePaths[0]);
   return (await createOpenFilePayload(result.filePaths[0])).file;
 });
 
@@ -473,11 +526,44 @@ ipcMain.handle("markdown:open", async () => {
   }
 
   const filePath = result.filePaths[0];
+  rememberRecentFile(filePath);
   return {
     name: path.basename(filePath),
     path: filePath,
     content: await readFile(filePath, "utf8")
   };
+});
+
+ipcMain.handle("files:open", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "EPUB 또는 Markdown 파일 열기",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      { name: "전자책과 Markdown", extensions: ["epub", "md", "markdown"] },
+      { name: "모든 파일", extensions: ["*"] }
+    ]
+  });
+  if (result.canceled) return [];
+  const payloads = [];
+  for (const filePath of result.filePaths) {
+    if (!isOpenableFilePath(filePath)) continue;
+    rememberRecentFile(filePath);
+    payloads.push(await createOpenFilePayload(filePath));
+  }
+  return payloads;
+});
+
+ipcMain.handle("recent:list", () => loadRecentFiles());
+ipcMain.handle("recent:open", async (_event, filePath) => {
+  if (!isOpenableFilePath(filePath)) return null;
+  rememberRecentFile(filePath);
+  return createOpenFilePayload(filePath);
+});
+ipcMain.handle("window:open-file", async (_event, filePath) => {
+  if (!isOpenableFilePath(filePath)) return { ok: false };
+  rememberRecentFile(filePath);
+  await createReaderWindow(filePath);
+  return { ok: true };
 });
 
 ipcMain.handle("markdown:save", async (_event, payload = {}) => {
@@ -514,6 +600,13 @@ ipcMain.handle("markdown:save", async (_event, payload = {}) => {
 
 ipcMain.handle("image:open", async (_event, payload) => openImageWindow(payload));
 ipcMain.on("file:ready", (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window && readerWindows.has(window)) {
+    readyReaderWindows.add(window);
+    const paths = pendingPathsByWindow.get(window) || [];
+    pendingPathsByWindow.set(window, []);
+    for (const filePath of paths) void sendFilePathToWindow(window, filePath);
+  }
   if (mainWindow && event.sender === mainWindow.webContents) {
     rendererReadyForFiles = true;
     void flushPendingFilePaths();
