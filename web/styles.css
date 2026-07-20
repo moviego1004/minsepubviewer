@@ -39,7 +39,10 @@ textarea {
 
 .app {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto 1fr;
+  width: 100%;
+  min-width: 0;
   height: 100vh;
   min-height: 0;
 }
@@ -48,6 +51,8 @@ textarea {
   position: relative;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -283,7 +288,9 @@ body.sidebar-collapsed .sidebar {
   align-items: center;
   justify-content: flex-start;
   gap: 18px;
+  min-width: 0;
   padding: 16px 20px;
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
@@ -297,13 +304,14 @@ body.sidebar-collapsed .sidebar {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
 }
 
 .book-title {
-  flex: 1 1 auto;
+  flex: 0 1 320px;
 }
 
 .book-title span {
@@ -378,7 +386,7 @@ body.sidebar-collapsed .sidebar {
 }
 
 .recent-menu-wrap { position: relative; }
-.recent-files-menu { position: absolute; z-index: 80; top: calc(100% + 8px); left: 0; width: min(360px, 70vw); padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 16px 40px rgba(32, 35, 39, 0.18); }
+.recent-files-menu { position: fixed; z-index: 1000; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 16px 40px rgba(32, 35, 39, 0.18); overflow-y: auto; overscroll-behavior: contain; }
 .recent-files-menu[hidden] { display: none; }
 .recent-file-item { display: grid; width: 100%; padding: 9px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
 .recent-file-item:hover { background: var(--accent-soft); }
@@ -698,9 +706,32 @@ body.sidebar-collapsed .sidebar {
 }
 
 .markdown-viewer .toastui-editor-contents {
+  width: 100%;
+  min-width: 0;
   max-width: 920px;
   margin: 0 auto;
   font-size: calc(16px * var(--markdown-zoom, 1));
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-viewer .toastui-editor-contents pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.markdown-viewer .toastui-editor-contents table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-viewer .toastui-editor-contents th,
+.markdown-viewer .toastui-editor-contents td,
+.markdown-viewer .toastui-editor-contents a {
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 

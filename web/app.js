@@ -197,6 +197,7 @@ const state = {
   markdownAnnotations: parseMarkdownAnnotationState(localStorage.getItem(MARKDOWN_ANNOTATIONS_KEY)),
   markdownSelection: null,
   markdownCurrentLine: 1,
+  markdownScrollTop: 0,
   activeSidebarTab: "toc",
   ui: loadUiState()
 };
@@ -211,7 +212,6 @@ const elements = {
   orangeSelectionButton: document.querySelector("#orangeSelectionButton"),
   underlineSelectionButton: document.querySelector("#underlineSelectionButton"),
   openBookButton: document.querySelector("#openBookButton"),
-  openFilesButton: document.querySelector("#openFilesButton"),
   recentFilesButton: document.querySelector("#recentFilesButton"),
   recentFilesMenu: document.querySelector("#recentFilesMenu"),
   documentTabs: document.querySelector("#documentTabs"),
@@ -1843,12 +1843,18 @@ function goToMarkdownLine(line) {
   requestAnimationFrame(() => {
     mapMarkdownBlocksToLines();
     const block = findMarkdownBlockForLine(line);
-    if (block) block.scrollIntoView({ block: "center", behavior: "smooth" });
-    else {
+    if (block) {
+      const viewerRect = elements.markdownViewer.getBoundingClientRect();
+      const blockRect = block.getBoundingClientRect();
+      const centeredOffset = blockRect.top - viewerRect.top - (elements.markdownViewer.clientHeight - blockRect.height) / 2;
+      elements.markdownViewer.scrollTop += centeredOffset;
+    } else {
       const max = Math.max(1, state.markdown.content.split("\n").length);
-      elements.markdownViewer.scrollTop = (line - 1) / max * elements.markdownViewer.scrollHeight;
+      const scrollRange = Math.max(0, elements.markdownViewer.scrollHeight - elements.markdownViewer.clientHeight);
+      elements.markdownViewer.scrollTop = (line - 1) / max * scrollRange;
     }
     state.markdownCurrentLine = line;
+    state.markdownScrollTop = elements.markdownViewer.scrollTop;
     render();
   });
 }
@@ -1891,10 +1897,19 @@ function applyMarkdownHighlights() {
   }
 }
 
-function prepareMarkdownViewer() {
+function prepareMarkdownViewer(scrollTop = state.markdownScrollTop) {
   mapMarkdownBlocksToLines();
   applyMarkdownHighlights();
+  const scrollRange = Math.max(0, elements.markdownViewer.scrollHeight - elements.markdownViewer.clientHeight);
+  state.markdownScrollTop = Math.min(Math.max(0, Number(scrollTop) || 0), scrollRange);
+  elements.markdownViewer.scrollTop = state.markdownScrollTop;
   updateMarkdownCurrentLine();
+
+  const tab = getActiveTab();
+  if (tab?.kind === "markdown" && tab.markdown) {
+    tab.markdown.currentLine = state.markdownCurrentLine;
+    tab.markdown.scrollTop = state.markdownScrollTop;
+  }
 }
 
 function updateMarkdownCurrentLine() {
@@ -1903,6 +1918,27 @@ function updateMarkdownCurrentLine() {
   const blocks = [...elements.markdownViewer.querySelectorAll("[data-md-line]")];
   const visible = blocks.find((block) => block.getBoundingClientRect().bottom >= viewerRect.top + 20);
   if (visible) state.markdownCurrentLine = Number(visible.dataset.mdLine) || 1;
+}
+
+function rememberMarkdownViewPosition() {
+  if (
+    state.mode !== "markdown" ||
+    state.markdown.viewMode !== "view" ||
+    !state.markdownViewer ||
+    elements.markdownViewer.hidden ||
+    !elements.markdownViewer.querySelector(".toastui-editor-contents")
+  ) {
+    return;
+  }
+
+  updateMarkdownCurrentLine();
+  state.markdownScrollTop = elements.markdownViewer.scrollTop;
+
+  const tab = getActiveTab();
+  if (tab?.kind === "markdown" && tab.markdown) {
+    tab.markdown.currentLine = state.markdownCurrentLine;
+    tab.markdown.scrollTop = state.markdownScrollTop;
+  }
 }
 
 function captureMarkdownSelection() {
@@ -1938,10 +1974,12 @@ function captureMarkdownSelection() {
 function destroyMarkdownInstances() {
   hideSelectionToolbar();
   state.markdownSelection = null;
-  state.markdownEditor?.destroy();
-  state.markdownViewer?.destroy();
+  const editor = state.markdownEditor;
+  const viewer = state.markdownViewer;
   state.markdownEditor = null;
   state.markdownViewer = null;
+  editor?.destroy();
+  viewer?.destroy();
   elements.markdownEditor.replaceChildren();
   elements.markdownViewer.replaceChildren();
 }
@@ -1982,6 +2020,8 @@ function activateMarkdownDocument(document, options = {}) {
     viewMode: options.viewMode === "view" ? "view" : "edit",
     saving: false
   };
+  state.markdownCurrentLine = Math.max(1, Number(options.currentLine) || 1);
+  state.markdownScrollTop = Math.max(0, Number(options.scrollTop) || 0);
 
   render();
   createMarkdownEditor();
@@ -2003,11 +2043,25 @@ function getActiveTab() {
 
 function snapshotActiveTab() {
   const tab = getActiveTab();
-  if (!tab || tab.kind !== "markdown" || state.mode !== "markdown") return;
+  if (!tab) return;
+
+  if (tab.kind === "epub" && state.mode === "epub") {
+    syncRenditionLocation();
+    return;
+  }
+
+  if (tab.kind !== "markdown" || state.mode !== "markdown") return;
+  rememberMarkdownViewPosition();
   const content = getMarkdownContent();
   tab.title = state.markdown.name || tab.title;
   tab.path = state.markdown.path || tab.path;
-  tab.markdown = { ...state.markdown, content, saving: false };
+  tab.markdown = {
+    ...state.markdown,
+    content,
+    saving: false,
+    currentLine: state.markdownCurrentLine,
+    scrollTop: state.markdownScrollTop
+  };
 }
 
 function renderDocumentTabs() {
@@ -2065,7 +2119,9 @@ async function activateDocumentTab(tabId) {
   activateMarkdownDocument(tab.markdown, {
     savedContent: tab.markdown.savedContent,
     dirty: tab.markdown.dirty,
-    viewMode: tab.markdown.viewMode
+    viewMode: tab.markdown.viewMode,
+    currentLine: tab.markdown.currentLine,
+    scrollTop: tab.markdown.scrollTop
   });
   renderDocumentTabs();
 }
@@ -2084,7 +2140,7 @@ async function addDocumentTab(payload) {
     id: createTabId(), kind: payload.kind, title: source.name || "문서", path, payload,
     markdown: payload.kind === "markdown" ? {
       name: source.name || "document.md", path, content: source.content || "", savedContent: source.content || "", dirty: false,
-      viewMode: source.viewMode === "edit" ? "edit" : "view", saving: false
+      viewMode: source.viewMode === "edit" ? "edit" : "view", saving: false, currentLine: 1, scrollTop: 0
     } : null
   };
   state.tabs.push(tab);
@@ -2237,9 +2293,11 @@ function installFileDropHandlers(target) {
 function showMarkdownEditMode() {
   hideSelectionToolbar();
   state.markdownSelection = null;
+  rememberMarkdownViewPosition();
   state.markdown.viewMode = "edit";
-  state.markdownViewer?.destroy();
+  const viewer = state.markdownViewer;
   state.markdownViewer = null;
+  viewer?.destroy();
   elements.markdownViewer.replaceChildren();
   renderMarkdownChrome();
   state.markdownEditor?.focus();
@@ -2248,10 +2306,13 @@ function showMarkdownEditMode() {
 function showMarkdownViewMode() {
   const Editor = window.toastui?.Editor;
   const content = getMarkdownContent();
+  const restoreScrollTop = state.markdownScrollTop;
 
   state.markdown.content = content;
   state.markdown.viewMode = "view";
-  state.markdownViewer?.destroy();
+  const previousViewer = state.markdownViewer;
+  state.markdownViewer = null;
+  previousViewer?.destroy();
   elements.markdownViewer.replaceChildren();
   renderMarkdownChrome();
 
@@ -2261,7 +2322,7 @@ function showMarkdownViewMode() {
     initialValue: content,
     usageStatistics: false
   });
-  requestAnimationFrame(prepareMarkdownViewer);
+  requestAnimationFrame(() => prepareMarkdownViewer(restoreScrollTop));
 }
 
 async function saveMarkdown(saveAs = false) {
@@ -2827,43 +2888,85 @@ elements.markdownInput.addEventListener("change", async (event) => {
   for (const file of files) await addDocumentTab({ kind: "markdown", document: { name: file.name, content: await file.text() } });
 });
 
-elements.openFilesButton.addEventListener("click", async () => {
-  const payloads = await window.minseDesktop?.openFiles?.() || [];
-  for (const payload of payloads) await addDocumentTab(payload);
-});
+function closeRecentFilesMenu() {
+  elements.recentFilesMenu.hidden = true;
+  elements.recentFilesButton.setAttribute("aria-expanded", "false");
+}
+
+function positionRecentFilesMenu() {
+  if (elements.recentFilesMenu.hidden) return;
+
+  const buttonRect = elements.recentFilesButton.getBoundingClientRect();
+  const viewportPadding = 8;
+  const menuWidth = Math.min(360, window.innerWidth - viewportPadding * 2);
+  const left = Math.max(
+    viewportPadding,
+    Math.min(buttonRect.left, window.innerWidth - menuWidth - viewportPadding)
+  );
+  const top = buttonRect.bottom + 8;
+  const availableHeight = Math.max(96, window.innerHeight - top - viewportPadding);
+
+  elements.recentFilesMenu.style.left = `${left}px`;
+  elements.recentFilesMenu.style.top = `${top}px`;
+  elements.recentFilesMenu.style.width = `${menuWidth}px`;
+  elements.recentFilesMenu.style.maxHeight = `${availableHeight}px`;
+}
 
 async function toggleRecentFilesMenu() {
-  const show = elements.recentFilesMenu.hidden;
-  elements.recentFilesMenu.hidden = !show;
-  elements.recentFilesButton.setAttribute("aria-expanded", String(show));
-  if (!show) return;
+  if (!elements.recentFilesMenu.hidden) {
+    closeRecentFilesMenu();
+    return;
+  }
+
+  elements.recentFilesMenu.hidden = false;
+  elements.recentFilesButton.setAttribute("aria-expanded", "true");
+  elements.recentFilesMenu.replaceChildren();
+  positionRecentFilesMenu();
+
   const recent = await window.minseDesktop?.getRecentFiles?.() || [];
+  if (elements.recentFilesMenu.hidden) return;
+
   if (!recent.length) {
     const empty = document.createElement("span");
     empty.className = "recent-file-item";
+    empty.setAttribute("role", "status");
     empty.textContent = "최근에 연 파일이 없습니다.";
     elements.recentFilesMenu.replaceChildren(empty);
+    positionRecentFilesMenu();
     return;
   }
   elements.recentFilesMenu.replaceChildren(...recent.map((entry) => {
     const button = document.createElement("button");
     button.className = "recent-file-item";
     button.type = "button";
+    button.setAttribute("role", "menuitem");
     const name = document.createElement("strong");
     name.textContent = entry.name;
     const location = document.createElement("small");
     location.textContent = entry.path;
     button.replaceChildren(name, location);
     button.addEventListener("click", async () => {
-      elements.recentFilesMenu.hidden = true;
+      closeRecentFilesMenu();
       const payload = await window.minseDesktop.openRecentFile(entry.path);
       if (payload) await addDocumentTab(payload);
     });
     return button;
   }));
+  positionRecentFilesMenu();
 }
 
 elements.recentFilesButton.addEventListener("click", () => void toggleRecentFilesMenu());
+document.addEventListener("pointerdown", (event) => {
+  if (
+    !elements.recentFilesMenu.hidden &&
+    !elements.recentFilesMenu.contains(event.target) &&
+    !elements.recentFilesButton.contains(event.target)
+  ) {
+    closeRecentFilesMenu();
+  }
+});
+window.addEventListener("resize", positionRecentFilesMenu);
+elements.recentFilesButton.closest(".toolbar-tools")?.addEventListener("scroll", positionRecentFilesMenu, { passive: true });
 
 elements.markdownEditButton.addEventListener("click", showMarkdownEditMode);
 elements.markdownViewButton.addEventListener("click", showMarkdownViewMode);
@@ -2880,7 +2983,7 @@ elements.reader.addEventListener("mousedown", () => {
 elements.markdownViewer.addEventListener("mouseup", () => requestAnimationFrame(captureMarkdownSelection));
 elements.markdownViewer.addEventListener("mousedown", () => hideSelectionToolbar());
 elements.markdownViewer.addEventListener("scroll", () => {
-  updateMarkdownCurrentLine();
+  rememberMarkdownViewPosition();
   const active = hasBookmarkAtCurrentLocation();
   elements.bookmarkButton.classList.toggle("is-active", active);
   elements.bookmarkButton.setAttribute("aria-pressed", String(active));
@@ -3029,6 +3132,12 @@ elements.textOnly.addEventListener("change", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !elements.recentFilesMenu.hidden) {
+    closeRecentFilesMenu();
+    elements.recentFilesButton.focus();
+    return;
+  }
+
   if (state.mode === "markdown" && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
     saveMarkdown(false);

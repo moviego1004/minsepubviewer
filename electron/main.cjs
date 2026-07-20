@@ -534,25 +534,6 @@ ipcMain.handle("markdown:open", async () => {
   };
 });
 
-ipcMain.handle("files:open", async () => {
-  const result = await dialog.showOpenDialog({
-    title: "EPUB 또는 Markdown 파일 열기",
-    properties: ["openFile", "multiSelections"],
-    filters: [
-      { name: "전자책과 Markdown", extensions: ["epub", "md", "markdown"] },
-      { name: "모든 파일", extensions: ["*"] }
-    ]
-  });
-  if (result.canceled) return [];
-  const payloads = [];
-  for (const filePath of result.filePaths) {
-    if (!isOpenableFilePath(filePath)) continue;
-    rememberRecentFile(filePath);
-    payloads.push(await createOpenFilePayload(filePath));
-  }
-  return payloads;
-});
-
 ipcMain.handle("recent:list", () => loadRecentFiles());
 ipcMain.handle("recent:open", async (_event, filePath) => {
   if (!isOpenableFilePath(filePath)) return null;
