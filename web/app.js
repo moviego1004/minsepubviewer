@@ -194,6 +194,7 @@ const state = {
   },
   markdownEditor: null,
   markdownViewer: null,
+  markdownSyncTimer: null,
   markdownAnnotations: parseMarkdownAnnotationState(localStorage.getItem(MARKDOWN_ANNOTATIONS_KEY)),
   markdownSelection: null,
   markdownCurrentLine: 1,
@@ -1756,13 +1757,56 @@ function getMarkdownContent() {
   return state.markdown.content;
 }
 
-function updateMarkdownDocumentState() {
+function clearMarkdownDocumentSync() {
+  if (state.markdownSyncTimer !== null) {
+    window.clearTimeout(state.markdownSyncTimer);
+    state.markdownSyncTimer = null;
+  }
+}
+
+function updateMarkdownDocumentState({ renderUi = true } = {}) {
+  clearMarkdownDocumentSync();
+  if (state.mode !== "markdown") return;
+
   const content = getMarkdownContent();
   state.markdown.content = content;
   state.markdown.dirty = content !== state.markdown.savedContent;
-  snapshotActiveTab();
-  renderMarkdownChrome();
-  renderDocumentTabs();
+
+  const tab = getActiveTab();
+  if (tab?.kind === "markdown") {
+    tab.title = state.markdown.name || tab.title;
+    tab.path = state.markdown.path || tab.path;
+    tab.markdown = {
+      ...state.markdown,
+      content,
+      saving: false,
+      currentLine: state.markdownCurrentLine,
+      scrollTop: state.markdownScrollTop
+    };
+  }
+
+  if (renderUi) {
+    renderMarkdownChrome();
+    renderDocumentTabs();
+  }
+}
+
+function scheduleMarkdownDocumentSync() {
+  if (state.mode !== "markdown") return;
+
+  // Serializing the complete WYSIWYG document on every keystroke blocks the
+  // editor for large files. Mark it dirty immediately, then coalesce the
+  // expensive state/tab synchronization until the user pauses typing.
+  if (!state.markdown.dirty) {
+    state.markdown.dirty = true;
+    renderMarkdownChrome();
+    renderDocumentTabs();
+  }
+
+  clearMarkdownDocumentSync();
+  state.markdownSyncTimer = window.setTimeout(() => {
+    updateMarkdownDocumentState();
+  }, 300);
 }
 
 function getMarkdownAnnotationKey() {
@@ -1972,6 +2016,7 @@ function captureMarkdownSelection() {
 }
 
 function destroyMarkdownInstances() {
+  clearMarkdownDocumentSync();
   hideSelectionToolbar();
   state.markdownSelection = null;
   const editor = state.markdownEditor;
@@ -1994,14 +2039,14 @@ function createMarkdownEditor() {
   state.markdownEditor = new Editor({
     el: elements.markdownEditor,
     height: "100%",
-    initialEditType: "markdown",
+    initialEditType: "wysiwyg",
     previewStyle: "vertical",
     initialValue: state.markdown.content,
     language: "ko-KR",
     usageStatistics: false,
     autofocus: false,
     events: {
-      change: updateMarkdownDocumentState
+      change: scheduleMarkdownDocumentSync
     }
   });
 }
@@ -2025,12 +2070,8 @@ function activateMarkdownDocument(document, options = {}) {
 
   render();
   createMarkdownEditor();
-  updateMarkdownDocumentState();
+  updateMarkdownDocumentState({ renderUi: false });
   if (state.markdown.viewMode === "view") showMarkdownViewMode();
-}
-
-function confirmDiscardMarkdownChanges() {
-  return !state.markdown.dirty || window.confirm("저장하지 않은 Markdown 변경 내용을 버릴까요?");
 }
 
 function createTabId() {
@@ -2051,8 +2092,11 @@ function snapshotActiveTab() {
   }
 
   if (tab.kind !== "markdown" || state.mode !== "markdown") return;
+  clearMarkdownDocumentSync();
   rememberMarkdownViewPosition();
   const content = getMarkdownContent();
+  state.markdown.content = content;
+  state.markdown.dirty = content !== state.markdown.savedContent;
   tab.title = state.markdown.name || tab.title;
   tab.path = state.markdown.path || tab.path;
   tab.markdown = {
@@ -2140,24 +2184,96 @@ async function addDocumentTab(payload) {
     id: createTabId(), kind: payload.kind, title: source.name || "문서", path, payload,
     markdown: payload.kind === "markdown" ? {
       name: source.name || "document.md", path, content: source.content || "", savedContent: source.content || "", dirty: false,
-      viewMode: source.viewMode === "edit" ? "edit" : "view", saving: false, currentLine: 1, scrollTop: 0
+      viewMode: source.viewMode === "view" ? "view" : "edit", saving: false, currentLine: 1, scrollTop: 0
     } : null
   };
   state.tabs.push(tab);
   await activateDocumentTab(tab.id);
 }
 
+async function askHowToCloseChangedDocument(tab) {
+  if (window.minseDesktop?.confirmSaveChanges) {
+    return window.minseDesktop.confirmSaveChanges({
+      name: tab.title || tab.markdown?.name || "문서",
+      kind: tab.kind
+    });
+  }
+
+  if (window.confirm(`${tab.title}의 변경 내용을 저장하시겠습니까?`)) return "save";
+  return window.confirm("저장하지 않고 닫으시겠습니까?") ? "discard" : "cancel";
+}
+
+async function resolveUnsavedMarkdownTab(tab) {
+  if (tab.kind !== "markdown" || !tab.markdown?.dirty) return true;
+
+  const decision = await askHowToCloseChangedDocument(tab);
+  if (decision === "cancel") return false;
+  if (decision === "discard") return true;
+  if (decision !== "save") return false;
+
+  if (tab.id !== state.activeTabId) {
+    const activeTab = getActiveTab();
+    if (activeTab?.kind === "epub" && !await resolveUnsavedEpubTab(activeTab)) return false;
+    await activateDocumentTab(tab.id);
+  }
+
+  return saveMarkdown(false);
+}
+
+function getPendingEpubEdits(tab) {
+  if (tab.id !== state.activeTabId || tab.kind !== "epub" || state.mode !== "epub") return null;
+
+  const note = state.book.notes.find((item) => item.id === state.editingNoteId) || null;
+  const textarea = note ? elements.annotationList.querySelector(".annotation-edit-input") : null;
+  const editedBody = textarea?.value.trim() || "";
+  const hasEditedNote = Boolean(note && textarea && editedBody !== note.body.trim());
+  const hasNewNote = Boolean(
+    state.selectedRange &&
+    state.selectedQuote &&
+    elements.noteBody.value.trim()
+  );
+
+  return hasEditedNote || hasNewNote
+    ? { note, textarea, editedBody, hasEditedNote, hasNewNote }
+    : null;
+}
+
+async function resolveUnsavedEpubTab(tab) {
+  const pending = getPendingEpubEdits(tab);
+  if (!pending) return true;
+
+  const decision = await askHowToCloseChangedDocument(tab);
+  if (decision === "cancel") return false;
+  if (decision === "discard") return true;
+  if (decision !== "save") return false;
+
+  if (pending.hasEditedNote) {
+    if (!pending.editedBody) {
+      window.alert("메모 내용을 입력한 후 저장해 주세요.");
+      pending.textarea.focus();
+      return false;
+    }
+    saveEditedNote(pending.note, pending.textarea);
+  }
+  if (pending.hasNewNote) addCurrentNote();
+  return true;
+}
+
+async function resolveUnsavedDocumentTab(tab) {
+  if (tab.kind === "markdown") return resolveUnsavedMarkdownTab(tab);
+  if (tab.kind === "epub") return resolveUnsavedEpubTab(tab);
+  return true;
+}
+
 async function closeDocumentTab(tabId) {
   snapshotActiveTab();
-  const index = state.tabs.findIndex((tab) => tab.id === tabId);
+  let index = state.tabs.findIndex((tab) => tab.id === tabId);
   if (index < 0) return;
   const tab = state.tabs[index];
-  if (tab.kind === "markdown" && tab.markdown?.dirty) {
-    const canClose = tab.id === state.activeTabId
-      ? confirmDiscardMarkdownChanges()
-      : window.confirm(`${tab.title}의 저장하지 않은 변경 내용을 버릴까요?`);
-    if (!canClose) return;
-  }
+  if (!await resolveUnsavedDocumentTab(tab)) return;
+
+  index = state.tabs.findIndex((item) => item.id === tabId);
+  if (index < 0) return;
   state.tabs.splice(index, 1);
   if (tab.id !== state.activeTabId) { renderDocumentTabs(); return; }
   state.activeTabId = "";
@@ -2305,10 +2421,12 @@ function showMarkdownEditMode() {
 
 function showMarkdownViewMode() {
   const Editor = window.toastui?.Editor;
+  clearMarkdownDocumentSync();
   const content = getMarkdownContent();
   const restoreScrollTop = state.markdownScrollTop;
 
   state.markdown.content = content;
+  state.markdown.dirty = content !== state.markdown.savedContent;
   state.markdown.viewMode = "view";
   const previousViewer = state.markdownViewer;
   state.markdownViewer = null;
@@ -2327,9 +2445,10 @@ function showMarkdownViewMode() {
 
 async function saveMarkdown(saveAs = false) {
   if (state.mode !== "markdown" || state.markdown.saving) {
-    return;
+    return false;
   }
 
+  clearMarkdownDocumentSync();
   const content = getMarkdownContent();
   const previousAnnotationKey = getMarkdownAnnotationKey();
   state.markdown.content = content;
@@ -2345,7 +2464,7 @@ async function saveMarkdown(saveAs = false) {
       });
       state.markdown.savedContent = content;
       state.markdown.dirty = false;
-      return;
+      return true;
     }
 
     const result = await window.minseDesktop.saveMarkdownFile({
@@ -2356,7 +2475,7 @@ async function saveMarkdown(saveAs = false) {
     });
 
     if (!result) {
-      return;
+      return false;
     }
 
     state.markdown.name = result.name;
@@ -2369,9 +2488,11 @@ async function saveMarkdown(saveAs = false) {
       path: result.path,
       characters: content.length
     });
+    return true;
   } catch (error) {
     logClient("markdown.save.failed", { error: formatError(error) });
     window.alert(`Markdown 저장에 실패했습니다.\n${error.message || error}`);
+    return false;
   } finally {
     state.markdown.saving = false;
     renderMarkdownChrome();
@@ -3157,7 +3278,45 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
+let windowCloseApproved = false;
+let windowCloseInProgress = false;
+
+window.minseDesktop?.onWindowCloseRequested?.(() => {
+  if (windowCloseInProgress) return;
+  windowCloseInProgress = true;
+
+  void (async () => {
+    snapshotActiveTab();
+    const activeTab = getActiveTab();
+    if (activeTab?.kind === "epub" && !await resolveUnsavedEpubTab(activeTab)) {
+      windowCloseInProgress = false;
+      window.minseDesktop.completeWindowClose(false);
+      return;
+    }
+    const dirtyTabIds = state.tabs
+      .filter((tab) => tab.kind === "markdown" && tab.markdown?.dirty)
+      .map((tab) => tab.id);
+
+    for (const tabId of dirtyTabIds) {
+      const tab = state.tabs.find((item) => item.id === tabId);
+      if (tab && !await resolveUnsavedMarkdownTab(tab)) {
+        windowCloseInProgress = false;
+        window.minseDesktop.completeWindowClose(false);
+        return;
+      }
+    }
+
+    windowCloseApproved = true;
+    window.minseDesktop.completeWindowClose(true);
+  })().catch((error) => {
+    windowCloseInProgress = false;
+    logClient("window.close.failed", { error: formatError(error) });
+    window.minseDesktop.completeWindowClose(false);
+  });
+});
+
 window.addEventListener("beforeunload", (event) => {
+  if (windowCloseApproved) return;
   snapshotActiveTab();
   if (state.tabs.some((tab) => tab.kind === "markdown" && tab.markdown?.dirty)) {
     event.preventDefault();

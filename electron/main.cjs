@@ -26,6 +26,8 @@ const imageViewerPayloads = new Map();
 const readerWindows = new Set();
 const readyReaderWindows = new Set();
 const pendingPathsByWindow = new Map();
+const approvedWindowCloses = new WeakSet();
+const pendingWindowCloses = new WeakSet();
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const mimeTypes = new Map([
@@ -459,6 +461,14 @@ async function createWindow({ filePaths = [] } = {}) {
   readerWindows.add(window);
   pendingPathsByWindow.set(window, filePaths.filter(isOpenableFilePath));
   rendererReadyForFiles = false;
+  window.on("close", (event) => {
+    if (approvedWindowCloses.has(window) || !readyReaderWindows.has(window)) return;
+
+    event.preventDefault();
+    if (pendingWindowCloses.has(window) || window.webContents.isDestroyed()) return;
+    pendingWindowCloses.add(window);
+    window.webContents.send("window:close-requested");
+  });
   window.once("closed", () => {
     readerWindows.delete(window);
     readyReaderWindows.delete(window);
@@ -577,6 +587,38 @@ ipcMain.handle("markdown:save", async (_event, payload = {}) => {
     name: path.basename(filePath),
     path: filePath
   };
+});
+
+ipcMain.handle("document:confirm-save", async (event, payload = {}) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const name = typeof payload.name === "string" && payload.name.trim()
+    ? payload.name.trim()
+    : "문서";
+  const options = {
+    type: "question",
+    title: "변경 내용 저장",
+    message: `${name}의 변경 내용을 저장하시겠습니까?`,
+    detail: "저장하지 않은 변경 내용이 있습니다.",
+    buttons: ["저장", "저장 안 함", "취소"],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true
+  };
+  const result = window
+    ? await dialog.showMessageBox(window, options)
+    : await dialog.showMessageBox(options);
+
+  return ["save", "discard", "cancel"][result.response] || "cancel";
+});
+
+ipcMain.on("window:close-complete", (event, shouldClose) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isDestroyed()) return;
+
+  pendingWindowCloses.delete(window);
+  if (!shouldClose) return;
+  approvedWindowCloses.add(window);
+  window.close();
 });
 
 ipcMain.handle("image:open", async (_event, payload) => openImageWindow(payload));
