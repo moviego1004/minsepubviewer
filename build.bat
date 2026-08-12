@@ -9,10 +9,15 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "node_modules\.bin\electron-builder.cmd" (
-  echo Installing dependencies...
-  npm.cmd ci
-  if errorlevel 1 exit /b 1
-)
+if not exist "node_modules\.bin\esbuild.cmd" goto install_dependencies
+if not exist "node_modules\.bin\electron-builder.cmd" goto install_dependencies
+goto build_app
 
-npm.cmd run build
+:install_dependencies
+echo Installing dependencies...
+call npm.cmd ci
+if errorlevel 1 exit /b 1
+
+:build_app
+call npm.cmd run build
+exit /b %errorlevel%
