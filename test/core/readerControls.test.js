@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   applyZoomIntent,
   getScrollBoundaryIntent,
+  getViewportPageState,
+  getViewportPageTarget,
   getWheelIntent
 } from "../../src/core/readerControls.js";
 
@@ -69,6 +71,39 @@ test("scroll boundary intent scrolls before moving to the previous page", () => 
   assert.equal(
     getScrollBoundaryIntent({ scrollTop: 0, scrollHeight: 1200, clientHeight: 600 }, "previous"),
     "page"
+  );
+});
+
+test("viewport page target moves one visible page in either direction", () => {
+  const metrics = { scrollTop: 600, scrollHeight: 2400, clientHeight: 600 };
+
+  assert.equal(getViewportPageTarget(metrics, "previous"), 0);
+  assert.equal(getViewportPageTarget(metrics, "next"), 1200);
+});
+
+test("viewport page target stays within the scroll range", () => {
+  assert.equal(
+    getViewportPageTarget({ scrollTop: 0, scrollHeight: 1800, clientHeight: 600 }, "previous"),
+    0
+  );
+  assert.equal(
+    getViewportPageTarget({ scrollTop: 1500, scrollHeight: 1800, clientHeight: 600 }, "next"),
+    1200
+  );
+});
+
+test("viewport page state reports the visible page and boundaries", () => {
+  assert.deepEqual(
+    getViewportPageState({ scrollTop: 600, scrollHeight: 1800, clientHeight: 600 }),
+    { page: 2, pageCount: 3, atStart: false, atEnd: false }
+  );
+  assert.deepEqual(
+    getViewportPageState({ scrollTop: 1200, scrollHeight: 1800, clientHeight: 600 }),
+    { page: 3, pageCount: 3, atStart: false, atEnd: true }
+  );
+  assert.deepEqual(
+    getViewportPageState({ scrollTop: 1100, scrollHeight: 1700, clientHeight: 600 }),
+    { page: 3, pageCount: 3, atStart: false, atEnd: true }
   );
 });
 

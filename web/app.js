@@ -36,6 +36,8 @@ import {
 } from "../src/core/markdownAnnotations.js";
 import {
   applyZoomIntent,
+  getViewportPageState,
+  getViewportPageTarget,
   getWheelIntent
 } from "../src/core/readerControls.js";
 import {
@@ -387,10 +389,6 @@ function getZoomedFontSize(settings) {
 
 function getRenditionFlow(settings) {
   return settings.viewMode === "continuous" ? "scrolled-doc" : "paginated";
-}
-
-function isPrePaginatedMode() {
-  return state.publicationLayoutMode === "pre-paginated";
 }
 
 function getRenditionGap(settings) {
@@ -753,24 +751,6 @@ function installContentHooks() {
     installContentImageHandler(contents);
     installFileDropHandlers(contents?.document);
 
-    if (state.__minsePendingScroll) {
-      const win = contents?.window;
-      const target = state.__minsePendingScroll;
-      state.__minsePendingScroll = null;
-
-      if (win) {
-        setTimeout(() => {
-          if (target === "bottom") {
-            const doc = win.document;
-            const scrollHeight = Math.max(doc?.documentElement?.scrollHeight || 0, doc?.body?.scrollHeight || 0);
-            win.scrollTo(0, scrollHeight);
-          } else if (target === "top") {
-            win.scrollTo(0, 0);
-          }
-        }, 20);
-      }
-    }
-
     render();
   });
 }
@@ -1098,12 +1078,12 @@ async function goToTocItem(item) {
 }
 
 async function goPrevious() {
+  if (state.mode === "markdown") {
+    navigateMarkdownPage("previous");
+    return;
+  }
+
   if (state.rendition) {
-    const settings = mergeReadingSettings(state.book.settings, {});
-    // Signal to land at bottom only in paginated mode when navigating back
-    if (settings.viewMode === "paginated" && !isPrePaginatedMode()) {
-      state.__minsePendingScroll = "bottom";
-    }
     await state.rendition.prev();
     syncRenditionLocation();
     render();
@@ -1114,12 +1094,12 @@ async function goPrevious() {
 }
 
 async function goNext() {
+  if (state.mode === "markdown") {
+    navigateMarkdownPage("next");
+    return;
+  }
+
   if (state.rendition) {
-    const settings = mergeReadingSettings(state.book.settings, {});
-    // Signal to land at top in paginated mode
-    if (settings.viewMode === "paginated" && !isPrePaginatedMode()) {
-      state.__minsePendingScroll = "top";
-    }
     await state.rendition.next();
     syncRenditionLocation();
     render();
@@ -1188,11 +1168,28 @@ function handleWheelEvent(event) {
 }
 
 function handleMarkdownWheelEvent(event) {
-  if (!event.ctrlKey) {
+  if (event.ctrlKey) {
+    handleWheelEvent(event);
     return;
   }
 
-  handleWheelEvent(event);
+  if (state.markdown.viewMode !== "view") {
+    return;
+  }
+
+  const intent = getWheelIntent(event);
+  if (intent.type !== "page") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!wheelNavLock) {
+    wheelNavLock = true;
+    setTimeout(() => { wheelNavLock = false; }, 300);
+    navigateMarkdownPage(intent.direction);
+  }
 }
 
 function getContinuousScrollElement() {
@@ -1954,6 +1951,8 @@ function prepareMarkdownViewer(scrollTop = state.markdownScrollTop) {
     tab.markdown.currentLine = state.markdownCurrentLine;
     tab.markdown.scrollTop = state.markdownScrollTop;
   }
+
+  renderPageNavigation();
 }
 
 function updateMarkdownCurrentLine() {
@@ -1983,6 +1982,32 @@ function rememberMarkdownViewPosition() {
     tab.markdown.currentLine = state.markdownCurrentLine;
     tab.markdown.scrollTop = state.markdownScrollTop;
   }
+}
+
+function getMarkdownViewportMetrics() {
+  return {
+    scrollTop: elements.markdownViewer.scrollTop,
+    scrollHeight: elements.markdownViewer.scrollHeight,
+    clientHeight: elements.markdownViewer.clientHeight
+  };
+}
+
+function navigateMarkdownPage(direction) {
+  if (
+    state.mode !== "markdown" ||
+    state.markdown.viewMode !== "view" ||
+    !state.markdownViewer
+  ) {
+    return false;
+  }
+
+  elements.markdownViewer.scrollTo({
+    top: getViewportPageTarget(getMarkdownViewportMetrics(), direction),
+    behavior: "auto"
+  });
+  rememberMarkdownViewPosition();
+  renderPageNavigation();
+  return true;
 }
 
 function captureMarkdownSelection() {
@@ -2878,9 +2903,7 @@ function render() {
   } else {
     elements.bookMeta.textContent = state.bookMeta;
   }
-  elements.pageLabel.textContent = state.rendition
-    ? state.progressLabel || "EPUB"
-    : `${state.page} / ${state.pageCount}`;
+  renderPageNavigation();
   elements.locationLabel.textContent = state.rendition
     ? state.progressLabel || "Saved"
     : state.book.lastLocation || "page-1";
@@ -2904,8 +2927,6 @@ function render() {
 
   elements.reader.classList.toggle("reader-continuous", settings.viewMode === "continuous");
   elements.reader.classList.toggle("reader-paginated", settings.viewMode === "paginated");
-  elements.prevButton.disabled = !state.rendition && state.page <= 1;
-  elements.nextButton.disabled = !state.rendition && state.page >= state.pageCount;
   elements.bookmarkButton.classList.toggle("is-active", hasBookmarkAtCurrentLocation());
   elements.bookmarkButton.setAttribute("aria-pressed", String(hasBookmarkAtCurrentLocation()));
   elements.prevSearchResultButton.disabled = !state.searchResults.length || state.searching;
@@ -2933,11 +2954,28 @@ function render() {
   renderDocumentTabs();
 }
 
+function renderPageNavigation() {
+  if (state.mode === "markdown") {
+    const pagination = getViewportPageState(getMarkdownViewportMetrics());
+    elements.pageLabel.textContent = `${pagination.page} / ${pagination.pageCount}`;
+    elements.prevButton.disabled = state.markdown.viewMode !== "view" || pagination.atStart;
+    elements.nextButton.disabled = state.markdown.viewMode !== "view" || pagination.atEnd;
+    return;
+  }
+
+  elements.pageLabel.textContent = state.rendition
+    ? state.progressLabel || "EPUB"
+    : `${state.page} / ${state.pageCount}`;
+  elements.prevButton.disabled = !state.rendition && state.page <= 1;
+  elements.nextButton.disabled = !state.rendition && state.page >= state.pageCount;
+}
+
 function renderMarkdownChrome() {
   const active = state.mode === "markdown";
   const viewing = state.markdown.viewMode === "view";
 
   document.body.classList.toggle("markdown-mode", active);
+  document.body.classList.toggle("markdown-viewing-mode", active && viewing);
   elements.contentRow.hidden = active;
   elements.markdownWorkspace.hidden = !active;
   elements.markdownActions.hidden = !active;
@@ -3105,6 +3143,7 @@ elements.markdownViewer.addEventListener("mouseup", () => requestAnimationFrame(
 elements.markdownViewer.addEventListener("mousedown", () => hideSelectionToolbar());
 elements.markdownViewer.addEventListener("scroll", () => {
   rememberMarkdownViewPosition();
+  renderPageNavigation();
   const active = hasBookmarkAtCurrentLocation();
   elements.bookmarkButton.classList.toggle("is-active", active);
   elements.bookmarkButton.setAttribute("aria-pressed", String(active));
@@ -3266,6 +3305,14 @@ window.addEventListener("keydown", (event) => {
   }
 
   if (state.mode === "markdown") {
+    if (state.markdown.viewMode === "view" && event.key === "ArrowRight") {
+      event.preventDefault();
+      goNext();
+    }
+    if (state.markdown.viewMode === "view" && event.key === "ArrowLeft") {
+      event.preventDefault();
+      goPrevious();
+    }
     return;
   }
 

@@ -53,3 +53,36 @@ export function getScrollBoundaryIntent(metrics, direction, threshold = 2) {
   return "page";
 }
 
+export function getViewportPageState(metrics) {
+  const scrollTop = Math.max(0, Number(metrics?.scrollTop) || 0);
+  const clientHeight = Math.max(0, Number(metrics?.clientHeight) || 0);
+  const scrollHeight = Math.max(clientHeight, Number(metrics?.scrollHeight) || 0);
+  const pageCount = clientHeight > 0
+    ? Math.max(1, Math.ceil(scrollHeight / clientHeight))
+    : 1;
+  const page = clientHeight > 0
+    ? Math.min(pageCount, Math.round(scrollTop / clientHeight) + 1)
+    : 1;
+
+  return {
+    page,
+    pageCount,
+    atStart: scrollTop <= 1,
+    atEnd: scrollTop + clientHeight >= scrollHeight - 1
+  };
+}
+
+export function getViewportPageTarget(metrics, direction) {
+  const scrollTop = Math.max(0, Number(metrics?.scrollTop) || 0);
+  const clientHeight = Math.max(0, Number(metrics?.clientHeight) || 0);
+  const scrollHeight = Math.max(clientHeight, Number(metrics?.scrollHeight) || 0);
+  const maxScrollTop = Math.max(0, scrollHeight - clientHeight);
+  const delta = direction === "previous"
+    ? -clientHeight
+    : direction === "next"
+      ? clientHeight
+      : 0;
+
+  return Math.min(maxScrollTop, Math.max(0, scrollTop + delta));
+}
+

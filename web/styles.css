@@ -762,14 +762,17 @@ body.sidebar-collapsed .sidebar {
 }
 
 body.markdown-mode #rightPanelToggle,
-body.markdown-mode #prevButton,
-body.markdown-mode #nextButton,
-body.markdown-mode #pageLabel,
 body.markdown-mode #prevSearchResultButton,
 body.markdown-mode #nextSearchResultButton,
 body.markdown-mode .view-mode-toggle,
 body.markdown-mode #textOnlyToolbarButton,
 body.markdown-mode #exportMarkdownButton {
+  display: none;
+}
+
+body.markdown-mode:not(.markdown-viewing-mode) #prevButton,
+body.markdown-mode:not(.markdown-viewing-mode) #nextButton,
+body.markdown-mode:not(.markdown-viewing-mode) #pageLabel {
   display: none;
 }
 
