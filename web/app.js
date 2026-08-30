@@ -35,6 +35,13 @@ import {
   updateMarkdownDocumentAnnotations
 } from "../src/core/markdownAnnotations.js";
 import {
+  findEmbeddedMarkdownImages,
+  insertTextAtMarkdownSelection,
+  prefixMarkdownSelectedLines,
+  shouldUsePlainTextMarkdownEditor,
+  wrapMarkdownTextSelection
+} from "../src/core/markdownEditing.js";
+import {
   applyZoomIntent,
   getViewportPageState,
   getViewportPageTarget,
@@ -192,11 +199,15 @@ const state = {
     savedContent: "",
     dirty: false,
     viewMode: "edit",
-    saving: false
+    saving: false,
+    largeDocument: false,
+    largeEditMode: "plain",
+    largeImagePreview: false
   },
   markdownEditor: null,
+  markdownTextEditor: null,
   markdownViewer: null,
-  markdownSyncTimer: null,
+  markdownImagePreviewTimer: null,
   markdownAnnotations: parseMarkdownAnnotationState(localStorage.getItem(MARKDOWN_ANNOTATIONS_KEY)),
   markdownSelection: null,
   markdownCurrentLine: 1,
@@ -226,6 +237,7 @@ const elements = {
   markdownActions: document.querySelector("#markdownActions"),
   markdownEditButton: document.querySelector("#markdownEditButton"),
   markdownViewButton: document.querySelector("#markdownViewButton"),
+  markdownLargeModeButton: document.querySelector("#markdownLargeModeButton"),
   saveMarkdownButton: document.querySelector("#saveMarkdownButton"),
   saveMarkdownAsButton: document.querySelector("#saveMarkdownAsButton"),
   closeMarkdownButton: document.querySelector("#closeMarkdownButton"),
@@ -1747,6 +1759,10 @@ function downloadTextFile({ content, fileName, type }) {
 }
 
 function getMarkdownContent() {
+  if (state.markdownTextEditor) {
+    return state.markdownTextEditor.value;
+  }
+
   if (state.markdownEditor) {
     return state.markdownEditor.getMarkdown();
   }
@@ -1754,56 +1770,40 @@ function getMarkdownContent() {
   return state.markdown.content;
 }
 
-function clearMarkdownDocumentSync() {
-  if (state.markdownSyncTimer !== null) {
-    window.clearTimeout(state.markdownSyncTimer);
-    state.markdownSyncTimer = null;
-  }
-}
-
-function updateMarkdownDocumentState({ renderUi = true } = {}) {
-  clearMarkdownDocumentSync();
-  if (state.mode !== "markdown") return;
-
-  const content = getMarkdownContent();
-  state.markdown.content = content;
-  state.markdown.dirty = content !== state.markdown.savedContent;
-
-  const tab = getActiveTab();
-  if (tab?.kind === "markdown") {
-    tab.title = state.markdown.name || tab.title;
-    tab.path = state.markdown.path || tab.path;
-    tab.markdown = {
-      ...state.markdown,
-      content,
-      saving: false,
-      currentLine: state.markdownCurrentLine,
-      scrollTop: state.markdownScrollTop
-    };
-  }
-
-  if (renderUi) {
-    renderMarkdownChrome();
-    renderDocumentTabs();
-  }
-}
-
 function scheduleMarkdownDocumentSync() {
   if (state.mode !== "markdown") return;
 
-  // Serializing the complete WYSIWYG document on every keystroke blocks the
-  // editor for large files. Mark it dirty immediately, then coalesce the
-  // expensive state/tab synchronization until the user pauses typing.
-  if (!state.markdown.dirty) {
-    state.markdown.dirty = true;
-    renderMarkdownChrome();
-    renderDocumentTabs();
-  }
+  scheduleLargeMarkdownImagePreview();
 
-  clearMarkdownDocumentSync();
-  state.markdownSyncTimer = window.setTimeout(() => {
-    updateMarkdownDocumentState();
-  }, 300);
+  // Serializing the complete WYSIWYG document after a large paste can block
+  // the renderer for seconds. Keep the editor as the source of truth while
+  // typing; save, view, tab-switch, and close paths snapshot it when needed.
+  if (state.markdown.dirty) return;
+
+  state.markdown.dirty = true;
+  const tab = getActiveTab();
+  if (tab?.kind === "markdown" && tab.markdown) {
+    tab.markdown.dirty = true;
+  }
+  renderMarkdownChrome();
+  renderDocumentTabs();
+}
+
+function clearMarkdownImagePreviewTimer() {
+  if (state.markdownImagePreviewTimer !== null) {
+    window.clearTimeout(state.markdownImagePreviewTimer);
+    state.markdownImagePreviewTimer = null;
+  }
+}
+
+function scheduleLargeMarkdownImagePreview() {
+  clearMarkdownImagePreviewTimer();
+  if (!state.markdownTextEditor || !state.markdown.largeImagePreview) return;
+
+  state.markdownImagePreviewTimer = window.setTimeout(() => {
+    state.markdownImagePreviewTimer = null;
+    renderLargeMarkdownImagePreview();
+  }, 350);
 }
 
 function getMarkdownAnnotationKey() {
@@ -2041,12 +2041,13 @@ function captureMarkdownSelection() {
 }
 
 function destroyMarkdownInstances() {
-  clearMarkdownDocumentSync();
+  clearMarkdownImagePreviewTimer();
   hideSelectionToolbar();
   state.markdownSelection = null;
   const editor = state.markdownEditor;
   const viewer = state.markdownViewer;
   state.markdownEditor = null;
+  state.markdownTextEditor = null;
   state.markdownViewer = null;
   editor?.destroy();
   viewer?.destroy();
@@ -2054,11 +2055,214 @@ function destroyMarkdownInstances() {
   elements.markdownViewer.replaceChildren();
 }
 
+function createLargeMarkdownToolbarButton(label, title, action, className = "") {
+  const button = document.createElement("button");
+  button.className = `markdown-format-button ${className}`.trim();
+  button.type = "button";
+  button.textContent = label;
+  button.title = title;
+  button.setAttribute("aria-label", title);
+  button.addEventListener("click", action);
+  return button;
+}
+
+function applyPlainMarkdownEdit(result) {
+  const textarea = state.markdownTextEditor;
+  if (!textarea || !result) return;
+
+  textarea.value = result.content;
+  textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
+  scheduleMarkdownDocumentSync();
+  textarea.focus();
+}
+
+function applyPlainMarkdownInline(before, after = before, placeholder = "텍스트") {
+  const textarea = state.markdownTextEditor;
+  if (!textarea) return;
+
+  applyPlainMarkdownEdit(wrapMarkdownTextSelection(
+    textarea.value,
+    textarea.selectionStart,
+    textarea.selectionEnd,
+    { before, after, placeholder }
+  ));
+}
+
+function applyPlainMarkdownBlock(prefix, stripPattern = null) {
+  const textarea = state.markdownTextEditor;
+  if (!textarea) return;
+
+  applyPlainMarkdownEdit(prefixMarkdownSelectedLines(
+    textarea.value,
+    textarea.selectionStart,
+    textarea.selectionEnd,
+    prefix,
+    { stripPattern }
+  ));
+}
+
+function renderLargeMarkdownImagePreview() {
+  const shell = elements.markdownEditor.querySelector(".markdown-large-editor-body");
+  const panel = elements.markdownEditor.querySelector(".markdown-image-preview");
+  const toggle = elements.markdownEditor.querySelector(".markdown-image-toggle");
+  if (!shell || !panel || !state.markdownTextEditor) return;
+
+  const visible = Boolean(state.markdown.largeImagePreview);
+  panel.hidden = !visible;
+  shell.classList.toggle("has-image-preview", visible);
+  toggle?.classList.toggle("is-active", visible);
+  toggle?.setAttribute("aria-pressed", String(visible));
+  if (!visible) return;
+
+  const images = findEmbeddedMarkdownImages(state.markdownTextEditor.value);
+  if (!images.length) {
+    const empty = document.createElement("p");
+    empty.className = "markdown-image-preview-empty";
+    empty.textContent = "Base64 이미지가 없습니다.";
+    panel.replaceChildren(empty);
+    return;
+  }
+
+  const header = document.createElement("div");
+  header.className = "markdown-image-preview-header";
+  header.textContent = `이미지 미리보기 · ${images.length}개`;
+  const cards = images.map((item, index) => {
+    const figure = document.createElement("figure");
+    figure.className = "markdown-image-card";
+    const image = document.createElement("img");
+    image.src = item.src;
+    image.alt = item.alt;
+    image.loading = "lazy";
+    image.decoding = "async";
+    const caption = document.createElement("figcaption");
+    caption.textContent = item.alt || `이미지 ${index + 1}`;
+    figure.append(image, caption);
+    return figure;
+  });
+  panel.replaceChildren(header, ...cards);
+}
+
+function toggleLargeMarkdownImagePreview() {
+  state.markdown.largeImagePreview = !state.markdown.largeImagePreview;
+  const tab = getActiveTab();
+  if (tab?.kind === "markdown" && tab.markdown) {
+    tab.markdown.largeImagePreview = state.markdown.largeImagePreview;
+  }
+  renderLargeMarkdownImagePreview();
+}
+
+function createLargeMarkdownFormattingToolbar() {
+  const toolbar = document.createElement("div");
+  toolbar.className = "markdown-large-toolbar";
+  toolbar.setAttribute("role", "toolbar");
+  toolbar.setAttribute("aria-label", "대용량 Markdown 서식 도구");
+
+  const heading = document.createElement("select");
+  heading.className = "markdown-format-select";
+  heading.setAttribute("aria-label", "문단 서식");
+  [
+    ["", "본문"],
+    ["1", "제목 1"],
+    ["2", "제목 2"],
+    ["3", "제목 3"]
+  ].forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    heading.appendChild(option);
+  });
+  heading.addEventListener("change", () => {
+    const prefix = heading.value ? `${"#".repeat(Number(heading.value))} ` : "";
+    applyPlainMarkdownBlock(prefix, /^#{1,6}\s+/u);
+    heading.value = "";
+  });
+
+  const imageToggle = createLargeMarkdownToolbarButton(
+    "이미지 보기",
+    "Base64 이미지 미리보기",
+    toggleLargeMarkdownImagePreview,
+    "markdown-image-toggle"
+  );
+  imageToggle.setAttribute("aria-pressed", String(state.markdown.largeImagePreview));
+
+  toolbar.append(
+    heading,
+    createLargeMarkdownToolbarButton("B", "굵게", () => applyPlainMarkdownInline("**", "**", "굵은 텍스트"), "is-bold"),
+    createLargeMarkdownToolbarButton("I", "기울임꼴", () => applyPlainMarkdownInline("*", "*", "기울임 텍스트"), "is-italic"),
+    createLargeMarkdownToolbarButton("S", "취소선", () => applyPlainMarkdownInline("~~", "~~", "취소선 텍스트"), "is-strike"),
+    createLargeMarkdownToolbarButton("인용", "인용구", () => applyPlainMarkdownBlock("> ")),
+    createLargeMarkdownToolbarButton("• 목록", "글머리 기호", () => applyPlainMarkdownBlock("- ")),
+    createLargeMarkdownToolbarButton("1. 목록", "번호 매기기", () => applyPlainMarkdownBlock((index) => `${index + 1}. `)),
+    createLargeMarkdownToolbarButton("☐", "체크박스", () => applyPlainMarkdownBlock("- [ ] ")),
+    createLargeMarkdownToolbarButton("`코드`", "인라인 코드", () => applyPlainMarkdownInline("`", "`", "code")),
+    createLargeMarkdownToolbarButton("코드 블록", "코드 블록", () => applyPlainMarkdownInline("```\n", "\n```", "code")),
+    createLargeMarkdownToolbarButton("링크", "링크 삽입", () => {
+      const url = window.prompt("링크 주소를 입력하세요.", "https://");
+      if (url) applyPlainMarkdownInline("[", `](${url})`, "링크 텍스트");
+    }),
+    imageToggle,
+    createLargeMarkdownToolbarButton("WYSIWYG 편집", "WYSIWYG 편집기로 전환", () => {
+      void switchLargeMarkdownToWysiwyg();
+    }, "markdown-wysiwyg-button")
+  );
+  return toolbar;
+}
+
+function createPlainTextMarkdownEditor(content, selectionStart = 0, selectionEnd = selectionStart) {
+  const previousEditor = state.markdownEditor;
+  state.markdownEditor = null;
+  state.markdownTextEditor = null;
+  previousEditor?.destroy();
+  elements.markdownEditor.replaceChildren();
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "markdown-large-editor";
+  const toolbar = createLargeMarkdownFormattingToolbar();
+  const body = document.createElement("div");
+  body.className = "markdown-large-editor-body";
+  const textarea = document.createElement("textarea");
+  textarea.className = "markdown-plain-text-editor";
+  textarea.setAttribute("aria-label", "대용량 Markdown 텍스트 편집기");
+  textarea.spellcheck = false;
+  textarea.value = content;
+  textarea.addEventListener("input", scheduleMarkdownDocumentSync);
+  const imagePreview = document.createElement("aside");
+  imagePreview.className = "markdown-image-preview";
+  imagePreview.setAttribute("aria-label", "Markdown 이미지 미리보기");
+  body.append(textarea, imagePreview);
+  wrapper.append(toolbar, body);
+  elements.markdownEditor.appendChild(wrapper);
+  state.markdownTextEditor = textarea;
+  state.markdown.largeDocument = true;
+  state.markdown.largeEditMode = "plain";
+  const tab = getActiveTab();
+  if (tab?.kind === "markdown" && tab.markdown) {
+    tab.markdown.largeDocument = true;
+    tab.markdown.largeEditMode = "plain";
+    tab.markdown.largeImagePreview = state.markdown.largeImagePreview;
+  }
+
+  const start = Math.min(Math.max(0, selectionStart), content.length);
+  const end = Math.min(Math.max(start, selectionEnd), content.length);
+  textarea.setSelectionRange(start, end);
+  renderLargeMarkdownImagePreview();
+  renderMarkdownChrome();
+  return textarea;
+}
+
 function createMarkdownEditor() {
   const Editor = window.toastui?.Editor;
 
   if (!Editor) {
     throw new Error("TOAST UI Editor failed to load");
+  }
+
+  if (
+    (state.markdown.largeDocument || shouldUsePlainTextMarkdownEditor(state.markdown.content)) &&
+    state.markdown.largeEditMode !== "wysiwyg"
+  ) {
+    createPlainTextMarkdownEditor(state.markdown.content);
+    return;
   }
 
   state.markdownEditor = new Editor({
@@ -2076,10 +2280,89 @@ function createMarkdownEditor() {
   });
 }
 
+function waitForUiPaint() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+  });
+}
+
+async function switchLargeMarkdownToWysiwyg() {
+  if (!state.markdownTextEditor || state.markdown.saving) return;
+
+  const content = state.markdownTextEditor.value;
+  state.markdown.content = content;
+  state.markdown.largeEditMode = "wysiwyg";
+  const tab = getActiveTab();
+  if (tab?.kind === "markdown" && tab.markdown) {
+    tab.markdown.content = content;
+    tab.markdown.largeDocument = true;
+    tab.markdown.largeEditMode = "wysiwyg";
+  }
+
+  state.markdownTextEditor = null;
+  elements.markdownEditor.replaceChildren();
+  renderMarkdownChrome("WYSIWYG 편집기로 전환 중...");
+  await waitForUiPaint();
+  createMarkdownEditor();
+  renderMarkdownChrome();
+  state.markdownEditor?.focus();
+}
+
+async function switchWysiwygToLargeMarkdown() {
+  if (!state.markdownEditor || !state.markdown.largeDocument || state.markdown.saving) return;
+
+  renderMarkdownChrome("대용량 텍스트 모드로 전환 중...");
+  await waitForUiPaint();
+  const content = state.markdownEditor.getMarkdown();
+  state.markdown.content = content;
+  state.markdown.largeEditMode = "plain";
+  createPlainTextMarkdownEditor(content, content.length);
+  scheduleMarkdownDocumentSync();
+  state.markdownTextEditor?.focus();
+}
+
+function handleLargeMarkdownPaste(event) {
+  if (
+    state.mode !== "markdown" ||
+    state.markdown.viewMode !== "edit" ||
+    state.markdownTextEditor ||
+    !state.markdownEditor
+  ) {
+    return;
+  }
+
+  const pastedText = event.clipboardData?.getData("text/plain") || "";
+  if (!shouldUsePlainTextMarkdownEditor(pastedText)) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  try {
+    // Switching modes once lets Toast UI map the WYSIWYG caret to the
+    // one-based Markdown line/column coordinates before it is destroyed.
+    state.markdownEditor.changeMode("markdown");
+    const content = state.markdownEditor.getMarkdown();
+    const [startPosition, endPosition] = state.markdownEditor.getSelection();
+    const next = insertTextAtMarkdownSelection(content, pastedText, startPosition, endPosition);
+    state.markdown.largeImagePreview = next.content.includes("data:image/");
+    const textarea = createPlainTextMarkdownEditor(
+      next.content,
+      next.selectionStart,
+      next.selectionEnd
+    );
+    scheduleMarkdownDocumentSync();
+    textarea.focus();
+  } catch (error) {
+    logClient("markdown.large-paste.failed", { error: formatError(error) });
+    window.alert("대용량 텍스트 편집기로 전환하지 못했습니다. 문서를 다시 열고 붙여넣어 주세요.");
+  }
+}
+
 function activateMarkdownDocument(document, options = {}) {
   destroyMarkdownInstances();
 
   const content = typeof document.content === "string" ? document.content : "";
+  const largeDocument = Boolean(document.largeDocument) || shouldUsePlainTextMarkdownEditor(content);
   state.mode = "markdown";
   state.markdown = {
     name: document.name || "document.md",
@@ -2088,14 +2371,18 @@ function activateMarkdownDocument(document, options = {}) {
     savedContent: typeof options.savedContent === "string" ? options.savedContent : (options.dirty ? "" : content),
     dirty: Boolean(options.dirty),
     viewMode: options.viewMode === "view" ? "view" : "edit",
-    saving: false
+    saving: false,
+    largeDocument,
+    largeEditMode: largeDocument && document.largeEditMode === "wysiwyg" ? "wysiwyg" : "plain",
+    largeImagePreview: typeof document.largeImagePreview === "boolean"
+      ? document.largeImagePreview
+      : content.includes("data:image/")
   };
   state.markdownCurrentLine = Math.max(1, Number(options.currentLine) || 1);
   state.markdownScrollTop = Math.max(0, Number(options.scrollTop) || 0);
 
   render();
   createMarkdownEditor();
-  updateMarkdownDocumentState({ renderUi: false });
   if (state.markdown.viewMode === "view") showMarkdownViewMode();
 }
 
@@ -2117,7 +2404,6 @@ function snapshotActiveTab() {
   }
 
   if (tab.kind !== "markdown" || state.mode !== "markdown") return;
-  clearMarkdownDocumentSync();
   rememberMarkdownViewPosition();
   const content = getMarkdownContent();
   state.markdown.content = content;
@@ -2441,12 +2727,11 @@ function showMarkdownEditMode() {
   viewer?.destroy();
   elements.markdownViewer.replaceChildren();
   renderMarkdownChrome();
-  state.markdownEditor?.focus();
+  (state.markdownTextEditor || state.markdownEditor)?.focus();
 }
 
 function showMarkdownViewMode() {
   const Editor = window.toastui?.Editor;
-  clearMarkdownDocumentSync();
   const content = getMarkdownContent();
   const restoreScrollTop = state.markdownScrollTop;
 
@@ -2473,14 +2758,17 @@ async function saveMarkdown(saveAs = false) {
     return false;
   }
 
-  clearMarkdownDocumentSync();
-  const content = getMarkdownContent();
   const previousAnnotationKey = getMarkdownAnnotationKey();
-  state.markdown.content = content;
   state.markdown.saving = true;
   renderMarkdownChrome();
 
   try {
+    // Paint the saving state before a user-requested WYSIWYG conversion can
+    // occupy the renderer. Plain large-document mode returns immediately.
+    await waitForUiPaint();
+    const content = getMarkdownContent();
+    state.markdown.content = content;
+
     if (!window.minseDesktop?.saveMarkdownFile) {
       downloadTextFile({
         content,
@@ -2489,6 +2777,7 @@ async function saveMarkdown(saveAs = false) {
       });
       state.markdown.savedContent = content;
       state.markdown.dirty = false;
+      snapshotActiveTab();
       return true;
     }
 
@@ -2521,6 +2810,7 @@ async function saveMarkdown(saveAs = false) {
   } finally {
     state.markdown.saving = false;
     renderMarkdownChrome();
+    renderDocumentTabs();
   }
 }
 
@@ -2970,7 +3260,7 @@ function renderPageNavigation() {
   elements.nextButton.disabled = !state.rendition && state.page >= state.pageCount;
 }
 
-function renderMarkdownChrome() {
+function renderMarkdownChrome(statusMessage = "") {
   const active = state.mode === "markdown";
   const viewing = state.markdown.viewMode === "view";
 
@@ -2989,11 +3279,19 @@ function renderMarkdownChrome() {
   state.activeSidebarTab = "bookmarks";
 
   elements.bookTitle.textContent = `${state.markdown.name || "document.md"}${state.markdown.dirty ? " *" : ""}`;
+  const markdownLocation = state.markdown.path || "아직 저장되지 않은 Markdown 문서";
   elements.bookMeta.textContent = state.markdown.saving
     ? "Markdown 저장 중..."
-    : state.markdown.path || "아직 저장되지 않은 Markdown 문서";
+    : statusMessage || (state.markdown.largeDocument
+      ? `${markdownLocation} · ${state.markdown.largeEditMode === "wysiwyg" ? "대용량 WYSIWYG 모드" : "대용량 텍스트 모드"}`
+      : markdownLocation);
   elements.markdownEditButton.classList.toggle("is-active", !viewing);
   elements.markdownViewButton.classList.toggle("is-active", viewing);
+  elements.markdownLargeModeButton.hidden = !(
+    !viewing &&
+    state.markdown.largeDocument &&
+    state.markdown.largeEditMode === "wysiwyg"
+  );
   elements.saveMarkdownButton.disabled = state.markdown.saving || (!state.markdown.dirty && Boolean(state.markdown.path));
   elements.saveMarkdownAsButton.disabled = state.markdown.saving;
 }
@@ -3129,12 +3427,19 @@ elements.recentFilesButton.closest(".toolbar-tools")?.addEventListener("scroll",
 
 elements.markdownEditButton.addEventListener("click", showMarkdownEditMode);
 elements.markdownViewButton.addEventListener("click", showMarkdownViewMode);
+elements.markdownLargeModeButton.addEventListener("click", () => {
+  void switchWysiwygToLargeMarkdown();
+});
 elements.saveMarkdownButton.addEventListener("click", () => saveMarkdown(false));
 elements.saveMarkdownAsButton.addEventListener("click", () => saveMarkdown(true));
 elements.closeMarkdownButton.addEventListener("click", closeMarkdown);
+elements.markdownEditor.addEventListener("paste", handleLargeMarkdownPaste, true);
 
 elements.reader.addEventListener("wheel", handleWheelEvent, { passive: false });
-elements.markdownWorkspace.addEventListener("wheel", handleMarkdownWheelEvent, { passive: false });
+elements.markdownWorkspace.addEventListener("wheel", handleMarkdownWheelEvent, {
+  passive: false,
+  capture: true
+});
 elements.reader.addEventListener("mousedown", () => {
   hideSelectionToolbar();
 });
