@@ -95,4 +95,3 @@ export function createMobileNavigation({ app, previous, next, bookmark }) {
   app.append(bar);
   return { bar, label, prev, mark, next: following };
 }
-

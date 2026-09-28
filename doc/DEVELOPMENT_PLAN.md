@@ -231,4 +231,3 @@ Use test-driven development for the reusable core:
 - Wheel with Ctrl changes zoom.
 - Text-only toggle hides images.
 - Annotation sidebar lists highlights and notes.
-

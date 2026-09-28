@@ -12,3 +12,5 @@
 - APK/Java 검사와 실제 Android 단말 검사는 이번에 재실행하지 않음. 다음 우선순위는 실기기 호환성 확인이며 구체적 구현 요청은 아직 없음.
 - 빌드 산출물, SDK 로컬 설정 및 서명키는 Git 제외 정책을 유지한다.
 - 추가 검증: `npm.cmd run test:reader` 실패(exit 1). 위치 저장/복원 로그 이후 `Uncaught TypeError: Cannot read properties of undefined (reading 'bounds')`가 발생했고 `scripts/smoke-reader.cjs:256`에서 오류 배열이 비어 있어야 한다는 검사가 실패했다. 이 인수인계 요청에서는 원인 수정까지 확장하지 않았으며 다음 작업의 첫 진단 대상으로 남긴다. 이 테스트는 모의 Android 플랫폼을 사용하므로 실기기 검증과 별개다.
+- 로컬 커밋: `c7904ef` (`Add Android reader support and cross-PC development handoff`). 첫 `git push origin master`는 자동 승인 검토가 GitHub 목적지 소유/신뢰 증거 부족으로 차단했다. `gh` 도구가 없어 계정 소유 확인은 수행하지 못했고 사용자에게 정확한 목적지 업로드 확인을 요청했다. 원격 전송 완료로 추정하지 않는다.
+- 후속 정리: 변경 파일 4개의 줄 끝 공백/빈 줄을 정리했다. 기능 변경은 없다.
