@@ -1,0 +1,14 @@
+# 개발 작업 기록
+
+새 작업은 아래에 날짜별로 추가한다. 요청/계획, 변경, 검증, 남은 일 및 중요한 결정을 기록하고 현재 요약은 HANDOFF.md와 NEXT_TASKS.md에 반영한다.
+
+## 2026-09-28 — Android 작업 저장 및 PC 간 인수인계
+
+- 사용자 요청: 현재 변경을 커밋/푸시하고 `doc/` 아래에 다른 PC의 Codex가 이어갈 자료를 남길 것. 앞으로도 계획과 결과를 지속 기록할 것.
+- 기존 미커밋 변경을 보존하여 Android 프로젝트, 플랫폼 연결부, 모바일 UI/터치/파일 저장 코드, 빌드·설치 스크립트 및 테스트를 함께 인수인계한다. 기존에 스테이징된 EPUB/Markdown 관련 파일도 포함한다.
+- 코드 확인 결과: Android API 24 이상 설정, 화면 크기 변화에 따른 재배치 지원. 기기 모델별 분류 및 전자잉크 전용 최적화는 없음. 모든 Android/WebView/단말 조합을 검증한 상태가 아님.
+- 문서: `doc/HANDOFF.md`, `doc/NEXT_TASKS.md`, `doc/WORK_LOG.md`, `doc/ANDROID.md`, `doc/DEVELOPMENT_PLAN.md`. 루트 `AGENTS.md`에 시작 전 읽기 및 작업 전후 문서 갱신 규칙 추가. 기존 `docs/` 경로는 새 위치 안내로 유지한다.
+- 검증: `npm.cmd test` 107개 통과, `node --check web/app.js` 통과, `npm.cmd run android:sync` 통과. sync 첫 실행은 샌드박스 읽기 권한 제한으로 실패했고 권한 확장 후 성공했다.
+- APK/Java 검사와 실제 Android 단말 검사는 이번에 재실행하지 않음. 다음 우선순위는 실기기 호환성 확인이며 구체적 구현 요청은 아직 없음.
+- 빌드 산출물, SDK 로컬 설정 및 서명키는 Git 제외 정책을 유지한다.
+- 추가 검증: `npm.cmd run test:reader` 실패(exit 1). 위치 저장/복원 로그 이후 `Uncaught TypeError: Cannot read properties of undefined (reading 'bounds')`가 발생했고 `scripts/smoke-reader.cjs:256`에서 오류 배열이 비어 있어야 한다는 검사가 실패했다. 이 인수인계 요청에서는 원인 수정까지 확장하지 않았으며 다음 작업의 첫 진단 대상으로 남긴다. 이 테스트는 모의 Android 플랫폼을 사용하므로 실기기 검증과 별개다.

@@ -1,0 +1,66 @@
+/* Loaded only in the Android package; desktop layout stays independent. */
+.platform-android .app {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.platform-android .document-tabs { display: none !important; }
+.platform-android .toolbar > :not(.mobile-tools) { display: none; }
+.mobile-tools { display: flex; gap: 4px; width: 100%; }
+.mobile-tools button { flex: 1; padding: 6px 3px; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; white-space: nowrap; }
+.platform-android .reader { height: 100%; margin: 0; width: 100%; border: 0; border-radius: 0; box-shadow: none; }
+.platform-android.mobile-fullscreen .toolbar, .platform-android.mobile-fullscreen .mobile-reader-navigation { display: none; }
+.platform-android.mobile-fullscreen .app { grid-template-rows: minmax(0, 1fr); }
+.platform-android.mobile-fullscreen .sidebar, .platform-android.mobile-fullscreen .settings { display: none; }
+.platform-android.mobile-fullscreen .content-row { grid-template-columns: minmax(0, 1fr); }
+.platform-android.mobile-fullscreen .workspace { grid-template-columns: minmax(0, 1fr); }
+.mobile-menu { width: min(90vw, 420px); max-height: 80dvh; overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); }
+.mobile-menu > button { display: block; width: 100%; margin-bottom: 8px; }
+.mobile-menu button { padding: 12px; min-height: 44px; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+.mobile-document-row { display: flex; gap: 8px; margin-top: 8px; }
+.mobile-document-row button:first-child { flex: 1; overflow-wrap: anywhere; }
+.mobile-font-toast { position: fixed; z-index: 1000; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 12px 20px; border-radius: 24px; background: #222d; color: white; pointer-events: none; }
+.mobile-fullscreen-progress { display: none; }
+.mobile-fullscreen.show-reading-progress .mobile-fullscreen-progress { display: block; position: fixed; bottom: max(3px, env(safe-area-inset-bottom)); right: 8px; font-size: 10px; padding: 2px 6px; border-radius: 8px; background: var(--reader-bg); color: var(--muted); pointer-events: none; }
+.mobile-reader-navigation { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--line); background: var(--surface); }
+.mobile-reader-navigation[hidden] { display: none; }
+.mobile-reader-navigation button { min-width: 56px; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--surface); }
+.mobile-reader-navigation button:disabled { opacity: 0.4; }
+.mobile-reader-navigation button.is-active { background: var(--accent-soft); }
+.mobile-reader-navigation span { flex: 1; text-align: center; font-size: 12px; }
+.platform-android #prevButton, .platform-android #nextButton, .platform-android #pageLabel, .platform-android #bookmarkButton { display: none; }
+.platform-android .toolbar { padding: 6px 8px; }
+.platform-android .toolbar-tools { overflow-x: auto; scrollbar-width: none; }
+.platform-android .toolbar-tools > *,
+.platform-android .markdown-actions > * { flex-shrink: 0; }
+.platform-android .document-tabs { min-height: 50px; overflow-y: hidden; }
+.platform-android .document-tab { height: 44px; flex-shrink: 0; }
+.platform-android .icon-button,
+.platform-android .toolbar-action-button,
+.platform-android .view-mode-button,
+.platform-android .panel-toggle,
+.platform-android .document-tab-action { min-width: 44px; min-height: 44px; }
+.platform-android .selection-tool-button { min-width: 40px; min-height: 40px; }
+.platform-android .book-title { display: none; }
+.platform-android .reader { touch-action: pan-y pinch-zoom; }
+.platform-android .recent-file-item small { display: none; }
+.platform-android .mobile-image-preview {
+  width: 100%; max-width: 100%; height: 100%; max-height: 100%;
+  margin: 0; border: 0; padding: 16px; background: #111; color: white;
+  overflow: auto; touch-action: pan-x pan-y pinch-zoom;
+}
+.mobile-image-preview img { display: block; max-width: 100%; margin: 60px auto 0; }
+.mobile-image-preview button { position: fixed; top: 16px; right: 16px; min-height: 44px; min-width: 64px; }
+.mobile-startup-error { padding: 24px; white-space: pre-wrap; }
+@media (max-width: 700px) {
+  .platform-android .content-row { grid-template-columns: minmax(0, 1fr); }
+  .platform-android .settings {
+    position: absolute; z-index: 40; inset: 0 0 0 auto;
+    width: min(300px, calc(100% - 48px)); overflow-y: auto;
+    box-shadow: -8px 0 24px #0002;
+  }
+  .platform-android .sidebar { padding: 12px; }
+  .platform-android .reader { margin: 0; width: 100%; }
+  .platform-android .markdown-workspace { padding: 0; }
+  .platform-android .markdown-viewer { padding: 16px; }
+}

@@ -1,3 +1,7 @@
+import { platform, storage } from "../src/platform/index.js";
+import { installReaderTouch, createMobileNavigation } from "../src/platform/touch-reader.js";
+import { installMobileUI } from "../src/platform/mobile-ui.js";
+import { MOBILE_EPUB_MAX_BYTES } from "../src/platform/mobile-files.js";
 import {
   createAnnotationExport,
   createBookmark,
@@ -61,6 +65,85 @@ const STORAGE_KEY = "minsepubviewer.library";
 const STORAGE_BACKUP_KEY = "minsepubviewer.library.backup";
 const UI_STORAGE_KEY = "minsepubviewer.ui";
 const MARKDOWN_ANNOTATIONS_KEY = "minsepubviewer.markdown-annotations";
+let mobileSessionTimer = null;
+let restoringMobileSession = false;
+let savingMobileSession = false;
+let mobileNavigation = null;
+let mobilePageTurning = false;
+let mobileUI = null;
+
+async function turnMobilePage(direction) {
+  if (mobilePageTurning) return;
+  mobilePageTurning = true;
+  try { await (direction === "next" ? goNext() : goPrevious()); }
+  finally { mobilePageTurning = false; }
+}
+
+function installMobileTouch(target, frame = null) {
+  if (!platform.isMobile) return;
+  installReaderTouch(target, {
+    viewport: target === elements.markdownWorkspace ? elements.markdownWorkspace : elements.reader, frame,
+    enabled: () => state.mode === "epub" ? Boolean(state.rendition) : state.markdown.viewMode === "view",
+    paginated: () => state.mode === "epub" && state.book.settings.viewMode !== "continuous",
+    navigate: turnMobilePage,
+    center: () => mobileUI?.center(),
+    fontSize: () => mergeReadingSettings(state.book.settings, {}).fontSize,
+    previewFont: size => mobileUI?.previewFont(size),
+    setFont: size => updateSettings({ fontSize: size }),
+    onError: (error) => window.alert(`페이지를 이동하지 못했습니다.\n${error.message || error}`)
+  });
+}
+
+function scheduleMobileSessionSave() {
+  if (!platform.isMobile || restoringMobileSession || savingMobileSession) return;
+  clearTimeout(mobileSessionTimer);
+  mobileSessionTimer = setTimeout(() => {
+    saveMobileSession();
+  }, 600);
+}
+
+function saveMobileSession() {
+  if (!platform.isMobile || restoringMobileSession) return;
+  clearTimeout(mobileSessionTimer);
+  savingMobileSession = true;
+  try {
+    snapshotActiveTab();
+    const drafts = [];
+    for (const tab of state.tabs) {
+      if (!tab.markdown) continue;
+      const position = { currentLine: tab.markdown.currentLine, scrollTop: tab.markdown.scrollTop };
+      if (tab.path) storage.setItem(`minsepubviewer.position:${tab.path}`, JSON.stringify(position));
+      if (tab.markdown.dirty) drafts.push({ ...tab.markdown, ...position });
+    }
+    storage.setItem("minsepubviewer.markdown-drafts", JSON.stringify(drafts));
+  } finally { savingMobileSession = false; }
+}
+
+async function restoreMobileSession() {
+  if (!platform.isMobile) return;
+  restoringMobileSession = true;
+  const lastPath = storage.getItem("minsepubviewer.last-document");
+  try {
+    let drafts = [];
+    try { drafts = JSON.parse(storage.getItem("minsepubviewer.markdown-drafts") || "[]"); } catch { /* Preserve other reading data. */ }
+    for (const draft of Array.isArray(drafts) ? drafts : []) {
+      if (typeof draft?.content !== "string") continue;
+      await addDocumentTab({ kind: "markdown", document: { ...draft, viewMode: "view" } });
+      const tab = getActiveTab();
+      Object.assign(tab.markdown, draft, { viewMode: "view", dirty: true, saving: false });
+      activateMarkdownDocument(tab.markdown, { ...tab.markdown, viewMode: "view" });
+    }
+    if (lastPath) {
+      const existing = state.tabs.find((tab) => tab.path === lastPath);
+      if (existing) await activateDocumentTab(existing.id);
+      else {
+        try { await addDocumentTab(await platform.openRecentFile(lastPath)); }
+        catch (error) { window.alert(`마지막 문서를 다시 열지 못했습니다. 최근 파일에서 선택해 주세요.\n${error.message || error}`); }
+      }
+    }
+    renderDocumentTabs();
+  } finally { restoringMobileSession = false; }
+}
 
 function formatError(error) {
   if (!error) {
@@ -82,15 +165,7 @@ function logClient(event, details = {}) {
     userAgent: navigator.userAgent
   };
 
-  fetch("/__client-log", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  }).catch(() => {
-    // Logging must never break the reader.
-  });
+  platform.log(payload);
 }
 
 window.addEventListener("error", (event) => {
@@ -111,13 +186,13 @@ window.addEventListener("unhandledrejection", (event) => {
 
 function loadLibrary() {
   const result = parseLibraryStateWithRecovery(
-    localStorage.getItem(STORAGE_KEY),
-    localStorage.getItem(STORAGE_BACKUP_KEY)
+    storage.getItem(STORAGE_KEY),
+    storage.getItem(STORAGE_BACKUP_KEY)
   );
 
   if (result.recovered) {
     const serialized = serializeLibraryState(result.library);
-    localStorage.setItem(STORAGE_KEY, serialized);
+    storage.setItem(STORAGE_KEY, serialized);
     logClient("library.recovered", {
       source: result.source,
       books: result.library.books.length
@@ -130,28 +205,28 @@ function loadLibrary() {
 function saveLibrary(library) {
   const serialized = serializeLibraryState(library);
 
-  localStorage.setItem(STORAGE_BACKUP_KEY, serialized);
-  localStorage.setItem(STORAGE_KEY, serialized);
+  storage.setItem(STORAGE_BACKUP_KEY, serialized);
+  storage.setItem(STORAGE_KEY, serialized);
 }
 
 function loadUiState() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}");
+    const parsed = JSON.parse(storage.getItem(UI_STORAGE_KEY) || "{}");
 
     return {
-      leftPanelCollapsed: Boolean(parsed.leftPanelCollapsed),
-      rightPanelCollapsed: Boolean(parsed.rightPanelCollapsed)
+      leftPanelCollapsed: parsed.leftPanelCollapsed ?? platform.isMobile,
+      rightPanelCollapsed: parsed.rightPanelCollapsed ?? platform.isMobile
     };
   } catch {
     return {
-      leftPanelCollapsed: false,
-      rightPanelCollapsed: false
+      leftPanelCollapsed: platform.isMobile,
+      rightPanelCollapsed: platform.isMobile
     };
   }
 }
 
 function saveUiState(ui) {
-  localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({
+  storage.setItem(UI_STORAGE_KEY, JSON.stringify({
     leftPanelCollapsed: Boolean(ui.leftPanelCollapsed),
     rightPanelCollapsed: Boolean(ui.rightPanelCollapsed)
   }));
@@ -208,7 +283,7 @@ const state = {
   markdownTextEditor: null,
   markdownViewer: null,
   markdownImagePreviewTimer: null,
-  markdownAnnotations: parseMarkdownAnnotationState(localStorage.getItem(MARKDOWN_ANNOTATIONS_KEY)),
+  markdownAnnotations: parseMarkdownAnnotationState(storage.getItem(MARKDOWN_ANNOTATIONS_KEY)),
   markdownSelection: null,
   markdownCurrentLine: 1,
   markdownScrollTop: 0,
@@ -761,6 +836,7 @@ function installContentHooks() {
     updateContentDiagnostics();
     installContentWheelHandler(contents);
     installContentImageHandler(contents);
+    installMobileTouch(contents?.document, contents?.document?.defaultView?.frameElement);
     installFileDropHandlers(contents?.document);
 
     render();
@@ -796,8 +872,8 @@ function openImagePreview(img) {
     title
   };
 
-  if (window.minseDesktop?.openImageWindow) {
-    window.minseDesktop.openImageWindow(payload).catch((error) => {
+  if (platform?.openImageWindow) {
+    platform.openImageWindow(payload).catch((error) => {
       logClient("epub.image.open.failed", {
         error: formatError(error)
       });
@@ -925,6 +1001,7 @@ function isEpubCfi(location) {
 }
 
 function getRenditionLocation() {
+  if (!state.rendition?.manager) return null;
   const location = state.rendition?.currentLocation?.();
 
   return location && typeof location.then !== "function" ? location : null;
@@ -941,7 +1018,10 @@ function syncRenditionLocation(location = getRenditionLocation()) {
   state.book = updateLastLocation(state.book, cfi);
 
   const percentage = state.epubBook?.locations?.percentageFromCfi?.(cfi);
-  state.progressLabel = Number.isFinite(percentage)
+  const displayed = location?.start?.displayed;
+  state.progressLabel = platform.isMobile && displayed
+    ? `${(location.start.index || 0) + 1}장 · ${displayed.page}/${displayed.total}`
+    : Number.isFinite(percentage)
     ? `${Math.max(1, Math.round(percentage * 100))}%`
     : state.progressLabel || "EPUB";
 
@@ -972,7 +1052,8 @@ async function openEpub(file, arrayBuffer) {
       throw new Error("JSZip was not loaded");
     }
 
-    state.epubBook = window.ePub(arrayBuffer.slice(0));
+    state.epubBook = window.ePub({ replacements: file.epubUrl ? "none" : undefined });
+    await state.epubBook.open(file.epubUrl || arrayBuffer, file.epubUrl ? "directory" : "binary");
     logClient("epub.book.created", {
       name: file.name
     });
@@ -1014,7 +1095,7 @@ async function openEpub(file, arrayBuffer) {
       name: file.name
     });
 
-    state.epubBook.locations.generate(1000).then(() => {
+    if (!platform.isMobile) state.epubBook.locations.generate(1000).then(() => {
       logClient("epub.locations.done", {
         name: file.name
       });
@@ -1247,6 +1328,17 @@ async function rebuildRenditionForViewMode() {
 }
 
 async function updateSettings(patch) {
+  if (platform.isMobile && Number.isFinite(patch.fontSize)) storage.setItem("minsepubviewer.default-font-size", String(patch.fontSize));
+  if (platform.isMobile && state.mode === "markdown") {
+    const viewer = document.querySelector('#markdownViewer');
+    const ratio = viewer ? viewer.scrollTop / Math.max(1, viewer.scrollHeight) : 0;
+    state.book.settings = mergeReadingSettings(state.book.settings, patch);
+    if (state.markdown.path) storage.setItem(`minsepubviewer.reading-settings:${state.markdown.path}`, JSON.stringify(state.book.settings));
+    render();
+    if (viewer) viewer.scrollTop = ratio * viewer.scrollHeight;
+    saveMobileSession();
+    return;
+  }
   const previousSettings = mergeReadingSettings(state.book.settings, {});
   const currentLocation = getRenditionLocation();
   const preservedLocation = isEpubCfi(currentLocation?.start?.cfi)
@@ -1371,6 +1463,10 @@ function applyPanelState({ persist = true, refresh = true } = {}) {
 }
 
 function togglePanel(panel) {
+  if (platform.isMobile) {
+    if (panel === "left") state.ui.rightPanelCollapsed = true;
+    if (panel === "right") state.ui.leftPanelCollapsed = true;
+  }
   if (panel === "left") {
     state.ui = {
       ...state.ui,
@@ -1745,7 +1841,8 @@ function createExportFileName(book) {
   return `${base}-annotations.json`;
 }
 
-function downloadTextFile({ content, fileName, type }) {
+async function downloadTextFile({ content, fileName, type }) {
+  if (platform.exportTextFile) return platform.exportTextFile({ content, fileName, type });
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1756,6 +1853,7 @@ function downloadTextFile({ content, fileName, type }) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+  return true;
 }
 
 function getMarkdownContent() {
@@ -1772,6 +1870,8 @@ function getMarkdownContent() {
 
 function scheduleMarkdownDocumentSync() {
   if (state.mode !== "markdown") return;
+
+  scheduleMobileSessionSave();
 
   scheduleLargeMarkdownImagePreview();
 
@@ -1819,7 +1919,7 @@ function saveCurrentMarkdownAnnotations(annotations) {
   const key = getMarkdownAnnotationKey();
   if (!key) return;
   state.markdownAnnotations = updateMarkdownDocumentAnnotations(state.markdownAnnotations, key, annotations);
-  localStorage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
+  storage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
 }
 
 function moveMarkdownAnnotations(previousKey, nextKey) {
@@ -1829,7 +1929,7 @@ function moveMarkdownAnnotations(previousKey, nextKey) {
   const documents = { ...state.markdownAnnotations.documents };
   delete documents[previousKey];
   state.markdownAnnotations = updateMarkdownDocumentAnnotations({ ...state.markdownAnnotations, documents }, nextKey, annotations);
-  localStorage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
+  storage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
 }
 
 function normalizeMarkdownLine(value) {
@@ -1976,6 +2076,7 @@ function rememberMarkdownViewPosition() {
 
   updateMarkdownCurrentLine();
   state.markdownScrollTop = elements.markdownViewer.scrollTop;
+  scheduleMobileSessionSave();
 
   const tab = getActiveTab();
   if (tab?.kind === "markdown" && tab.markdown) {
@@ -2364,6 +2465,11 @@ function activateMarkdownDocument(document, options = {}) {
   const content = typeof document.content === "string" ? document.content : "";
   const largeDocument = Boolean(document.largeDocument) || shouldUsePlainTextMarkdownEditor(content);
   state.mode = "markdown";
+  if (platform.isMobile) {
+    let saved = {};
+    try { saved = JSON.parse(storage.getItem(`minsepubviewer.reading-settings:${document.path}`) || '{}'); } catch {}
+    state.book.settings = mergeReadingSettings({}, { fontSize: Number(storage.getItem('minsepubviewer.default-font-size')) || 18, ...saved });
+  }
   state.markdown = {
     name: document.name || "document.md",
     path: document.path || "",
@@ -2382,7 +2488,8 @@ function activateMarkdownDocument(document, options = {}) {
   state.markdownScrollTop = Math.max(0, Number(options.scrollTop) || 0);
 
   render();
-  createMarkdownEditor();
+  // Reading on mobile should not instantiate an editor or normalize source text.
+  if (!platform.isMobile || state.markdown.viewMode !== "view") createMarkdownEditor();
   if (state.markdown.viewMode === "view") showMarkdownViewMode();
 }
 
@@ -2417,6 +2524,11 @@ function snapshotActiveTab() {
     currentLine: state.markdownCurrentLine,
     scrollTop: state.markdownScrollTop
   };
+  if (platform.isMobile && tab.path) {
+    storage.setItem(`minsepubviewer.position:${tab.path}`, JSON.stringify({
+      currentLine: tab.markdown.currentLine, scrollTop: tab.markdown.scrollTop
+    }));
+  }
 }
 
 function renderDocumentTabs() {
@@ -2438,8 +2550,8 @@ function renderDocumentTabs() {
     detach.type = "button";
     detach.textContent = "↗";
     detach.title = "새 창에서 열기";
-    detach.hidden = !tab.path || Boolean(dirty) || !window.minseDesktop?.openFileInNewWindow;
-    detach.addEventListener("click", () => void window.minseDesktop.openFileInNewWindow(tab.path));
+    detach.hidden = !tab.path || Boolean(dirty) || !platform?.openFileInNewWindow;
+    detach.addEventListener("click", () => void platform.openFileInNewWindow(tab.path));
 
     const close = document.createElement("button");
     close.className = "document-tab-action";
@@ -2462,6 +2574,7 @@ async function activateDocumentTab(tabId) {
   await destroyEpub();
   if (sequence !== state.tabActivationSequence) return;
   state.activeTabId = tab.id;
+  if (platform.isMobile && tab.path) storage.setItem("minsepubviewer.last-document", tab.path);
   renderDocumentTabs();
 
   if (tab.kind === "epub") {
@@ -2499,12 +2612,19 @@ async function addDocumentTab(payload) {
     } : null
   };
   state.tabs.push(tab);
+  if (platform.isMobile && tab.markdown && path) {
+    try {
+      const position = JSON.parse(storage.getItem(`minsepubviewer.position:${path}`) || "null");
+      if (position) Object.assign(tab.markdown, position);
+    } catch { /* A damaged position must not prevent opening the document. */ }
+  }
   await activateDocumentTab(tab.id);
+  scheduleMobileSessionSave();
 }
 
 async function askHowToCloseChangedDocument(tab) {
-  if (window.minseDesktop?.confirmSaveChanges) {
-    return window.minseDesktop.confirmSaveChanges({
+  if (platform?.confirmSaveChanges) {
+    return platform.confirmSaveChanges({
       name: tab.title || tab.markdown?.name || "문서",
       kind: tab.kind
     });
@@ -2586,6 +2706,7 @@ async function closeDocumentTab(tabId) {
   index = state.tabs.findIndex((item) => item.id === tabId);
   if (index < 0) return;
   state.tabs.splice(index, 1);
+  scheduleMobileSessionSave();
   if (tab.id !== state.activeTabId) { renderDocumentTabs(); return; }
   state.activeTabId = "";
   destroyMarkdownInstances();
@@ -2593,6 +2714,7 @@ async function closeDocumentTab(tabId) {
   const next = state.tabs[Math.min(index, state.tabs.length - 1)];
   if (next) await activateDocumentTab(next.id);
   else {
+    if (platform.isMobile) storage.removeItem("minsepubviewer.last-document");
     state.mode = "epub";
     showReaderMessage("EPUB 또는 Markdown 파일을 열어 주세요.");
     render();
@@ -2620,7 +2742,7 @@ async function openFilePayload(payload) {
 
 function getDroppedFilePath(file) {
   try {
-    return window.minseDesktop?.getPathForFile?.(file) || "";
+    return platform?.getPathForFile?.(file) || "";
   } catch {
     return "";
   }
@@ -2726,6 +2848,7 @@ function showMarkdownEditMode() {
   state.markdownViewer = null;
   viewer?.destroy();
   elements.markdownViewer.replaceChildren();
+  if (!state.markdownEditor && !state.markdownTextEditor) createMarkdownEditor();
   renderMarkdownChrome();
   (state.markdownTextEditor || state.markdownEditor)?.focus();
 }
@@ -2769,8 +2892,8 @@ async function saveMarkdown(saveAs = false) {
     const content = getMarkdownContent();
     state.markdown.content = content;
 
-    if (!window.minseDesktop?.saveMarkdownFile) {
-      downloadTextFile({
+    if (!platform?.saveMarkdownFile) {
+      await downloadTextFile({
         content,
         fileName: state.markdown.name || "document.md",
         type: "text/markdown;charset=utf-8"
@@ -2781,7 +2904,7 @@ async function saveMarkdown(saveAs = false) {
       return true;
     }
 
-    const result = await window.minseDesktop.saveMarkdownFile({
+    const result = await platform.saveMarkdownFile({
       content,
       path: state.markdown.path,
       saveAs,
@@ -2794,10 +2917,12 @@ async function saveMarkdown(saveAs = false) {
 
     state.markdown.name = result.name;
     state.markdown.path = result.path;
+    if (platform.isMobile) storage.setItem("minsepubviewer.last-document", result.path);
     state.markdown.savedContent = content;
     state.markdown.dirty = false;
     snapshotActiveTab();
     moveMarkdownAnnotations(previousAnnotationKey, getMarkdownAnnotationKey());
+    scheduleMobileSessionSave();
     logClient("markdown.saved", {
       path: result.path,
       characters: content.length
@@ -2818,14 +2943,15 @@ function closeMarkdown() {
   void closeDocumentTab(state.activeTabId);
 }
 
-function exportAnnotations() {
+async function exportAnnotations() {
   const exported = createAnnotationExport(state.book);
 
-  downloadTextFile({
+  const saved = await downloadTextFile({
     content: JSON.stringify(exported, null, 2),
     fileName: createExportFileName(state.book),
     type: "application/json"
   });
+  if (!saved) return;
 
   logClient("annotations.exported", {
     highlights: exported.highlights.length,
@@ -2877,11 +3003,12 @@ async function exportMarkdown() {
       sections: markdownSections
     });
 
-    downloadTextFile({
+    const saved = await downloadTextFile({
       content: `${markdown}\n`,
       fileName: createMarkdownFileName(state.book.title),
       type: "text/markdown;charset=utf-8"
     });
+    if (!saved) return;
 
     logClient("epub.markdown.exported", {
       sections: markdownSections.length,
@@ -2944,16 +3071,18 @@ async function loadSelectedFile(fileLike) {
   });
 
   try {
-    const arrayBuffer = await readFileArrayBuffer(fileLike);
-    const content = new Uint8Array(arrayBuffer);
+    const prepared = platform.isMobile && fileLike.epubUrl && /^[0-9a-f]{64}$/.test(fileLike.bookId || "");
+    const arrayBuffer = prepared ? null : await readFileArrayBuffer(fileLike);
+    const content = prepared ? undefined : new Uint8Array(arrayBuffer);
 
-    assertOpenableEpub(fileLike, content);
+    assertOpenableEpub(fileLike, content, prepared ? { maxBytes: MOBILE_EPUB_MAX_BYTES } : {});
 
     state.book = createBookRecord({
       content,
+      ...(prepared ? { bookId: fileLike.bookId } : {}),
       title: fileLike.name.replace(/\.epub$/i, ""),
       filePath: fileLike.path || fileLike.name,
-      settings: state.book.settings
+      settings: platform.isMobile ? { ...state.book.settings, fontSize: Number(storage.getItem('minsepubviewer.default-font-size')) || 18 } : state.book.settings
     });
 
     const savedBook = getBookRecord(state.library, state.book.bookId);
@@ -3213,7 +3342,7 @@ function render() {
   elements.reader.style.setProperty("--reader-font-size", getZoomedFontSize(settings));
   elements.reader.style.setProperty("--reader-line-height", settings.lineHeight);
   elements.reader.style.setProperty("--reader-margin", settings.margin);
-  elements.markdownWorkspace.style.setProperty("--markdown-zoom", settings.zoom);
+  elements.markdownWorkspace.style.setProperty("--markdown-zoom", settings.zoom * (platform.isMobile ? settings.fontSize / 18 : 1));
 
   elements.reader.classList.toggle("reader-continuous", settings.viewMode === "continuous");
   elements.reader.classList.toggle("reader-paginated", settings.viewMode === "paginated");
@@ -3245,6 +3374,19 @@ function render() {
 }
 
 function renderPageNavigation() {
+  if (mobileNavigation) {
+    const active = state.mode === "epub" ? Boolean(state.rendition) : state.markdown.viewMode === "view";
+    mobileNavigation.bar.hidden = !active;
+    const markdown = state.mode === "markdown";
+    const pagination = markdown ? getViewportPageState(getMarkdownViewportMetrics()) : null;
+    mobileNavigation.label.textContent = markdown ? `${pagination.page} / ${pagination.pageCount}` : state.progressLabel || "EPUB";
+    mobileUI?.progress(mobileNavigation.label.textContent);
+    mobileNavigation.prev.disabled = !active || (markdown ? pagination.atStart : Boolean(getRenditionLocation()?.atStart));
+    mobileNavigation.next.disabled = !active || (markdown ? pagination.atEnd : Boolean(getRenditionLocation()?.atEnd));
+    const bookmarked = hasBookmarkAtCurrentLocation();
+    mobileNavigation.mark.classList.toggle("is-active", bookmarked);
+    mobileNavigation.mark.setAttribute("aria-pressed", String(bookmarked));
+  }
   if (state.mode === "markdown") {
     const pagination = getViewportPageState(getMarkdownViewportMetrics());
     elements.pageLabel.textContent = `${pagination.page} / ${pagination.pageCount}`;
@@ -3303,23 +3445,27 @@ elements.bookInput.addEventListener("change", async (event) => {
 });
 
 elements.openBookButton.addEventListener("click", async (event) => {
-  if (!window.minseDesktop?.openEpubFile) {
-    return;
-  }
-
-  event.preventDefault();
-  const file = await window.minseDesktop.openEpubFile();
-  if (file) await addDocumentTab({ kind: "epub", file });
-});
-
-elements.openMarkdownButton.addEventListener("click", async (event) => {
-  if (!window.minseDesktop?.openMarkdownFile) {
+  if (!platform?.openEpubFile) {
     return;
   }
 
   event.preventDefault();
   try {
-    const document = await window.minseDesktop.openMarkdownFile();
+    const file = await platform.openEpubFile();
+    if (file) await addDocumentTab({ kind: "epub", file });
+  } catch (error) {
+    window.alert(`EPUB 파일을 열지 못했습니다.\n${error.message || error}`);
+  }
+});
+
+elements.openMarkdownButton.addEventListener("click", async (event) => {
+  if (!platform?.openMarkdownFile) {
+    return;
+  }
+
+  event.preventDefault();
+  try {
+    const document = await platform.openMarkdownFile();
     if (document) await addDocumentTab({ kind: "markdown", document });
   } catch (error) {
     logClient("markdown.open.failed", { error: formatError(error) });
@@ -3353,7 +3499,7 @@ function closeRecentFilesMenu() {
 function positionRecentFilesMenu() {
   if (elements.recentFilesMenu.hidden) return;
 
-  const buttonRect = elements.recentFilesButton.getBoundingClientRect();
+  const buttonRect = (platform.isMobile ? document.querySelector('#mobileRecent') : elements.recentFilesButton).getBoundingClientRect();
   const viewportPadding = 8;
   const menuWidth = Math.min(360, window.innerWidth - viewportPadding * 2);
   const left = Math.max(
@@ -3380,7 +3526,7 @@ async function toggleRecentFilesMenu() {
   elements.recentFilesMenu.replaceChildren();
   positionRecentFilesMenu();
 
-  const recent = await window.minseDesktop?.getRecentFiles?.() || [];
+  const recent = await platform?.getRecentFiles?.() || [];
   if (elements.recentFilesMenu.hidden) return;
 
   if (!recent.length) {
@@ -3404,8 +3550,12 @@ async function toggleRecentFilesMenu() {
     button.replaceChildren(name, location);
     button.addEventListener("click", async () => {
       closeRecentFilesMenu();
-      const payload = await window.minseDesktop.openRecentFile(entry.path);
-      if (payload) await addDocumentTab(payload);
+      try {
+        const payload = await platform.openRecentFile(entry.path);
+        if (payload) await addDocumentTab(payload);
+      } catch (error) {
+        window.alert(`최근 파일을 열지 못했습니다.\n${error.message || error}`);
+      }
     });
     return button;
   }));
@@ -3417,6 +3567,7 @@ document.addEventListener("pointerdown", (event) => {
   if (
     !elements.recentFilesMenu.hidden &&
     !elements.recentFilesMenu.contains(event.target) &&
+    !document.querySelector('#mobileRecent')?.contains(event.target) &&
     !elements.recentFilesButton.contains(event.target)
   ) {
     closeRecentFilesMenu();
@@ -3445,6 +3596,14 @@ elements.reader.addEventListener("mousedown", () => {
 });
 
 elements.markdownViewer.addEventListener("mouseup", () => requestAnimationFrame(captureMarkdownSelection));
+if (platform.isMobile) {
+  mobileUI = installMobileUI({ storage, platform, resize: () => refreshRenditionLayout(state.book.lastLocation),
+    openFile: async () => { const payload = await platform.openFile(); if (payload) await addDocumentTab(payload); },
+    tabs: () => state.tabs, activate: activateDocumentTab, closeTab: closeDocumentTab });
+  document.addEventListener("selectionchange", () => {
+    if (state.mode === "markdown" && state.markdown.viewMode === "view") requestAnimationFrame(captureMarkdownSelection);
+  });
+}
 elements.markdownViewer.addEventListener("mousedown", () => hideSelectionToolbar());
 elements.markdownViewer.addEventListener("scroll", () => {
   rememberMarkdownViewPosition();
@@ -3572,7 +3731,7 @@ elements.noteButton.addEventListener("click", () => {
   addCurrentNote();
 });
 elements.exportAnnotationsButton.addEventListener("click", () => {
-  exportAnnotations();
+  void exportAnnotations().catch((error) => window.alert(`내보내기에 실패했습니다.\n${error.message || error}`));
 });
 elements.noteBody.addEventListener("input", () => {
   renderAnnotations();
@@ -3633,7 +3792,7 @@ window.addEventListener("keydown", (event) => {
 let windowCloseApproved = false;
 let windowCloseInProgress = false;
 
-window.minseDesktop?.onWindowCloseRequested?.(() => {
+platform?.onWindowCloseRequested?.(() => {
   if (windowCloseInProgress) return;
   windowCloseInProgress = true;
 
@@ -3642,7 +3801,7 @@ window.minseDesktop?.onWindowCloseRequested?.(() => {
     const activeTab = getActiveTab();
     if (activeTab?.kind === "epub" && !await resolveUnsavedEpubTab(activeTab)) {
       windowCloseInProgress = false;
-      window.minseDesktop.completeWindowClose(false);
+      platform.completeWindowClose(false);
       return;
     }
     const dirtyTabIds = state.tabs
@@ -3653,21 +3812,22 @@ window.minseDesktop?.onWindowCloseRequested?.(() => {
       const tab = state.tabs.find((item) => item.id === tabId);
       if (tab && !await resolveUnsavedMarkdownTab(tab)) {
         windowCloseInProgress = false;
-        window.minseDesktop.completeWindowClose(false);
+        platform.completeWindowClose(false);
         return;
       }
     }
 
     windowCloseApproved = true;
-    window.minseDesktop.completeWindowClose(true);
+    platform.completeWindowClose(true);
   })().catch((error) => {
     windowCloseInProgress = false;
     logClient("window.close.failed", { error: formatError(error) });
-    window.minseDesktop.completeWindowClose(false);
+    platform.completeWindowClose(false);
   });
 });
 
 window.addEventListener("beforeunload", (event) => {
+  if (platform.isMobile) { saveMobileSession(); return; }
   if (windowCloseApproved) return;
   snapshotActiveTab();
   if (state.tabs.some((tab) => tab.kind === "markdown" && tab.markdown?.dirty)) {
@@ -3677,13 +3837,63 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 installFileDropHandlers(document);
-window.minseDesktop?.onOpenFile?.((payload) => {
+platform?.onOpenFile?.((payload) => {
   void openFilePayload(payload);
 });
-window.minseDesktop?.onOpenFileError?.((payload) => {
+platform?.onOpenFileError?.((payload) => {
   window.alert(`${payload?.name || "파일"}을 열지 못했습니다.\n${payload?.message || "알 수 없는 오류"}`);
 });
-window.minseDesktop?.readyForOpenFiles?.();
+platform?.readyForOpenFiles?.();
 
 applyPanelState({ persist: false, refresh: false });
 render();
+
+if (platform.isMobile) {
+  mobileNavigation = createMobileNavigation({ app: elements.app,
+    previous: () => turnMobilePage("previous"), next: () => turnMobilePage("next"),
+    bookmark: () => elements.bookmarkButton.click() });
+  installMobileTouch(elements.reader);
+  installMobileTouch(elements.markdownWorkspace);
+  let resizeTimer;
+  new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (state.rendition?.manager) refreshRenditionAtCurrentSize(state.book.lastLocation); }, 150);
+  }).observe(elements.reader);
+  renderPageNavigation();
+  const saveBeforeBackground = async () => {
+    saveMobileSession();
+    await platform.flush();
+  };
+  platform.onBackground(saveBeforeBackground);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") void saveBeforeBackground().catch(console.error);
+  });
+  let handlingBack = false;
+  platform.onBackButton(async () => {
+    if (handlingBack) return;
+    handlingBack = true;
+    try {
+      if (mobileUI.back()) return;
+      if (!elements.recentFilesMenu.hidden) { closeRecentFilesMenu(); return; }
+      if (!state.ui.leftPanelCollapsed || !state.ui.rightPanelCollapsed) {
+        state.ui.leftPanelCollapsed = true;
+        state.ui.rightPanelCollapsed = true;
+        applyPanelState();
+        return;
+      }
+      if (state.tabs.length) {
+        await closeDocumentTab(state.activeTabId);
+        saveMobileSession();
+        await platform.flush();
+        return;
+      }
+      await platform.exit();
+    } finally { handlingBack = false; }
+  });
+  void restoreMobileSession().catch((error) => window.alert(`문서 복원에 실패했습니다.\n${error.message || error}`))
+    .then(() => platform.onExternalDocument?.(async payload => {
+      await addDocumentTab(payload);
+      saveMobileSession();
+      await platform.flush();
+    })).catch(console.error);
+}
