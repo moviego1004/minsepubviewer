@@ -50,4 +50,8 @@ test("translates native error keys and leaves other messages unchanged", () => {
   assert.equal(isMessageKey("Plain sentence."), false);
   assert.equal(translateErrorMessage("en", new Error("native.pickerBusy")), "A file picker is already open.");
   assert.equal(translateErrorMessage("ko", new Error("disk full")), "disk full");
+  assert.equal(
+    translateErrorMessage("en", new Error("Error invoking remote method 'document:convert-hwp': Error: document.invalidHwp")),
+    "Invalid or corrupted HWP file."
+  );
 });

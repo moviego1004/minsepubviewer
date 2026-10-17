@@ -3,6 +3,9 @@ const path = require("node:path");
 const supportedExtensions = new Map([
   [".epub", "epub"],
   [".pdf", "pdf"],
+  [".docx", "document"],
+  [".hwp", "document"],
+  [".hwpx", "document"],
   [".md", "markdown"],
   [".markdown", "markdown"]
 ]);

@@ -11,6 +11,7 @@ const deadlineTimer = setTimeout(() => { console.error("Reader smoke test timed 
 const root = path.resolve(__dirname, "..");
 const { createSamplePdf } = require("./sample-pdf.cjs");
 const samplePdf = createSamplePdf();
+const { createSampleDocx } = require("./sample-documents.cjs");
 let server;
 let temp;
 app.whenReady().then(async () => {
@@ -22,6 +23,7 @@ app.whenReady().then(async () => {
   zip.file("nav.xhtml", '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>목차</title></head><body><nav epub:type="toc"><ol><li><a href="one.xhtml">첫 장</a></li></ol></nav></body></html>');
   zip.file("one.xhtml", '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>첫 장</title></head><body><h1>EPUB 읽기 검사</h1>' + '<p>안드로이드에서도 책을 읽고 위치를 복원합니다.</p>'.repeat(100) + '</body></html>');
   const epub = await zip.generateAsync({ type: "base64" });
+  const docx = (await createSampleDocx()).toString("base64");
   const { computeBookId } = await import("../src/core/books.js");
   const bookId = computeBookId(Buffer.from(epub, "base64"));
   await fs.writeFile(path.join(temp, "preload.cjs"), `
@@ -34,6 +36,10 @@ app.whenReady().then(async () => {
     if (!localStorage.getItem("minsepubviewer.language")) localStorage.setItem("minsepubviewer.language", "ko");
     // PDF.js comes from the mobile build output, as on Android (run npm run build:mobile first).
     window.MINS_PDFJS_BASE = '/dist/mobile/vendor/pdfjs/';
+    window.MINS_MAMMOTH_URL = '/dist/mobile/vendor/mammoth/mammoth.browser.min.js';
+    const docxBytes = Uint8Array.from(atob('${docx}'), value => value.charCodeAt(0)).buffer;
+    // A binary HWP 5.0 header: the phone build shows the PC-only notice for it.
+    const oleBytes = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0, 0, 0]).buffer;
     const pdfFile = { path: '/app/documents/sample.pdf', name: 'sample.pdf', size: ${samplePdf.length}, pdfUrl: window.location.origin + '/_pdf/sample.pdf', type: 'application/pdf' };
     window.minsePlatform = {
       kind: 'android', isMobile: true, storage: window.localStorage,
@@ -46,6 +52,8 @@ app.whenReady().then(async () => {
         window.__nextOpenKind = '';
         if (kind === 'markdown') return { kind, document: { ...document } };
         if (kind === 'pdf') return { kind, file: { ...pdfFile } };
+        if (kind === 'docx') return { kind: 'document', file: { path: '/app/documents/sample.docx', name: 'sample.docx', size: docxBytes.byteLength, bytes: docxBytes.slice(0) } };
+        if (kind === 'hwp') return { kind: 'document', file: { path: '/app/documents/old.hwp', name: 'old.hwp', size: oleBytes.byteLength, bytes: oleBytes.slice(0) } };
         return { kind: 'epub', file: { ...epubFile } };
       },
       setFullscreen: async enabled => { window.__immersive = enabled; },
@@ -280,12 +288,21 @@ app.whenReady().then(async () => {
   await run("window.__background()");
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.body.classList.contains('pdf-mode') && document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
+  await run("window.__nextOpenKind = 'docx'; document.querySelector('#mobileOpenFile').click()");
+  await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('h1')?.textContent === 'DOCX 검사 문서' && /^1 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
+  // Tap paging applies in page mode; earlier steps may have left continuous scrolling on.
+  await run("document.querySelector('#paginatedModeButton').click()");
+  const docBox = await run("(() => { const r = document.querySelector('#docFrame').getBoundingClientRect(); return { x: r.left + r.width / 2, bottom: r.top + r.height * 0.85 }; })()");
+  await touch({ x: docBox.x, y: docBox.bottom });
+  await waitFor("/^2 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
+  await run("window.__nextOpenKind = 'hwp'; document.querySelector('#mobileOpenFile').click()");
+  await waitFor("document.querySelector('#bookMeta').textContent.includes('PC 버전')");
   await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#mobileOpenFile').textContent === 'Open file' && document.querySelector('#bookmarksTab').textContent === 'Bookmarks' && document.querySelector('#mobilePrevButton').textContent === 'Prev'");
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, pinch in/out, fullscreen and center tap, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, and Korean/English UI switch (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, pinch in/out, fullscreen and center tap, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 PC-only notice, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);

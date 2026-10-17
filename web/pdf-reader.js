@@ -22,9 +22,9 @@ let libraryPromise = null;
 export function loadPdfLibrary() {
   libraryPromise ||= (async () => {
     const base = globalThis.MINS_PDFJS_BASE || DEFAULT_LIBRARY_BASE;
-    const pdfjsLib = await import(`${base}build/pdf.mjs`);
+    const pdfjsLib = await import(`${base}build/pdf.min.mjs`);
     globalThis.pdfjsLib = pdfjsLib;
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `${base}build/pdf.worker.mjs`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `${base}build/pdf.worker.min.mjs`;
     const viewerLib = await import(`${base}web/pdf_viewer.mjs`);
     if (!document.querySelector("link[data-pdfjs-viewer-css]")) {
       const link = document.createElement("link");

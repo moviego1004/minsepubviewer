@@ -18,7 +18,7 @@ const pdfjs = resolve(output, "vendor/pdfjs");
 await rm(pdfjs, { recursive: true, force: true });
 await mkdir(resolve(pdfjs, "build"), { recursive: true });
 await mkdir(resolve(pdfjs, "web"), { recursive: true });
-for (const name of ["pdf.mjs", "pdf.worker.mjs"]) {
+for (const name of ["pdf.min.mjs", "pdf.worker.min.mjs"]) {
   await copyFile(`node_modules/pdfjs-dist/legacy/build/${name}`, resolve(pdfjs, "build", name));
 }
 for (const name of ["pdf_viewer.mjs", "pdf_viewer.css"]) {
@@ -29,6 +29,10 @@ for (const name of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
   await cp(`node_modules/pdfjs-dist/${name}`, resolve(pdfjs, name), { recursive: true });
 }
 await copyFile("node_modules/pdfjs-dist/LICENSE", resolve(pdfjs, "LICENSE"));
+// DOCX converter, loaded only when a DOCX file is opened.
+await mkdir(resolve(output, "vendor/mammoth"), { recursive: true });
+await copyFile("node_modules/mammoth/mammoth.browser.min.js", resolve(output, "vendor/mammoth/mammoth.browser.min.js"));
+await copyFile("node_modules/mammoth/LICENSE", resolve(output, "vendor/mammoth/LICENSE"));
 const html = (await readFile("web/index.html", "utf8"))
   .replace('src="/node_modules/jszip/dist/jszip.min.js"', 'src="/vendor/jszip.min.js"')
   .replace('src="/node_modules/epubjs/dist/epub.min.js"', 'src="/vendor/epub.min.js"')

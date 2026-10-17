@@ -50,3 +50,12 @@ test("PDF imports stay in the app library and are read by URL", async () => {
   assert.equal(result.file.type, "application/pdf");
   await assert.rejects(hydrateMobileFile({ kind: "pdf", path: "/a.pdf", size: MOBILE_PDF_MAX_BYTES + 1 }, (path) => path), /native\.invalidDescriptor/);
 });
+
+test("DOCX and HWP imports are read as bytes for conversion", async () => {
+  const bytes = new Uint8Array([0x50, 0x4b, 3, 4]);
+  const result = await hydrateMobileFile({ kind: "document", path: "/data/a.docx", name: "a.docx", size: 4 }, (path) => path,
+    async () => new Response(bytes));
+  assert.equal(result.kind, "document");
+  assert.deepEqual(new Uint8Array(result.file.bytes), bytes);
+  await assert.rejects(hydrateMobileFile({ kind: "document", path: "/a.hwp", size: 65 * 1024 * 1024 }, (path) => path), /native\.invalidDescriptor/);
+});

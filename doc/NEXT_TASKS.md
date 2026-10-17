@@ -2,6 +2,28 @@
 
 최종 갱신: 2026-10-17
 
+## 현재 요청 — 오피스·한글 문서 지원과 배포 크기 축소 (구현·검증 완료, 사용자 테스트 대기, 커밋 전, 2026-10-17)
+
+결과 요약: DOCX·HWPX·XML HWP는 PC·Android 공통, 바이너리 HWP 5.0은 PC만 지원. 상세와 수치는 WORK_LOG 2026-10-17 "오피스·한글 문서 지원" 참고.
+
+남은 일:
+- 사용자 테스트: PC 설치본(`build.bat`/`makeSetup.bat`)과 APK(`android/app/build/outputs/apk/debug/app-debug.apk`) 실사용 확인. 특히 실제 DOCX/HWPX 문서, 큰 HWP, 휴대폰 터치·확대.
+- 실제 HWPX 파일 샘플로 변환 확인(지금은 규격 기반 생성 파일만 확인).
+- Android HWP 5.0: `@ohah/hwpjs` 패키지에 React Native용 `android` 폴더가 있어 네이티브 연동 가능성 조사(공유 메모리 WASM 대신).
+- 배포 크기의 대부분은 Electron 런타임. 크게 줄이려면 시스템 WebView2를 쓰는 셸(Tauri 등)로의 전환을 별도 과제로 검토.
+- 기존 의존성 보안 경고: epubjs 내장 @xmldom/xmldom(<=0.8.14), Toast UI의 dompurify(<=3.4.15). 이번 작업에서 생긴 것은 아니며 미조치.
+
+
+사용자 요청: 제안 순서대로 HWP·HWPX·DOCX 지원, 배포 파일 크기 축소 방안(공통 라이브러리 별도 받기 등) 검토·적용, 빌드·테스트 준비가 되면 알릴 것.
+
+계획:
+1. 변환 문서 뷰어(공통): 변환한 HTML을 스크립트 없는 iframe에 표시. 이어보기(스크롤 위치), 쪽 단위 이동, 검색, 책갈피, 형광펜·메모(텍스트 오프셋 기록), 확대, 테마, 한/영 문구. 원본 파일은 수정하지 않는 읽기 전용.
+2. DOCX: mammoth 1.13.0 브라우저 번들(PC·Android). 필요할 때만 불러온다.
+3. HWPX(OWPML zip)·HWPML(XML .hwp): 자체 XML 변환기, 텍스트·표 위주(이미지·쪽 배치 제외). HWPX 실제 파일 샘플은 없어 규격 기반 테스트만 가능.
+4. HWP 5.0: PC는 Electron 메인 프로세스에서 @ohah/hwpjs 네이티브 모듈로 HTML 변환. Android는 공유 메모리 제약으로 이번에는 안내 문구만 표시.
+5. 배포 크기: 현재 크기를 측정하고 PC(Electron 언어 파일, 불필요한 모듈 파일 제외, 최소화 빌드)와 Android(최소화된 PDF.js)를 줄인다. 실행 중 라이브러리를 내려받는 방식은 장단점을 비교해 보고한다.
+6. 검증: 단위 테스트, 스모크 테스트, PC 패키지 빌드, APK 빌드. 실기기·설치본 테스트는 사용자가 진행.
+
 ## 현재 요청 — PDF 지원 범용 뷰어 "Mins Reader" (구현 완료, `fff1c45` 커밋·푸시)
 
 사용자 요청(2026-10-17): EPUB/MD에 더해 PDF도 보는 범용 뷰어로 확장. PC(Windows)와 Android 먼저, iOS는 Mac이 없어 보류. 시작 시 `origin/master`와 로컬이 `39cef44`로 일치함을 확인했다.

@@ -50,5 +50,8 @@ export function isMessageKey(value, locale = FALLBACK_LOCALE) {
 
 export function translateErrorMessage(locale, error) {
   const message = typeof error?.message === "string" ? error.message : String(error ?? "");
-  return isMessageKey(message, locale) ? translate(locale, message) : message;
+  if (isMessageKey(message, locale)) return translate(locale, message);
+  // Electron wraps main-process errors: "Error invoking remote method 'x': Error: native.key".
+  const wrapped = /Error: ([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9-]+)+)$/.exec(message)?.[1];
+  return wrapped && isMessageKey(wrapped, locale) ? translate(locale, wrapped) : message;
 }

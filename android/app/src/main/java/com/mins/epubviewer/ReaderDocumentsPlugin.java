@@ -44,6 +44,7 @@ public class ReaderDocumentsPlugin extends Plugin {
     }
     private static final long EPUB_LIMIT = EpubArchive.MAX_ARCHIVE;
     private static final long PDF_LIMIT = 512L * 1024 * 1024;
+    private static final long DOCUMENT_LIMIT = 64L * 1024 * 1024;
     private static final long MARKDOWN_LIMIT = 16L * 1024 * 1024;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private volatile boolean pickerActive = false;
@@ -137,6 +138,8 @@ public class ReaderDocumentsPlugin extends Plugin {
         String lower = name.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".epub")) return "epub";
         if (lower.endsWith(".pdf")) return "pdf";
+        // DOCX, HWP and HWPX are converted to HTML by the reader.
+        if (lower.endsWith(".docx") || lower.endsWith(".hwp") || lower.endsWith(".hwpx")) return "document";
         if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".txt")) return "markdown";
         throw new IOException("native.chooseSupportedFile");
     }
@@ -192,9 +195,10 @@ public class ReaderDocumentsPlugin extends Plugin {
         String name = displayName(uri);
         String kind = documentKind(name);
         if (requestedKind != null && !requestedKind.equals(kind)) throw new IOException("native.kindMismatch");
-        long limit = kind.equals("epub") ? EPUB_LIMIT : kind.equals("pdf") ? PDF_LIMIT : MARKDOWN_LIMIT;
+        long limit = kind.equals("epub") ? EPUB_LIMIT : kind.equals("pdf") ? PDF_LIMIT : kind.equals("document") ? DOCUMENT_LIMIT : MARKDOWN_LIMIT;
         // Stable within this installation, even when two documents have the same name.
-        File destination = new File(documentsDir(), uriId(uri) + (kind.equals("markdown") ? ".md" : "." + kind));
+        String extension = kind.equals("markdown") ? ".md" : kind.equals("document") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.ROOT) : "." + kind;
+        File destination = new File(documentsDir(), uriId(uri) + extension);
         // Re-selecting an imported document opens the saved app copy, preserving edits.
         if (!destination.exists()) {
             AtomicFile target = new AtomicFile(destination);

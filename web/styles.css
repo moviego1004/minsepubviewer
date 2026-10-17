@@ -1463,3 +1463,32 @@ body.desktop-fullscreen .content-row {
 #openBookButton {
   display: none;
 }
+
+/* Converted documents (DOCX, HWP, HWPX) are shown read-only in a script-free iframe. */
+.doc-workspace {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.doc-workspace[hidden] {
+  display: none;
+}
+
+.doc-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+body.doc-mode #reader,
+body.doc-mode .epub-only,
+body.doc-mode #textOnlyToolbarButton,
+body.doc-mode #exportMarkdownButton,
+body.doc-mode .view-mode-toggle {
+  display: none;
+}

@@ -337,7 +337,7 @@ function isOpenableFilePath(filePath) {
 async function createOpenFilePayload(filePath) {
   const kind = getSupportedFileKind(filePath);
 
-  if (kind === "epub" || kind === "pdf") {
+  if (kind === "epub" || kind === "pdf" || kind === "document") {
     const bytes = await readFile(filePath);
     return {
       kind,
@@ -345,7 +345,7 @@ async function createOpenFilePayload(filePath) {
         name: path.basename(filePath),
         path: filePath,
         size: bytes.byteLength,
-        type: kind === "pdf" ? "application/pdf" : "application/epub+zip",
+        type: kind === "pdf" ? "application/pdf" : kind === "epub" ? "application/epub+zip" : "application/octet-stream",
         bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
       }
     };
@@ -532,13 +532,37 @@ ipcMain.on("app:set-locale", (_event, locale) => {
   if (i18n?.SUPPORTED_LOCALES.includes(locale)) rendererLocale = locale;
 });
 
+// HWP 5.0 is converted with the native @ohah/hwpjs module, loaded on first use.
+const hwpMaxBytes = 64 * 1024 * 1024;
+let hwpModule = null;
+
+ipcMain.handle("document:convert-hwp", async (_event, payload = {}) => {
+  let bytes;
+  if (typeof payload.path === "string" && payload.path && getSupportedFileKind(payload.path) === "document") {
+    bytes = await readFile(payload.path);
+  } else if (payload.bytes) {
+    bytes = Buffer.from(payload.bytes);
+  } else {
+    throw new Error("document.invalidHwp");
+  }
+  if (bytes.byteLength > hwpMaxBytes) throw new Error("native.documentTooLarge");
+  hwpModule ||= require("@ohah/hwpjs");
+  try {
+    return hwpModule.toHtml(bytes);
+  } catch (error) {
+    console.error("HWP conversion failed", error);
+    throw new Error("document.invalidHwp");
+  }
+});
+
 ipcMain.handle("document:open", async () => {
   await i18nReady;
   const result = await dialog.showOpenDialog({
     title: t("dialog.openDocument"),
     properties: ["openFile"],
     filters: [
-      { name: t("dialog.filterSupported"), extensions: ["epub", "pdf", "md", "markdown", "txt"] },
+      { name: t("dialog.filterSupported"), extensions: ["epub", "pdf", "md", "markdown", "txt", "docx", "hwp", "hwpx"] },
+      { name: t("dialog.filterDocuments"), extensions: ["docx", "hwp", "hwpx"] },
       { name: t("dialog.filterEpub"), extensions: ["epub"] },
       { name: t("dialog.filterPdf"), extensions: ["pdf"] },
       { name: t("dialog.filterMarkdown"), extensions: ["md", "markdown"] },

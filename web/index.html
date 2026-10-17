@@ -19,7 +19,7 @@
           <button id="newMarkdownButton" class="toolbar-action-button" type="button" data-i18n="toolbar.newMarkdown" data-i18n-title="toolbar.newMarkdownTitle"></button>
           <label id="openFileButton" class="toolbar-action-button markdown-file-button" data-i18n-title="toolbar.openFileTitle">
             <span data-i18n="toolbar.openFile"></span>
-            <input id="fileInput" type="file" multiple accept=".epub,.pdf,.md,.markdown,.txt,application/epub+zip,application/pdf,text/markdown,text/plain">
+            <input id="fileInput" type="file" multiple accept=".epub,.pdf,.md,.markdown,.txt,.docx,.hwp,.hwpx,application/epub+zip,application/pdf,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
           </label>
 
           <div class="recent-menu-wrap">
@@ -166,6 +166,10 @@
             <blockquote data-i18n="reader.welcome3"></blockquote>
           </article>
 
+          <section id="docWorkspace" class="doc-workspace" hidden>
+            <iframe id="docFrame" class="doc-frame" sandbox="allow-same-origin" title="Document"></iframe>
+          </section>
+
           <section id="pdfWorkspace" class="pdf-workspace" hidden>
             <div id="pdfContainer" class="pdf-container" tabindex="0">
               <div id="pdfViewer" class="pdfViewer"></div>
@@ -277,7 +281,7 @@
 
     <div id="fileDropOverlay" class="file-drop-overlay" hidden>
       <strong data-i18n="drop.title"></strong>
-      <span>.epub, .pdf, .md, .markdown</span>
+      <span>.epub, .pdf, .md, .markdown, .docx, .hwp, .hwpx</span>
     </div>
 
     <script src="/node_modules/jszip/dist/jszip.min.js"></script>

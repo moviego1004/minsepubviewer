@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("minseDesktop", {
   openEpubFile: () => ipcRenderer.invoke("book:open"),
   openMarkdownFile: () => ipcRenderer.invoke("markdown:open"),
   openDocument: () => ipcRenderer.invoke("document:open"),
+  convertHwp: (payload) => ipcRenderer.invoke("document:convert-hwp", payload),
   openRecentFile: (filePath) => ipcRenderer.invoke("recent:open", filePath),
   getRecentFiles: () => ipcRenderer.invoke("recent:list"),
   openFileInNewWindow: (filePath) => ipcRenderer.invoke("window:open-file", filePath),

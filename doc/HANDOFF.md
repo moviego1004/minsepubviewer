@@ -21,7 +21,9 @@
 - EPUB/Markdown 열기, 읽기 설정, 위치 복원, 책갈피/주석, Markdown 편집 및 내보내기 코드가 있다.
 - PDF: `web/pdf-reader.js`(PDF.js 뷰어 래퍼), `src/core/pdfLocation.js`(위치·형광펜 좌표 문자열). 이어보기(쪽·배율·위치), 목차, 검색, 책갈피, 형광펜/메모(앱 내부 저장, 원본 미수정), 테마, 두 쪽 보기, 회전, PC 전체 화면(F11).
 - 다국어: `src/locales/ko.js`, `en.js`(키 일치 테스트), `web/i18n.js`(`data-i18n` 적용). Electron 대화상자와 Android Java 오류(`native.*` 키)도 같은 사전을 쓴다.
-- iOS는 Mac/Xcode가 없어 보류. HWP/DOC 지원은 검토만 했다(NEXT_TASKS 참고).
+- 변환 문서(읽기 전용): DOCX(mammoth 1.13.0), HWPX·XML HWP(자체 변환기 `src/core/hwpXml.js`, 텍스트·표), 바이너리 HWP 5.0(PC만, Electron 메인 프로세스의 `@ohah/hwpjs@0.1.0-rc.10` 네이티브 모듈, 쪽 배치 재현). 뷰어는 `web/document-reader.js`(스크립트 없는 iframe), 위치·형광펜은 `src/core/textAnchors.js`. Android에서 HWP 5.0은 PC 전용 안내 문구를 보인다.
+- 배포 축소: PC 패키지는 필요한 파일만 넣고(Electron 언어 ko·en만, PDF.js min, HWP는 Windows용 `.node`만), Toast UI는 devDependency로 옮겼다. 사용자 샘플 `test/sample/`은 Git 제외.
+- iOS는 Mac/Xcode가 없어 보류.
 - Android에는 네이티브 문서 가져오기/저장, 다른 앱의 열기/공유 수신, 앱 내부 사본과 상태 저장, 모바일 메뉴/전체 화면/터치 조작이 구현되어 있다.
 - Android `versionName=0.1.3`, `versionCode=4`. 데스크톱 `package.json` 버전은 `0.1.0`으로 서로 다르다. `scripts/bump-version.cjs`는 Android 버전을 변경하지 않는다.
 - 화면 영역에 맞춘 반응형 배치와 ResizeObserver 기반 EPUB 재배치가 있다. Android 최소 API 24(7.0), target/compile API 36이다.

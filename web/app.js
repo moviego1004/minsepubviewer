@@ -9,7 +9,7 @@ import {
   createTextNote,
   updateTextNoteBody
 } from "../src/core/annotations.js";
-import { createBookRecord, updateBookSettings, updateLastLocation } from "../src/core/books.js";
+import { computeBookId, createBookRecord, updateBookSettings, updateLastLocation } from "../src/core/books.js";
 import {
   createEpubContentSample,
   summarizeEpubContent
@@ -72,6 +72,9 @@ import {
 } from "./i18n.js";
 import { PdfReader } from "./pdf-reader.js";
 import { formatPdfLocation, isPdfLocation, isPdfRange, parsePdfLocation } from "../src/core/pdfLocation.js";
+import { DocumentReader } from "./document-reader.js";
+import { convertDocument, getDocumentFormat } from "./document-convert.js";
+import { isDocLocation, isDocRange, parseDocLocation } from "../src/core/textAnchors.js";
 
 const STORAGE_KEY = "minsepubviewer.library";
 const STORAGE_BACKUP_KEY = "minsepubviewer.library.backup";
@@ -119,6 +122,7 @@ function scheduleMobileSessionSave() {
 function saveMobileSession() {
   if (!platform.isMobile || restoringMobileSession) return;
   flushPdfLocation();
+  flushDocLocation();
   clearTimeout(mobileSessionTimer);
   savingMobileSession = true;
   try {
@@ -263,6 +267,9 @@ const state = {
   pdf: null,
   pdfSelection: null,
   pdfMeta: null,
+  docReader: null,
+  docMeta: null,
+  docSelection: null,
   rendition: null,
   renditionEventsInstalled: false,
   publicationLayoutMode: "reflowable",
@@ -347,6 +354,8 @@ const elements = {
   margin: document.querySelector("#margin"),
   theme: document.querySelector("#theme"),
   languageSelect: document.querySelector("#languageSelect"),
+  docWorkspace: document.querySelector("#docWorkspace"),
+  docFrame: document.querySelector("#docFrame"),
   pdfWorkspace: document.querySelector("#pdfWorkspace"),
   pdfContainer: document.querySelector("#pdfContainer"),
   pdfViewer: document.querySelector("#pdfViewer"),
@@ -407,6 +416,7 @@ function persistBook() {
 
 function getCurrentBookmarkLocation() {
   if (state.mode === "pdf" && state.pdf) return formatPdfLocation({ pageNumber: state.pdf.pageNumber });
+  if (state.mode === "document" && state.docReader) return state.docReader.currentLocation();
   return state.book.lastLocation || `page-${state.page}`;
 }
 
@@ -417,6 +427,10 @@ function hasBookmarkAtCurrentLocation() {
   if (state.mode === "pdf") {
     const page = state.pdf?.pageNumber;
     return Boolean(page) && state.book.bookmarks.some((bookmark) => parsePdfLocation(bookmark.location)?.pageNumber === page);
+  }
+  if (state.mode === "document") {
+    const page = state.docReader?.pageState.page;
+    return Boolean(page) && state.book.bookmarks.some((bookmark) => state.docReader.pageForLocation(bookmark.location) === page);
   }
   const location = getCurrentBookmarkLocation();
 
@@ -1188,6 +1202,10 @@ async function goToBookmark(bookmark) {
     state.pdf.goToLocation(bookmark.location, { keepView: true });
     return;
   }
+  if (state.docReader && isDocLocation(bookmark.location)) {
+    state.docReader.goToLocation(bookmark.location);
+    return;
+  }
 
   if (state.rendition && isEpubCfi(bookmark.location)) {
     await state.rendition.display(bookmark.location);
@@ -1222,6 +1240,10 @@ async function goPrevious() {
     state.pdf?.previous();
     return;
   }
+  if (state.mode === "document") {
+    state.docReader?.previous();
+    return;
+  }
 
   if (state.mode === "markdown") {
     navigateMarkdownPage("previous");
@@ -1241,6 +1263,10 @@ async function goPrevious() {
 async function goNext() {
   if (state.mode === "pdf") {
     state.pdf?.next();
+    return;
+  }
+  if (state.mode === "document") {
+    state.docReader?.next();
     return;
   }
 
@@ -1394,6 +1420,15 @@ async function updateSettings(patch) {
     render();
     if (viewer) viewer.scrollTop = ratio * viewer.scrollHeight;
     saveMobileSession();
+    return;
+  }
+  if (state.mode === "document") {
+    state.book = updateBookSettings(state.book, patch);
+    persistBook();
+    const settings = mergeReadingSettings(state.book.settings, {});
+    state.docReader?.setTheme(settings.theme);
+    state.docReader?.setZoom(settings.zoom);
+    render();
     return;
   }
   if (state.mode === "pdf") {
@@ -1589,9 +1624,12 @@ function renderBookmarks() {
       button.className = "list-item";
       button.type = "button";
       const pdfLocation = parsePdfLocation(bookmark.location);
+      const docLocation = parseDocLocation(bookmark.location);
       button.textContent = pdfLocation
         ? t("bookmarks.pageLabel", { page: pdfLocation.pageNumber })
-        : bookmark.label || bookmark.location;
+        : docLocation
+          ? t("bookmarks.percentLabel", { percent: Math.round(docLocation.ratio * 100) })
+          : bookmark.label || bookmark.location;
       button.addEventListener("click", () => {
         goToBookmark(bookmark);
       });
@@ -1652,7 +1690,7 @@ function addCurrentHighlight(style = elements.highlightColor.value) {
 
   const highlight = createHighlight({
     bookId: state.book.bookId,
-    location: state.pdfSelection?.range === state.selectedRange ? state.pdfSelection.location : state.selectedRange,
+    location: getSelectionLocation(),
     range: state.selectedRange,
     quote: state.selectedQuote,
     color: style
@@ -1675,6 +1713,7 @@ function addCurrentHighlight(style = elements.highlightColor.value) {
   }
 
   if (state.pdf) finishPdfAnnotation();
+  else if (state.docReader) finishDocAnnotation();
   hideSelectionToolbar();
   render();
 }
@@ -1686,7 +1725,7 @@ function addCurrentNote() {
 
   const note = createTextNote({
     bookId: state.book.bookId,
-    location: state.pdfSelection?.range === state.selectedRange ? state.pdfSelection.location : state.selectedRange,
+    location: getSelectionLocation(),
     range: state.selectedRange,
     quote: state.selectedQuote,
     body: elements.noteBody.value
@@ -1710,12 +1749,17 @@ function addCurrentNote() {
   }
 
   if (state.pdf) finishPdfAnnotation();
+  else if (state.docReader) finishDocAnnotation();
   render();
 }
 
 async function goToAnnotation(annotation) {
   if (state.pdf && isPdfRange(annotation.range)) {
     state.pdf.goToRange(annotation.range);
+    return;
+  }
+  if (state.docReader && isDocRange(annotation.range)) {
+    state.docReader.goToRange(annotation.range);
     return;
   }
   if (state.rendition && isEpubCfi(annotation.range)) {
@@ -1728,6 +1772,10 @@ async function goToAnnotation(annotation) {
 async function goToSearchResult(result) {
   if (state.pdf && result.pdfPage) {
     state.pdf.goToPage(result.pdfPage);
+    return;
+  }
+  if (state.docReader && Number.isInteger(result.docIndex)) {
+    state.docReader.showMatch(result.docIndex);
     return;
   }
   if (state.rendition && isEpubCfi(result.cfi)) {
@@ -1809,7 +1857,7 @@ async function searchBook(query) {
   state.activeSearchResultIndex = -1;
   clearSearchHighlights();
 
-  if (!state.pdf && (!state.epubBook || !state.rendition)) {
+  if (!state.pdf && !state.docReader && (!state.epubBook || !state.rendition)) {
     state.searchStatus = t("search.openFirst");
     renderSearch();
     return;
@@ -1827,6 +1875,18 @@ async function searchBook(query) {
 
   if (state.pdf) {
     state.pdf.find(normalizedQuery);
+    return;
+  }
+
+  if (state.docReader) {
+    const matches = state.docReader.find(normalizedQuery);
+    state.searching = false;
+    state.searchResults = matches.map((match) => ({ index: match.index, docIndex: match.index, excerpt: match.excerpt, label: "" }));
+    state.activeSearchResultIndex = matches.length ? 0 : -1;
+    state.searchStatus = matches.length
+      ? (matches.length === 1 ? t("search.resultsOne") : t("search.results", { count: matches.length }))
+      : t("search.noResults");
+    render();
     return;
   }
 
@@ -1890,6 +1950,7 @@ function removeAnnotation(annotation) {
     applyStoredAnnotations();
   }
   state.pdf?.refreshHighlights();
+  state.docReader?.refreshHighlights();
 
   persistBook();
   render();
@@ -2667,10 +2728,18 @@ async function activateDocumentTab(tabId) {
   destroyMarkdownInstances();
   await destroyEpub();
   await destroyPdf();
+  await destroyDocumentReader();
   if (sequence !== state.tabActivationSequence) return;
   state.activeTabId = tab.id;
   if (platform.isMobile && tab.path) storage.setItem("minsepubviewer.last-document", tab.path);
   renderDocumentTabs();
+
+  if (tab.kind === "document") {
+    state.mode = "document";
+    await openConvertedDocument(tab.payload.file);
+    if (sequence === state.tabActivationSequence) renderDocumentTabs();
+    return;
+  }
 
   if (tab.kind === "pdf") {
     state.mode = "pdf";
@@ -2746,7 +2815,7 @@ async function resolveUnsavedMarkdownTab(tab) {
 
   if (tab.id !== state.activeTabId) {
     const activeTab = getActiveTab();
-    if ((activeTab?.kind === "epub" || activeTab?.kind === "pdf") && !await resolveUnsavedEpubTab(activeTab)) return false;
+    if (["epub", "pdf", "document"].includes(activeTab?.kind) && !await resolveUnsavedEpubTab(activeTab)) return false;
     await activateDocumentTab(tab.id);
   }
 
@@ -2754,7 +2823,7 @@ async function resolveUnsavedMarkdownTab(tab) {
 }
 
 function getPendingEpubEdits(tab) {
-  if (tab.id !== state.activeTabId || tab.kind !== state.mode || !["epub", "pdf"].includes(tab.kind)) return null;
+  if (tab.id !== state.activeTabId || tab.kind !== state.mode || !["epub", "pdf", "document"].includes(tab.kind)) return null;
 
   const note = state.book.notes.find((item) => item.id === state.editingNoteId) || null;
   const textarea = note ? elements.annotationList.querySelector(".annotation-edit-input") : null;
@@ -2794,7 +2863,7 @@ async function resolveUnsavedEpubTab(tab) {
 
 async function resolveUnsavedDocumentTab(tab) {
   if (tab.kind === "markdown") return resolveUnsavedMarkdownTab(tab);
-  if (tab.kind === "epub" || tab.kind === "pdf") return resolveUnsavedEpubTab(tab);
+  if (["epub", "pdf", "document"].includes(tab.kind)) return resolveUnsavedEpubTab(tab);
   return true;
 }
 
@@ -2814,6 +2883,7 @@ async function closeDocumentTab(tabId) {
   destroyMarkdownInstances();
   await destroyEpub();
   await destroyPdf();
+  await destroyDocumentReader();
   const next = state.tabs[Math.min(index, state.tabs.length - 1)];
   if (next) await activateDocumentTab(next.id);
   else {
@@ -3025,6 +3095,183 @@ async function toggleDesktopFullscreen() {
   }
 }
 
+const DOC_LOADING_ID = "doc-loading";
+const DOCUMENT_MAX_BYTES = 64 * 1024 * 1024;
+let docLocationSaveTimer = null;
+
+function getSelectionLocation() {
+  const selection = state.mode === "document" ? state.docSelection : state.pdfSelection;
+  return selection?.range === state.selectedRange ? selection.location : state.selectedRange;
+}
+
+function docProgressLabel() {
+  const { page, pageCount } = state.docReader.pageState;
+  return t("pdf.progress", { page, total: pageCount });
+}
+
+function clearDocSelection() {
+  state.docSelection = null;
+  if (state.mode === "document") {
+    state.selectedRange = "";
+    state.selectedQuote = "";
+  }
+  hideSelectionToolbar();
+  renderAnnotations();
+}
+
+function finishDocAnnotation() {
+  state.docReader?.refreshHighlights();
+  state.docReader?.clearSelection();
+  clearDocSelection();
+}
+
+// Like PDF, a collapsed selection keeps the last one so a note can be typed in the side panel.
+function handleDocSelection(selection) {
+  if (!selection || state.mode !== "document") return;
+  state.docSelection = selection;
+  state.selectedRange = selection.range;
+  state.selectedQuote = selection.quote;
+  const rowRect = elements.contentRow.getBoundingClientRect();
+  const rect = selection.clientRect;
+  elements.selectionToolbar.style.left = `${Math.max(48, rect.left - rowRect.left + rect.width / 2)}px`;
+  elements.selectionToolbar.style.top = `${Math.max(48, rect.top - rowRect.top - 10)}px`;
+  elements.selectionToolbar.hidden = false;
+  renderAnnotations();
+}
+
+function handleDocLocationChange(location) {
+  if (!state.docReader?.document || state.book.bookId === DOC_LOADING_ID) return;
+  state.book = updateLastLocation(state.book, location);
+  state.progressLabel = docProgressLabel();
+  clearTimeout(docLocationSaveTimer);
+  docLocationSaveTimer = setTimeout(() => {
+    docLocationSaveTimer = null;
+    persistBook();
+  }, 400);
+  elements.locationLabel.textContent = state.progressLabel;
+  renderPageNavigation();
+  const bookmarked = hasBookmarkAtCurrentLocation();
+  elements.bookmarkButton.classList.toggle("is-active", bookmarked);
+  elements.bookmarkButton.setAttribute("aria-pressed", String(bookmarked));
+  scheduleMobileSessionSave();
+}
+
+function flushDocLocation() {
+  if (!docLocationSaveTimer) return;
+  clearTimeout(docLocationSaveTimer);
+  docLocationSaveTimer = null;
+  if (state.docReader && state.book.bookId !== DOC_LOADING_ID) persistBook();
+}
+
+// The converted page runs no scripts, so the reader attaches its handlers from here.
+function installDocumentFrameHandlers(frameDocument) {
+  frameDocument.addEventListener("pointerdown", () => {
+    if (state.docSelection) clearDocSelection();
+  });
+  frameDocument.addEventListener("wheel", (event) => {
+    const intent = getWheelIntent(event);
+    if (intent.type !== "zoom") return;
+    event.preventDefault();
+    void updateSettings({ zoom: applyZoomIntent(state.book.settings, intent).zoom });
+  }, { passive: false });
+  frameDocument.addEventListener("keydown", (event) => {
+    if (["ArrowLeft", "ArrowRight", "F11", "Escape"].includes(event.key)) {
+      if (event.key === "F11") event.preventDefault();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey }));
+    }
+  });
+  if (platform.isMobile) {
+    installReaderTouch(frameDocument, {
+      viewport: elements.docWorkspace,
+      frame: elements.docFrame,
+      enabled: () => state.mode === "document" && Boolean(state.docReader),
+      paginated: () => state.book.settings.viewMode !== "continuous",
+      navigate: turnMobilePage,
+      center: () => mobileUI?.center(),
+      fontSize: () => Math.round(mergeReadingSettings(state.book.settings, {}).zoom * 18),
+      setFont: (size) => updateSettings({ zoom: Math.round((size / 18) * 100) / 100 }),
+      onError: (error) => window.alert(t("error.pageTurn", { detail: errorText(error) }))
+    });
+  }
+}
+
+async function destroyDocumentReader() {
+  clearTimeout(docLocationSaveTimer);
+  docLocationSaveTimer = null;
+  const reader = state.docReader;
+  if (!reader) return;
+  state.docReader = null;
+  state.docSelection = null;
+  if (state.book.bookId !== DOC_LOADING_ID && state.mode === "document") persistBook();
+  hideSelectionToolbar();
+  state.searchResults = [];
+  state.activeSearchResultIndex = -1;
+  state.searchStatus = "";
+  state.progressLabel = "";
+  state.selectedRange = "";
+  state.selectedQuote = "";
+  reader.destroy();
+}
+
+function showDocumentMessage(message) {
+  const paragraph = document.createElement("p");
+  paragraph.textContent = message;
+  elements.docFrame.srcdoc = `<!doctype html><meta charset="utf-8"><body style="font:16px system-ui,sans-serif;padding:24px;color:#555">${paragraph.outerHTML}</body>`;
+}
+
+async function openConvertedDocument(fileLike) {
+  const name = fileLike?.name || "document";
+  const filePath = fileLike?.path || name;
+  const format = getDocumentFormat(name) || "document";
+  logClient("document.file.selected", { name, size: fileLike?.size, format });
+  state.mode = "document";
+  state.docMeta = null;
+  state.book = createBookRecord({ bookId: DOC_LOADING_ID, title: name.replace(/\.(docx|hwpx|hwp)$/i, ""), filePath, settings: state.book.settings });
+  state.toc = [];
+  state.progressLabel = "";
+  state.bookMeta = t("document.opening");
+  render();
+
+  const reader = new DocumentReader({
+    frame: elements.docFrame,
+    onLocationChange: handleDocLocationChange,
+    onSelectionChange: handleDocSelection,
+    onReady: installDocumentFrameHandlers,
+    getHighlights: getPdfAnnotations
+  });
+  state.docReader = reader;
+
+  try {
+    const bytes = new Uint8Array(await readFileArrayBuffer(fileLike));
+    if (bytes.byteLength > DOCUMENT_MAX_BYTES) throw new Error("native.documentTooLarge");
+    const converted = await convertDocument(fileLike, bytes, platform);
+    if (state.docReader !== reader) return;
+    const bookId = computeBookId(bytes);
+    const saved = getBookRecord(state.library, bookId);
+    state.book = saved
+      ? { ...saved, filePath, title: state.book.title }
+      : createBookRecord({ bookId, title: state.book.title, filePath, settings: state.book.settings });
+    const settings = mergeReadingSettings(state.book.settings, {});
+    await reader.open({ html: converted.html, layout: converted.layout, location: state.book.lastLocation, theme: settings.theme, zoom: settings.zoom, lang: getLocale() });
+    if (state.docReader !== reader) return;
+    state.docMeta = { name, size: (bytes.byteLength / 1024 / 1024).toFixed(2), format: format.toUpperCase() };
+    state.progressLabel = docProgressLabel();
+    persistBook();
+    render();
+    logClient("document.file.opened", { format, layout: converted.layout });
+  } catch (error) {
+    const message = error?.message ? errorText(error) : t("document.convertFailed");
+    logClient("document.file.rejected", { name, format, error: formatError(error) });
+    if (state.docReader === reader) {
+      state.docReader = null;
+      reader.destroy();
+      showDocumentMessage(message);
+    }
+    state.bookMeta = `${name} - ${message}`;
+    render();
+  }
+}
+
 function getOpenFileKind(name) {
   const extension = String(name || "").toLowerCase();
 
@@ -3034,6 +3281,10 @@ function getOpenFileKind(name) {
 
   if (extension.endsWith(".pdf")) {
     return "pdf";
+  }
+
+  if (getDocumentFormat(extension)) {
+    return "document";
   }
 
   if (extension.endsWith(".md") || extension.endsWith(".markdown")) {
@@ -3066,12 +3317,12 @@ async function openDroppedFile(file) {
   try {
     const filePath = getDroppedFilePath(file);
 
-    if (kind === "epub" || kind === "pdf") {
+    if (kind === "epub" || kind === "pdf" || kind === "document") {
       await addDocumentTab({ kind, file: {
         name: file.name,
         path: filePath,
         size: file.size,
-        type: file.type || (kind === "pdf" ? "application/pdf" : "application/epub+zip"),
+        type: file.type || (kind === "pdf" ? "application/pdf" : kind === "epub" ? "application/epub+zip" : "application/octet-stream"),
         arrayBuffer: () => file.arrayBuffer()
       }});
       return;
@@ -3512,10 +3763,10 @@ function renderAnnotations() {
 
 function renderSearch() {
   elements.searchInput.value = state.searchQuery;
-  elements.searchButton.disabled = state.searching || !(state.rendition || state.pdf);
+  elements.searchButton.disabled = state.searching || !(state.rendition || state.pdf || state.docReader);
   elements.searchStatus.className = state.searchResults.length ? "empty search-summary" : "empty";
   elements.searchStatus.textContent = state.searchStatus || (
-    state.rendition || state.pdf ? t("search.enterTerm") : t("search.openFirst")
+    state.rendition || state.pdf || state.docReader ? t("search.enterTerm") : t("search.openFirst")
   );
 
   if (!state.searchResults.length) {
@@ -3590,7 +3841,7 @@ function renderToc() {
 
   if (!items.length) {
     elements.tocList.className = "empty";
-    elements.tocList.textContent = state.rendition || state.pdf
+    elements.tocList.textContent = state.rendition || state.pdf || state.docReader
       ? t("toc.none")
       : t("toc.empty");
     return;
@@ -3629,11 +3880,14 @@ function render() {
   } else {
     elements.bookMeta.textContent = state.mode === "pdf" && state.pdf && state.pdfMeta
       ? t("pdf.meta", state.pdfMeta)
-      : state.bookMeta || t("book.placeholderMeta");
+      : state.mode === "document" && state.docReader && state.docMeta
+        ? t("document.meta", state.docMeta)
+        : state.bookMeta || t("book.placeholderMeta");
   }
   renderPageNavigation();
   if (state.pdf) state.progressLabel = t("pdf.progress", { page: state.pdf.pageNumber, total: state.pdf.pageCount });
-  elements.locationLabel.textContent = state.rendition || state.pdf
+  if (state.docReader?.document) state.progressLabel = docProgressLabel();
+  elements.locationLabel.textContent = state.rendition || state.pdf || state.docReader
     ? state.progressLabel || t("settings.locationSaved")
     : state.book.lastLocation || "page-1";
   elements.zoomLabel.textContent = `${Math.round(settings.zoom * 100)}%`;
@@ -3674,6 +3928,8 @@ function render() {
   document.body.classList.toggle("theme-sepia", settings.theme === "sepia");
   document.body.classList.toggle("text-only", settings.textOnly);
   document.body.classList.toggle("pdf-mode", state.mode === "pdf");
+  document.body.classList.toggle("doc-mode", state.mode === "document");
+  elements.docWorkspace.hidden = state.mode !== "document";
   elements.pdfWorkspace.hidden = state.mode !== "pdf";
   elements.pdfActions.hidden = state.mode !== "pdf";
   renderPdfControls();
@@ -3692,14 +3948,16 @@ function renderPageNavigation() {
   if (mobileNavigation) {
     const active = state.mode === "pdf"
       ? Boolean(state.pdf)
+      : state.mode === "document"
+      ? Boolean(state.docReader?.document)
       : state.mode === "epub" ? Boolean(state.rendition) : state.markdown.viewMode === "view";
     mobileNavigation.bar.hidden = !active;
     const markdown = state.mode === "markdown";
     const pagination = markdown ? getViewportPageState(getMarkdownViewportMetrics()) : null;
     mobileNavigation.label.textContent = markdown ? `${pagination.page} / ${pagination.pageCount}` : state.progressLabel || "EPUB";
     mobileUI?.progress(mobileNavigation.label.textContent);
-    mobileNavigation.prev.disabled = !active || (markdown ? pagination.atStart : Boolean(state.mode === "pdf" ? state.pdf?.atStart : getRenditionLocation()?.atStart));
-    mobileNavigation.next.disabled = !active || (markdown ? pagination.atEnd : Boolean(state.mode === "pdf" ? state.pdf?.atEnd : getRenditionLocation()?.atEnd));
+    mobileNavigation.prev.disabled = !active || (markdown ? pagination.atStart : Boolean(state.mode === "pdf" ? state.pdf?.atStart : state.mode === "document" ? state.docReader?.pageState.atStart : getRenditionLocation()?.atStart));
+    mobileNavigation.next.disabled = !active || (markdown ? pagination.atEnd : Boolean(state.mode === "pdf" ? state.pdf?.atEnd : state.mode === "document" ? state.docReader?.pageState.atEnd : getRenditionLocation()?.atEnd));
     const bookmarked = hasBookmarkAtCurrentLocation();
     mobileNavigation.mark.classList.toggle("is-active", bookmarked);
     mobileNavigation.mark.setAttribute("aria-pressed", String(bookmarked));
@@ -3709,6 +3967,14 @@ function renderPageNavigation() {
     elements.pageLabel.textContent = `${pagination.page} / ${pagination.pageCount}`;
     elements.prevButton.disabled = state.markdown.viewMode !== "view" || pagination.atStart;
     elements.nextButton.disabled = state.markdown.viewMode !== "view" || pagination.atEnd;
+    return;
+  }
+
+  if (state.mode === "document") {
+    const pageState = state.docReader?.document ? state.docReader.pageState : null;
+    elements.pageLabel.textContent = pageState ? t("pdf.progress", { page: pageState.page, total: pageState.pageCount }) : "-";
+    elements.prevButton.disabled = !pageState || pageState.atStart;
+    elements.nextButton.disabled = !pageState || pageState.atEnd;
     return;
   }
 
@@ -3990,7 +4256,9 @@ elements.bookmarkButton.addEventListener("click", () => {
   // PDF bookmarks mark a page; the stored offset and zoom do not need to match.
   const sameLocation = (bookmark) => state.mode === "pdf"
     ? parsePdfLocation(bookmark.location)?.pageNumber === state.pdf?.pageNumber
-    : bookmark.location === location;
+    : state.mode === "document"
+      ? state.docReader?.pageForLocation(bookmark.location) === state.docReader?.pageState.page
+      : bookmark.location === location;
   const exists = state.book.bookmarks.some(sameLocation);
 
   if (exists) {
@@ -4180,7 +4448,7 @@ platform?.onWindowCloseRequested?.(() => {
   void (async () => {
     snapshotActiveTab();
     const activeTab = getActiveTab();
-    if ((activeTab?.kind === "epub" || activeTab?.kind === "pdf") && !await resolveUnsavedEpubTab(activeTab)) {
+    if (["epub", "pdf", "document"].includes(activeTab?.kind) && !await resolveUnsavedEpubTab(activeTab)) {
       windowCloseInProgress = false;
       platform.completeWindowClose(false);
       return;
@@ -4209,6 +4477,7 @@ platform?.onWindowCloseRequested?.(() => {
 
 window.addEventListener("beforeunload", (event) => {
   flushPdfLocation();
+  flushDocLocation();
   if (platform.isMobile) { saveMobileSession(); return; }
   if (windowCloseApproved) return;
   snapshotActiveTab();

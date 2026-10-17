@@ -1,7 +1,8 @@
 const { mkdir, readFile, rm, stat, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const JSZip = require("jszip");
+// The self-contained build keeps jszip's own dependencies out of the packaged app.
+const JSZip = require("jszip/dist/jszip.min.js");
 
 const DECORATION_ATTRIBUTES = new Set([
   "align",

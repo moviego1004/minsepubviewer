@@ -42,3 +42,17 @@
 - Java 테스트 `ReaderFilesTest` 2건이 예전 한국어 문구(보관함/경로)를 확인하고 있어 `native.outsideLibrary`/`native.invalidEntryPath` 키 비교로 수정.
 - 검증: `npm.cmd run android:apk` → BUILD SUCCESSFUL, `app-debug.apk` 8.0MB(PDF.js 자산 포함 확인). `gradlew testDebugUnitTest` 5/5 통과. `npm.cmd test` 119 통과. 실기기 미확인.
 - HWP 평가: NEXT_TASKS 참고. `test/sample/`은 `.gitignore`에 추가.
+
+## 2026-10-17 (계속) — 오피스·한글 문서 지원과 배포 크기 축소
+
+- 사용자 요청: 제안 순서대로 HWP·HWPX·DOCX 지원, 배포 크기 축소 방안 검토(공통 라이브러리 별도 받기 등), 빌드·테스트 준비되면 알릴 것.
+- 공통: `web/document-reader.js`(변환 HTML을 sandbox=allow-same-origin iframe에 표시, 스크립트·on* 속성·javascript: 링크 제거, 링크 이동 차단), `src/core/textAnchors.js`(doc:scroll 위치, doc-range 문자 오프셋, 쪽 단위 이동, 검색), `web/document-convert.js`(형식 판별·변환). `app.js`에 document 모드(탭, 이어보기, 쪽 이동, 책갈피(비율 %), 형광펜·메모, 검색, 테마, Ctrl+휠 확대, 모바일 탭·핀치 확대).
+- DOCX: mammoth 1.13.0 브라우저 번들을 처음 열 때만 불러옴. HWPX(OWPML zip)·HWPML(.hwp XML): `src/core/hwpXml.js`(문단·줄바꿈·표·병합, 문서 메타데이터 미표시, UTF-16 선언·UTF-8 실제 인코딩 처리). 실제 HWPML 샘플: 문단 108, 표 5, 셀 78(원본 태그 수와 일치).
+- HWP 5.0: PC는 `document:convert-hwp` IPC로 메인 프로세스에서 `@ohah/hwpjs` 네이티브 변환(64MB 이하). 쪽 바탕이 투명해지는 문제를 CSS로 수정(.hpa). Android는 `document.hwpDesktopOnly` 안내. Electron 원격 오류 문자열에서 메시지 키를 꺼내 번역하도록 `translateErrorMessage` 보강.
+- 열기 경로: 파일 열기 입력/대화상자(문서 필터 추가), 드롭, 명령줄(.docx/.hwp/.hwpx), Android 선택기·공유(MIME 추가, 원래 확장자로 앱 사본 저장, 64MB). 파일 연결(.docx/.hwp 기본 앱 등록)은 다른 앱 기본값을 바꿀 수 있어 추가하지 않음.
+- 배포 크기: 0.1.0 설치본 101.9MB(풀린 크기 238MB, app.asar 19.4MB에 Toast UI 원본·Capacitor·epubjs 원본과 의존성 포함). 이번 패키지는 app.asar 7.5MB(PDF·DOCX·HWP 포함), 언어 파일 55개(25MB) → 2개. 풀린 크기 276MB 중 Electron 42 런타임이 약 265MB(`Mins Reader.exe` 216MB). zip 압축 129.6MB → NSIS LZMA 설치본은 약 100MB 예상(미측정). APK 8.1MB(PDF.js min, mammoth 0.4MB 포함).
+- 실행 중 라이브러리 내려받기 방식은 줄어드는 양이 수 MB(PDF.js·mammoth)에 그치고 첫 사용에 인터넷·무결성 확인이 필요해 채택하지 않음. 큰 절감은 Electron 대신 시스템 WebView2를 쓰는 셸 전환이 필요(별도 검토 과제).
+- 검증: `npm.cmd test` 129 통과, `test:reader` 통과(DOCX 탭 넘김·HWP 5.0 안내 추가), `test:pdf` 통과, `test:documents`(신규) 통과, Electron 개발 실행으로 실제 HWP 5.0 샘플 열림 확인, `npm.cmd run build` 후 **패키지된 `Mins Reader.exe`**에서 PDF·DOCX·HWP 5.0(13쪽) 열림을 DevTools 프로토콜로 확인, `android:apk` 성공, Java 테스트 5/5.
+- 중간 발견·수정: 쪽 이동이 화면 높이의 92%라 쪽 번호가 바뀌지 않던 문제(반올림·끝은 마지막 쪽), 연속 스크롤 설정에서는 모바일 탭 넘김이 꺼지는 것은 EPUB과 같은 의도된 동작.
+- 테스트 중 개발 프로필(%APPDATA%MinsEPUBviewer)의 최근 파일에 들어간 테스트 항목 3개를 제거(사용자 항목 7개 유지). 같은 프로필의 내부 책 기록(localStorage)에는 테스트 문서 기록이 남아 있을 수 있음.
+- 미검증: 실기기, 설치 파일(NSIS) 실제 크기·업그레이드, 실제 DOCX/HWPX 사용자 문서, 매우 큰 HWP.
