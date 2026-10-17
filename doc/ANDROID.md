@@ -81,7 +81,7 @@ Android Studio에서 프로젝트를 열어 `android/local.properties`를 생성
 
 ## 케이블 없이 APK 파일로 설치
 
-전달용 APK: `build/MinsEPUBViewer-Android-0.1.3-debug.apk`.
+전달용 APK: `npm.cmd run release:android`(PC 설치 파일까지 함께는 `npm.cmd run release`)가 버전을 하나 올리고 `build/MinsReader_ver<버전>.apk`로 저장합니다(디버그 서명). 예: `build/MinsReader_ver0.1.4.apk`. 이전 이름의 0.1.3 파일은 `build/MinsEPUBViewer-Android-0.1.3-debug.apk`였습니다.
 이 파일은 해당 버전 빌드의 사본이며, 다시 빌드하면 최신 APK는
 `android/app/build/outputs/apk/debug/app-debug.apk`에서 가져옵니다.
 

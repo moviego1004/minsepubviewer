@@ -1,6 +1,6 @@
 {
   "name": "MinsEPUBviewer",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "description": "Mins Reader: shared EPUB, PDF and Markdown reader for Windows and Android.",
   "author": "Mins",
   "private": true,
@@ -20,7 +20,10 @@
     "android:apk": "npm run android:sync && node scripts/build-android.js",
     "android:install": "node scripts/install-android.js",
     "test:pdf": "electron scripts/smoke-pdf.cjs",
-    "test:documents": "electron scripts/smoke-documents.cjs"
+    "test:documents": "electron scripts/smoke-documents.cjs",
+    "release": "node scripts/release.cjs",
+    "release:pc": "node scripts/release.cjs pc",
+    "release:android": "node scripts/release.cjs android"
   },
   "engines": {
     "node": ">=22"

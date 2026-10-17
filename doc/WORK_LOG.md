@@ -56,3 +56,11 @@
 - 중간 발견·수정: 쪽 이동이 화면 높이의 92%라 쪽 번호가 바뀌지 않던 문제(반올림·끝은 마지막 쪽), 연속 스크롤 설정에서는 모바일 탭 넘김이 꺼지는 것은 EPUB과 같은 의도된 동작.
 - 테스트 중 개발 프로필(%APPDATA%MinsEPUBviewer)의 최근 파일에 들어간 테스트 항목 3개를 제거(사용자 항목 7개 유지). 같은 프로필의 내부 책 기록(localStorage)에는 테스트 문서 기록이 남아 있을 수 있음.
 - 미검증: 실기기, 설치 파일(NSIS) 실제 크기·업그레이드, 실제 DOCX/HWPX 사용자 문서, 매우 큰 HWP.
+
+## 2026-10-17 (계속) — 배포 파일 이름과 버전 규칙
+
+- 사용자 지시: 앞으로 앱 빌드 파일은 `MinsReader_ver<버전>`, 빌드할 때마다 버전 번호를 하나씩 올린다.
+- `scripts/bump-version.cjs` 재작성: PC(0.1.0)와 Android(0.1.3) 중 높은 버전에서 이어서 마지막 자리 +1, Android versionCode +1. package.json·package-lock·installer.nsi·android/app/build.gradle을 함께 갱신하고 실패 시 되돌리는 restore() 제공.
+- `scripts/release.cjs` 추가(`npm.cmd run release`, `release:pc`, `release:android`): 버전을 올린 뒤 PC 패키지+NSIS 설치 파일(`build/MinsReader_ver<버전>.exe`)과 APK 복사본(`build/MinsReader_ver<버전>.apk`)을 만든다. 빌드 실패 시 버전 복원. `build/win-unpacked`만 지워 이전 배포 파일을 보존(이전 `makeSetup.bat`은 build 폴더 전체를 삭제했음).
+- `makeSetup.bat`은 `node scripts/release.cjs pc`를 호출하는 얇은 래퍼로 변경(날짜·일련번호 방식 제거).
+- 검증: `test/electron/releaseVersion.test.cjs` 3개 통과. `npm.cmd run release` 실행 → 0.1.4(versionCode 5), `build/MinsReader_ver0.1.4.exe` 94.1MB, `build/MinsReader_ver0.1.4.apk` 7.5MB 생성. 설치 파일 실행·업그레이드는 사용자 테스트 예정.

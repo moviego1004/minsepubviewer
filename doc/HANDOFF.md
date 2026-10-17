@@ -25,7 +25,7 @@
 - 배포 축소: PC 패키지는 필요한 파일만 넣고(Electron 언어 ko·en만, PDF.js min, HWP는 Windows용 `.node`만), Toast UI는 devDependency로 옮겼다. 사용자 샘플 `test/sample/`은 Git 제외.
 - iOS는 Mac/Xcode가 없어 보류.
 - Android에는 네이티브 문서 가져오기/저장, 다른 앱의 열기/공유 수신, 앱 내부 사본과 상태 저장, 모바일 메뉴/전체 화면/터치 조작이 구현되어 있다.
-- Android `versionName=0.1.3`, `versionCode=4`. 데스크톱 `package.json` 버전은 `0.1.0`으로 서로 다르다. `scripts/bump-version.cjs`는 Android 버전을 변경하지 않는다.
+- 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 명령: `npm.cmd run release`(둘 다), `release:pc`(=`makeSetup.bat`), `release:android`. 실패하면 버전을 되돌린다. 개발용 `npm.cmd run build`/`android:apk`는 버전을 올리지 않는다. 현재 0.1.4(versionCode 5).
 - 화면 영역에 맞춘 반응형 배치와 ResizeObserver 기반 EPUB 재배치가 있다. Android 최소 API 24(7.0), target/compile API 36이다.
 - 기기 모델 자동 분류나 전자잉크 전용 갱신/잔상 제어는 없다. Android 버전만으로 호환성을 보장할 수 없으며 WebView와 실제 기기 검증이 필요하다.
 
