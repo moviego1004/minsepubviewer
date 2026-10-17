@@ -12,11 +12,13 @@ Android 프로젝트는 Capacitor 8 기반이며 Android Studio에서 `android/`
 | `src/platform/index.js` | Electron / 브라우저 / Android 연결부 선택 |
 | `src/platform/android.js` | Android 파일 API, 이미지 보기, 앱 생명주기 연결 |
 | `src/platform/storage.js` | 동기식 읽기 모델과 순차적인 영구 저장 연결 |
-| `src/platform/mobile-files.js` | 가져온 EPUB/MD를 공통 뷰어 입력으로 변환 |
+| `src/platform/mobile-files.js` | 가져온 EPUB/PDF/MD를 공통 뷰어 입력으로 변환 (PDF는 URL로 전달) |
+| `web/pdf-reader.js`, `src/core/pdfLocation.js` | PDF.js 기반 PDF 보기, PDF 위치·형광펜 좌표 형식 |
+| `web/i18n.js`, `src/core/i18n.js`, `src/locales/` | 한국어/영어 UI 문구 |
 | `web/mobile.css` | Android 전용 화면 보정 |
 | `electron/` | Windows 앱 및 PC 파일 처리 |
 | `android/` | Android Studio 프로젝트와 문서 처리 플러그인 |
-| `dist/mobile/` | 생성된 모바일 웹 자산, Git 제외 |
+| `dist/mobile/` | 생성된 모바일 웹 자산, Git 제외 (`vendor/pdfjs/`에 PDF.js legacy 빌드 복사) |
 
 `window.minseDesktop`은 Electron preload에 유지됩니다. 공통 화면은 이제 `platform`을 사용합니다.
 Android는 앱 시작 시 영구 저장 데이터를 먼저 읽고 공통 화면을 초기화합니다.
@@ -84,7 +86,7 @@ Android Studio에서 프로젝트를 열어 `android/local.properties`를 생성
 1. 메일 또는 개인 클라우드로 APK를 휴대폰에 내려받습니다.
 2. 갤럭시의 **내 파일 → 다운로드**에서 APK를 누릅니다.
 3. 설치 권한 안내가 나타나면 APK를 여는 앱에 대해 **이 출처 허용**을 켜고 설치합니다.
-4. 설치 후 Mins EPUB Viewer에서 EPUB 또는 MD를 엽니다.
+4. 설치 후 Mins Reader에서 EPUB, PDF 또는 MD를 엽니다.
 
 이 방식에는 USB 디버깅이나 삼성 USB 드라이버가 필요하지 않습니다.
 메일에서 APK 첨부를 제한하면 개인 클라우드의 다운로드 링크를 이용합니다.
@@ -115,9 +117,20 @@ Windows 실행·빌드 명령은 기존 `npm.cmd run desktop`, `npm.cmd run buil
 
 ## 파일과 저장 정책
 
+### 앱 이름, PDF, 다국어 (0.2 작업, 2026-10-17)
+
+- 앱 표시 이름을 **Mins Reader**로 바꿨습니다. `appId`/패키지 이름 `com.mins.epubviewer`는 기존 설치 업데이트를 위해 유지합니다.
+- PDF를 **파일 열기**, 다른 앱으로 열기/공유(`application/pdf`)로 받을 수 있습니다. PDF는 앱 내부 보관함(`reader-documents/*.pdf`, 512MB 이하)에 복사하고,
+  웹 화면에는 바이트 대신 `convertFileSrc` URL을 넘겨 PDF.js가 직접 읽습니다.
+- PDF.js 6.3.289(`pdfjs-dist`, Apache-2.0)의 **legacy 빌드**를 `scripts/build-mobile.js`가 `dist/mobile/vendor/pdfjs/`로 복사합니다(약 5.3MB, CMap·표준 글꼴·wasm 포함).
+- PDF 기능은 PDF.js가 제공하는 범위만 씁니다: 페이지/연속 보기, 확대·맞춤, 회전, 두 쪽 보기, 텍스트 선택, 검색, 목차, 링크, 테마 색상.
+  형광펜·메모·책갈피는 앱 내부 기록(PDF 좌표)이며 원본 PDF를 수정하지 않습니다. 스캔 PDF 영역 형광펜, OCR, 양식 저장은 지원하지 않습니다.
+- PDF 확대·축소는 PDF.js 두 손가락 확대를 사용합니다. 쪽이 화면에 다 들어올 때만 상하단 탭/스와이프로 쪽을 넘기고, 확대해서 스크롤이 생기면 스크롤을 우선합니다.
+- 메뉴·알림 문구는 한국어/영어를 지원합니다(보기 설정 → 언어, 기본은 시스템 언어). Java 오류는 `native.*` 키로 전달해 화면 언어로 표시합니다.
+
 ### 다른 앱과 클라우드에서 열기 (0.1.3)
 
-- EPUB·Markdown 파일의 **다른 앱으로 열기** 또는 **공유** 목록에서 Mins EPUB Viewer를 선택할 수 있도록 등록했습니다.
+- EPUB·PDF·Markdown 파일의 **다른 앱으로 열기** 또는 **공유** 목록에서 Mins Reader(이전 이름 Mins EPUB Viewer)를 선택할 수 있도록 등록했습니다.
 - 앱이 꺼져 있으면 시작 후 문서를 열고, 이미 실행 중이면 새 문서로 받습니다. 여러 파일 공유도 순서대로 처리합니다.
 - 일부 메신저의 일반 파일 형식(`application/octet-stream`, ZIP)도 받되, 실제 파일 이름은 EPUB/MD/Markdown/TXT인지 확인합니다. 텍스트 메시지 공유는 파일 가져오기로 처리하지 않습니다.
 - Google Drive 등 Android 문서 제공자는 **파일 열기 → 제공자 선택**으로 접근할 수 있습니다. 최초 열기는 네트워크가 필요할 수 있습니다.
@@ -158,8 +171,11 @@ Windows 실행·빌드 명령은 기존 `npm.cmd run desktop`, `npm.cmd run buil
 ```powershell
 npm.cmd test
 npm.cmd run test:reader
+npm.cmd run test:pdf
 npm.cmd run android:sync
 ```
+
+`test:reader`의 PDF 단계는 `dist/mobile/vendor/pdfjs/`를 사용하므로 먼저 `npm.cmd run build:mobile` 또는 `android:sync`를 실행합니다.
 
 - 공통 로직과 모바일 파일 입력/저장 큐 테스트
 - Chromium 비표시 창에서 412×860 크기로 EPUB·MD 열기와 위치 복원 검사
@@ -174,7 +190,10 @@ npm.cmd run android:sync
 검사 화면은 `build/mobile-smoke.png`, `build/mobile-epub-smoke.png`에 생성됩니다.
 
 2026-09-26에 JDK 21과 Android SDK를 설치하고 `npm.cmd run android:apk`로
-**Java/Gradle 컴파일 및 디버그 APK 생성을 완료**했습니다. 실기기 동작 검증은 휴대폰 연결 후 진행합니다.
+**Java/Gradle 컴파일 및 디버그 APK 생성을 완료**했습니다(과거 기록). 실기기 동작 검증은 휴대폰 연결 후 진행합니다.
+
+2026-10-17 PDF·다국어 변경은 `android:sync`와 모의 연결부 `test:reader`(PDF URL 열기·탭 이동·재실행 복원 포함)까지만 확인했습니다.
+이 작업 PC에는 JDK/SDK가 없어 **변경된 Java 플러그인의 컴파일과 APK 생성은 아직 검증하지 않았습니다.**
 
 ## 실기기에서 이어서 확인할 항목
 
@@ -184,6 +203,8 @@ npm.cmd run android:sync
 4. 한글 입력, 선택·복사, 키보드 표시 및 화면 회전
 5. 저장 창 취소, 외부 내보내기 실패, 저장 공간 부족 시 데이터 보존
 6. 그림 많은 EPUB, 긴 Markdown, 태블릿 화면 및 시스템 글자 크기
+7. PDF: 선택기·다른 앱 공유로 열기, 대용량/한글(CMap) PDF, 두 손가락 확대, 텍스트 선택 후 형광펜, 재실행 위치 복원, 오래된 WebView의 legacy 빌드 동작
+8. 영어 시스템 언어에서 메뉴·오류 문구, 앱 표시 이름 Mins Reader
 
 ## 후속 범위
 

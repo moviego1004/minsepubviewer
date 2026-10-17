@@ -4,6 +4,7 @@ const fsSync = require("node:fs");
 const { appendFile, mkdir, readFile, writeFile } = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
 const { listenWithPortFallback, normalizePort } = require("./local-server.cjs");
 const { findSupportedFilePath, getSupportedFileKind } = require("./open-file.cjs");
 
@@ -28,12 +29,36 @@ const readyReaderWindows = new Set();
 const pendingPathsByWindow = new Map();
 const approvedWindowCloses = new WeakSet();
 const pendingWindowCloses = new WeakSet();
+// Packaged builds were named "Mins EPUB Viewer" before. Electron derives the profile folder
+// from the app name, so keep using an existing profile to preserve the library and annotations.
+if (app.isPackaged) {
+  const appData = app.getPath("appData");
+  const legacyProfile = ["Mins EPUB Viewer", "MinsEPUBviewer"]
+    .map((name) => path.join(appData, name))
+    .find((folder) => fsSync.existsSync(folder));
+  if (legacyProfile) app.setPath("userData", legacyProfile);
+}
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+// The renderer owns the language setting and reports it; until then the system language is used.
+const i18nReady = import(pathToFileURL(path.join(__dirname, "..", "src", "core", "i18n.js")).href);
+let i18n = null;
+let rendererLocale = "";
+void i18nReady.then((module) => { i18n = module; }, (error) => console.error("i18n failed to load", error));
+
+function t(key, params) {
+  if (!i18n) return key;
+  const locale = rendererLocale || i18n.resolveLocale("system", [app.getLocale()]);
+  return i18n.translate(locale, key, params);
+}
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
   [".css", "text/css; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
+  [".mjs", "text/javascript; charset=utf-8"],
+  [".wasm", "application/wasm"],
+  [".png", "image/png"],
   [".json", "application/json; charset=utf-8"],
   [".svg", "image/svg+xml"]
 ]);
@@ -312,7 +337,7 @@ function isOpenableFilePath(filePath) {
 async function createOpenFilePayload(filePath) {
   const kind = getSupportedFileKind(filePath);
 
-  if (kind === "epub") {
+  if (kind === "epub" || kind === "pdf") {
     const bytes = await readFile(filePath);
     return {
       kind,
@@ -320,7 +345,7 @@ async function createOpenFilePayload(filePath) {
         name: path.basename(filePath),
         path: filePath,
         size: bytes.byteLength,
-        type: "application/epub+zip",
+        type: kind === "pdf" ? "application/pdf" : "application/epub+zip",
         bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
       }
     };
@@ -337,7 +362,7 @@ async function createOpenFilePayload(filePath) {
     };
   }
 
-  throw new Error("지원하지 않는 파일 형식입니다.");
+  throw new Error("native.unsupportedFile");
 }
 
 function getRecentFilesPath() {
@@ -449,7 +474,7 @@ async function createWindow({ filePaths = [] } = {}) {
     minWidth: mainWindowMinimum.width,
     minHeight: mainWindowMinimum.height,
     show: false,
-    title: "Minse EPUB Viewer",
+    title: "Mins Reader",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -503,13 +528,47 @@ async function createReaderWindow(filePath) {
   return window;
 }
 
-ipcMain.handle("book:open", async () => {
+ipcMain.on("app:set-locale", (_event, locale) => {
+  if (i18n?.SUPPORTED_LOCALES.includes(locale)) rendererLocale = locale;
+});
+
+ipcMain.handle("document:open", async () => {
+  await i18nReady;
   const result = await dialog.showOpenDialog({
-    title: "Open EPUB",
+    title: t("dialog.openDocument"),
     properties: ["openFile"],
     filters: [
-      { name: "EPUB Books", extensions: ["epub"] },
-      { name: "All Files", extensions: ["*"] }
+      { name: t("dialog.filterSupported"), extensions: ["epub", "pdf", "md", "markdown", "txt"] },
+      { name: t("dialog.filterEpub"), extensions: ["epub"] },
+      { name: t("dialog.filterPdf"), extensions: ["pdf"] },
+      { name: t("dialog.filterMarkdown"), extensions: ["md", "markdown"] },
+      { name: t("dialog.filterText"), extensions: ["txt"] },
+      { name: t("dialog.filterAll"), extensions: ["*"] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  const filePath = result.filePaths[0];
+  rememberRecentFile(filePath);
+  // Plain text opens in the Markdown editor, as from the Markdown dialog.
+  if (path.extname(filePath).toLowerCase() === ".txt") {
+    return { kind: "markdown", document: { name: path.basename(filePath), path: filePath, content: await readFile(filePath, "utf8") } };
+  }
+  return createOpenFilePayload(filePath);
+});
+
+ipcMain.handle("book:open", async () => {
+  await i18nReady;
+  const result = await dialog.showOpenDialog({
+    title: t("dialog.openBook"),
+    properties: ["openFile"],
+    filters: [
+      { name: t("dialog.filterBooks"), extensions: ["epub", "pdf"] },
+      { name: t("dialog.filterEpub"), extensions: ["epub"] },
+      { name: t("dialog.filterPdf"), extensions: ["pdf"] },
+      { name: t("dialog.filterAll"), extensions: ["*"] }
     ]
   });
 
@@ -521,13 +580,14 @@ ipcMain.handle("book:open", async () => {
 });
 
 ipcMain.handle("markdown:open", async () => {
+  await i18nReady;
   const result = await dialog.showOpenDialog({
-    title: "Markdown 파일 열기",
+    title: t("dialog.openMarkdown"),
     properties: ["openFile"],
     filters: [
-      { name: "Markdown", extensions: ["md", "markdown"] },
-      { name: "텍스트 파일", extensions: ["txt"] },
-      { name: "모든 파일", extensions: ["*"] }
+      { name: t("dialog.filterMarkdown"), extensions: ["md", "markdown"] },
+      { name: t("dialog.filterText"), extensions: ["txt"] },
+      { name: t("dialog.filterAll"), extensions: ["*"] }
     ]
   });
 
@@ -563,14 +623,15 @@ ipcMain.handle("markdown:save", async (_event, payload = {}) => {
   let filePath = !saveAs && typeof payload.path === "string" ? payload.path : "";
 
   if (!filePath) {
+    await i18nReady;
     const result = await dialog.showSaveDialog({
-      title: "Markdown 파일 저장",
+      title: t("dialog.saveMarkdown"),
       defaultPath: typeof payload.suggestedName === "string" && payload.suggestedName
         ? payload.suggestedName
         : "document.md",
       filters: [
-        { name: "Markdown", extensions: ["md"] },
-        { name: "모든 파일", extensions: ["*"] }
+        { name: t("dialog.filterMarkdown"), extensions: ["md"] },
+        { name: t("dialog.filterAll"), extensions: ["*"] }
       ]
     });
 
@@ -590,16 +651,17 @@ ipcMain.handle("markdown:save", async (_event, payload = {}) => {
 });
 
 ipcMain.handle("document:confirm-save", async (event, payload = {}) => {
+  await i18nReady;
   const window = BrowserWindow.fromWebContents(event.sender);
   const name = typeof payload.name === "string" && payload.name.trim()
     ? payload.name.trim()
-    : "문서";
+    : t("common.document");
   const options = {
     type: "question",
-    title: "변경 내용 저장",
-    message: `${name}의 변경 내용을 저장하시겠습니까?`,
-    detail: "저장하지 않은 변경 내용이 있습니다.",
-    buttons: ["저장", "저장 안 함", "취소"],
+    title: t("confirm.saveTitle"),
+    message: t("confirm.saveChanges", { name }),
+    detail: t("confirm.unsavedDetail"),
+    buttons: [t("common.save"), t("confirm.dontSave"), t("common.cancel")],
     defaultId: 0,
     cancelId: 2,
     noLink: true

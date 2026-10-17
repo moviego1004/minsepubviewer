@@ -20,10 +20,10 @@ final class EpubArchive {
     }
 
     static Prepared prepare(File source, File cache) throws IOException {
-        if (source.length() == 0 || source.length() > MAX_ARCHIVE) throw new IOException("EPUB 파일은 512MB 이하만 지원합니다.");
-        if (!cache.isDirectory() && !cache.mkdirs()) throw new IOException("EPUB 임시 폴더를 만들지 못했습니다.");
+        if (source.length() == 0 || source.length() > MAX_ARCHIVE) throw new IOException("native.epubTooLarge");
+        if (!cache.isDirectory() && !cache.mkdirs()) throw new IOException("native.tempDirFailed");
         File output = new File(cache, source.getName() + ".unpacked").getCanonicalFile();
-        if (!cache.getCanonicalFile().equals(output.getParentFile())) throw new IOException("잘못된 EPUB 경로입니다.");
+        if (!cache.getCanonicalFile().equals(output.getParentFile())) throw new IOException("native.invalidEpubPath");
         File marker = new File(output, ".reader-complete");
         String identity = source.length() + ":" + source.lastModified();
         Properties metadata = new Properties();
@@ -36,7 +36,7 @@ final class EpubArchive {
             }
         }
         deleteInside(output, cache);
-        if (!output.mkdirs()) throw new IOException("EPUB 임시 폴더를 만들지 못했습니다.");
+        if (!output.mkdirs()) throw new IOException("native.tempDirFailed");
         String bookId = contentId(source);
         byte[] buffer = new byte[64 * 1024];
         long expanded = 0;
@@ -45,26 +45,26 @@ final class EpubArchive {
             Enumeration<? extends ZipEntry> files = archive.entries();
             while (files.hasMoreElements()) {
                 ZipEntry entry = files.nextElement();
-                if (++entries > 50000) throw new IOException("EPUB 내부 파일 수가 너무 많습니다.");
+                if (++entries > 50000) throw new IOException("native.tooManyEntries");
                 String name = entry.getName().replace('\\', '/');
                 File destination = new File(output, name).getCanonicalFile();
                 if (entry.isDirectory() && destination.equals(output)) continue;
                 if (name.startsWith("/") || name.contains(":") || !destination.getPath().startsWith(output.getPath() + File.separator)
-                    || destination.equals(marker)) throw new IOException("EPUB 내부 경로가 올바르지 않습니다.");
-                if (entry.isDirectory()) { if (!destination.isDirectory() && !destination.mkdirs()) throw new IOException("EPUB 폴더 생성 실패"); continue; }
-                if (!destination.getParentFile().isDirectory() && !destination.getParentFile().mkdirs()) throw new IOException("EPUB 폴더 생성 실패");
+                    || destination.equals(marker)) throw new IOException("native.invalidEntryPath");
+                if (entry.isDirectory()) { if (!destination.isDirectory() && !destination.mkdirs()) throw new IOException("native.folderCreateFailed"); continue; }
+                if (!destination.getParentFile().isDirectory() && !destination.getParentFile().mkdirs()) throw new IOException("native.folderCreateFailed");
                 long length = 0;
                 try (InputStream input = archive.getInputStream(entry); OutputStream stream = new FileOutputStream(destination)) {
                     int count;
                     while ((count = input.read(buffer)) != -1) {
                         length += count;
                         expanded += count;
-                        if (length > MAX_ENTRY || expanded > MAX_EXPANDED) throw new IOException("EPUB 압축 해제 크기가 지원 범위를 넘습니다.");
+                        if (length > MAX_ENTRY || expanded > MAX_EXPANDED) throw new IOException("native.expandedTooLarge");
                         stream.write(buffer, 0, count);
                     }
                 }
             }
-            if (!new File(output, "META-INF/container.xml").isFile()) throw new IOException("EPUB에 container.xml이 없습니다.");
+            if (!new File(output, "META-INF/container.xml").isFile()) throw new IOException("native.missingContainer");
             metadata.setProperty("source", identity);
             metadata.setProperty("bookId", bookId);
             try (OutputStream stream = new FileOutputStream(marker)) { metadata.store(stream, "Reader EPUB cache"); }
@@ -93,10 +93,10 @@ final class EpubArchive {
     }
 
     private static void deleteInside(File file, File root) throws IOException {
-        if (!file.getCanonicalPath().startsWith(root.getCanonicalPath() + File.separator)) throw new IOException("임시 폴더 경로가 잘못되었습니다.");
+        if (!file.getCanonicalPath().startsWith(root.getCanonicalPath() + File.separator)) throw new IOException("native.invalidTempPath");
         if (!file.exists()) return;
         File[] children = file.listFiles();
         if (children != null) for (File child : children) deleteInside(child, root);
-        if (!file.delete()) throw new IOException("EPUB 임시 파일을 정리하지 못했습니다.");
+        if (!file.delete()) throw new IOException("native.cleanupFailed");
     }
 }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hydrateMobileFile, MOBILE_EPUB_MAX_BYTES } from "../../src/platform/mobile-files.js";
+import { hydrateMobileFile, MOBILE_EPUB_MAX_BYTES, MOBILE_PDF_MAX_BYTES } from "../../src/platform/mobile-files.js";
 
 test("a cancelled Android picker produces no document or fetch", async () => {
   assert.equal(await hydrateMobileFile({ cancelled: true }, () => { throw new Error("unexpected fetch"); }), null);
@@ -36,7 +36,17 @@ test("large native EPUBs use an unpacked URL without fetching or copying their a
 test("oversized or inaccessible imports fail before entering the reader", async () => {
   await assert.rejects(hydrateMobileFile({ kind: "epub", path: "/a", size: MOBILE_EPUB_MAX_BYTES + 1 }, () => {
     throw new Error("must not fetch oversized document");
-  }), /크기/);
+  }), /native.invalidDescriptor/);
   await assert.rejects(hydrateMobileFile({ kind: "markdown", path: "/a", size: 1 }, (path) => path,
-    async () => new Response("", { status: 404 })), /읽지 못/);
+    async () => new Response("", { status: 404 })), /native.readImportedFailed/);
+});
+
+test("PDF imports stay in the app library and are read by URL", async () => {
+  const result = await hydrateMobileFile({ kind: "pdf", path: "/data/reader-documents/a.pdf", name: "a.pdf", size: 1024 },
+    (path) => `https://localhost/_capacitor_file_${path}`,
+    async () => { throw new Error("The PDF must not enter JavaScript memory"); });
+  assert.equal(result.kind, "pdf");
+  assert.equal(result.file.pdfUrl, "https://localhost/_capacitor_file_/data/reader-documents/a.pdf");
+  assert.equal(result.file.type, "application/pdf");
+  await assert.rejects(hydrateMobileFile({ kind: "pdf", path: "/a.pdf", size: MOBILE_PDF_MAX_BYTES + 1 }, (path) => path), /native\.invalidDescriptor/);
 });

@@ -41,7 +41,7 @@ export function lineRangeFromSource(content, quote, occurrence = 0) {
 
 export function createMarkdownBookmark(line, label = "") {
   const safeLine = Math.max(1, Math.trunc(Number(line) || 1));
-  return { id: id("md-bookmark"), line: safeLine, label: label || `${safeLine}번 줄`, createdAt: new Date().toISOString() };
+  return { id: id("md-bookmark"), line: safeLine, label: typeof label === "string" ? label.trim() : "", createdAt: new Date().toISOString() };
 }
 
 export function createMarkdownHighlight(input) {

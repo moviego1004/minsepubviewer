@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Mins EPUB Viewer</string>
-    <string name="title_activity_main">Mins EPUB Viewer</string>
+    <string name="app_name">Mins Reader</string>
+    <string name="title_activity_main">Mins Reader</string>
     <string name="package_name">com.mins.epubviewer</string>
     <string name="custom_url_scheme">com.mins.epubviewer</string>
 </resources>

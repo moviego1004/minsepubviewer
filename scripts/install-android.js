@@ -29,4 +29,4 @@ if (!run([...target, "install", "-r", apk])) {
   process.exit(1);
 }
 if (!run([...target, "shell", "am", "start", "-n", "com.mins.epubviewer/.MainActivity"])) process.exit(1);
-console.log("Mins EPUB Viewer를 휴대폰에 설치하고 실행했습니다.");
+console.log("Mins Reader를 휴대폰에 설치하고 실행했습니다.");

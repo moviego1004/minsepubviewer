@@ -10,6 +10,9 @@ const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
   [".css", "text/css; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
+  [".mjs", "text/javascript; charset=utf-8"],
+  [".wasm", "application/wasm"],
+  [".png", "image/png"],
   [".json", "application/json; charset=utf-8"],
   [".svg", "image/svg+xml"]
 ]);
@@ -88,5 +91,5 @@ if (address.usedFallback) {
   console.warn(`Port ${preferredPort} is already in use; using ${address.port} instead.`);
 }
 
-console.log(`Minse EPUB Viewer dev server: http://${address.host}:${address.port}`);
+console.log(`Mins Reader dev server: http://${address.host}:${address.port}`);
 

@@ -1336,3 +1336,130 @@ body.text-only .reader * {
   opacity: 0.75;
 }
 
+
+/* PDF documents: PDF.js renders inside an absolutely positioned scroll container. */
+.pdf-workspace {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.pdf-workspace[hidden] {
+  display: none;
+}
+
+.pdf-container {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  outline: none;
+}
+
+.pdf-container .pdfViewer {
+  padding: 12px 0;
+}
+
+body.pdf-mode #reader,
+body.pdf-mode .epub-only,
+body.pdf-mode #textOnlyToolbarButton,
+body.pdf-mode #exportMarkdownButton {
+  display: none;
+}
+
+.pdf-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pdf-actions[hidden] {
+  display: none;
+}
+
+.pdf-icon-button {
+  min-width: 32px;
+  font-size: 16px;
+}
+
+.pdf-zoom-select {
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.mins-pdf-highlights {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.mins-pdf-highlight {
+  position: absolute;
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+  opacity: 0.42;
+}
+
+.mins-pdf-highlight.is-yellow { background: #f8d94a; }
+.mins-pdf-highlight.is-orange { background: #ff9f1c; }
+.mins-pdf-highlight.is-green { background: #8edb8e; }
+.mins-pdf-highlight.is-pink { background: #f4a3be; }
+.mins-pdf-highlight.is-blue,
+.mins-pdf-highlight.is-note { background: #8ec5f4; }
+
+.mins-pdf-highlight.is-underline {
+  border-bottom: 2px solid #1c5d99;
+  background: transparent;
+  opacity: 0.9;
+  mix-blend-mode: normal;
+}
+
+body.theme-dark .mins-pdf-highlight:not(.is-underline) {
+  mix-blend-mode: screen;
+  opacity: 0.35;
+}
+
+.fullscreen-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  background:
+    linear-gradient(currentColor, currentColor) left top / 6px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) left top / 2px 6px no-repeat,
+    linear-gradient(currentColor, currentColor) right top / 6px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) right top / 2px 6px no-repeat,
+    linear-gradient(currentColor, currentColor) left bottom / 6px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) left bottom / 2px 6px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 6px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 2px 6px no-repeat;
+}
+
+body.platform-android .fullscreen-button {
+  display: none;
+}
+
+/* Desktop full screen hides the app chrome like the Android reader; Esc or F11 leaves it. */
+body.desktop-fullscreen .toolbar,
+body.desktop-fullscreen .document-tabs,
+body.desktop-fullscreen .sidebar,
+body.desktop-fullscreen .settings {
+  display: none;
+}
+
+body.desktop-fullscreen .app {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+body.desktop-fullscreen .workspace,
+body.desktop-fullscreen .content-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* "파일 열기" opens every supported format, so the EPUB-only folder button is not shown. */
+#openBookButton {
+  display: none;
+}

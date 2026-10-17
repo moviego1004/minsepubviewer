@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 contextBridge.exposeInMainWorld("minseDesktop", {
   openEpubFile: () => ipcRenderer.invoke("book:open"),
   openMarkdownFile: () => ipcRenderer.invoke("markdown:open"),
+  openDocument: () => ipcRenderer.invoke("document:open"),
   openRecentFile: (filePath) => ipcRenderer.invoke("recent:open", filePath),
   getRecentFiles: () => ipcRenderer.invoke("recent:list"),
   openFileInNewWindow: (filePath) => ipcRenderer.invoke("window:open-file", filePath),
@@ -10,6 +11,7 @@ contextBridge.exposeInMainWorld("minseDesktop", {
   confirmSaveChanges: (payload) => ipcRenderer.invoke("document:confirm-save", payload),
   completeWindowClose: (shouldClose) => ipcRenderer.send("window:close-complete", Boolean(shouldClose)),
   openImageWindow: (payload) => ipcRenderer.invoke("image:open", payload),
+  setLocale: (locale) => ipcRenderer.send("app:set-locale", locale),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   onOpenFile: (callback) => {
     const listener = (_event, payload) => callback(payload);

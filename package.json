@@ -1,7 +1,7 @@
 {
   "name": "MinsEPUBviewer",
   "version": "0.1.0",
-  "description": "Shared EPUB and Markdown reader for Windows and Android.",
+  "description": "Mins Reader: shared EPUB, PDF and Markdown reader for Windows and Android.",
   "author": "Mins",
   "private": true,
   "type": "module",
@@ -18,7 +18,8 @@
     "android:open": "cap open android",
     "android:run": "npm run android:sync && cap run android",
     "android:apk": "npm run android:sync && node scripts/build-android.js",
-    "android:install": "node scripts/install-android.js"
+    "android:install": "node scripts/install-android.js",
+    "test:pdf": "electron scripts/smoke-pdf.cjs"
   },
   "engines": {
     "node": ">=22"
@@ -28,7 +29,8 @@
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.2",
     "@toast-ui/editor": "^3.2.2",
-    "epubjs": "^0.3.93"
+    "epubjs": "^0.3.93",
+    "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
@@ -38,7 +40,7 @@
   },
   "build": {
     "appId": "com.mins.epubviewer",
-    "productName": "Mins EPUB Viewer",
+    "productName": "Mins Reader",
     "asar": true,
     "directories": {
       "output": "build"
@@ -49,6 +51,16 @@
       "src/**/*",
       "node_modules/epubjs/**/*",
       "node_modules/jszip/**/*",
+      "node_modules/pdfjs-dist/LICENSE",
+      "node_modules/pdfjs-dist/build/pdf.mjs",
+      "node_modules/pdfjs-dist/build/pdf.worker.mjs",
+      "node_modules/pdfjs-dist/web/pdf_viewer.mjs",
+      "node_modules/pdfjs-dist/web/pdf_viewer.css",
+      "node_modules/pdfjs-dist/web/images/**/*",
+      "node_modules/pdfjs-dist/cmaps/**/*",
+      "node_modules/pdfjs-dist/standard_fonts/**/*",
+      "node_modules/pdfjs-dist/wasm/**/*",
+      "node_modules/pdfjs-dist/iccs/**/*",
       "package.json"
     ],
     "fileAssociations": [
@@ -56,6 +68,11 @@
         "ext": "epub",
         "name": "EPUB Book",
         "description": "EPUB 전자책"
+      },
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "description": "PDF 문서"
       },
       {
         "ext": [
@@ -72,7 +89,7 @@
         "dir",
         "nsis"
       ],
-      "artifactName": "MinsEPUBViewer-${version}.${ext}"
+      "artifactName": "MinsReader-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,

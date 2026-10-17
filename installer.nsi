@@ -1,5 +1,5 @@
 !ifndef APP_NAME
-  !define APP_NAME      "Mins EPUB Viewer"
+  !define APP_NAME      "Mins Reader"
 !endif
 !ifndef APP_VERSION
   !define APP_VERSION   "0.1.0"
@@ -8,23 +8,25 @@
   !define APP_ID        "com.mins.epubviewer"
 !endif
 !ifndef APP_EXE
-  !define APP_EXE       "Mins EPUB Viewer.exe"
+  !define APP_EXE       "Mins Reader.exe"
 !endif
 !ifndef BUILD_NUMBER
   !define BUILD_NUMBER  "local"
 !endif
 !ifndef DISPLAY_NAME
-  !define DISPLAY_NAME  "MinsEpubViewer"
+  !define DISPLAY_NAME  "Mins Reader"
 !endif
 !ifndef DISPLAY_VERSION
   !define DISPLAY_VERSION "${APP_VERSION}.${BUILD_NUMBER}"
 !endif
 !ifndef OUT_FILE
-  !define OUT_FILE      "MinsEpubViewer-${DISPLAY_VERSION}-setup.exe"
+  !define OUT_FILE      "MinsReader-${DISPLAY_VERSION}-setup.exe"
 !endif
 !ifndef SOURCE_DIR
   !define SOURCE_DIR    "build\win-unpacked"
 !endif
+; Earlier versions were installed as "Mins EPUB Viewer".
+!define LEGACY_NAME   "Mins EPUB Viewer"
 !define INSTALL_DIR   "$PROGRAMFILES64\${APP_NAME}"
 !define REG_UNINSTALL "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
 
@@ -61,6 +63,13 @@ Section "MainSection" SEC_MAIN
 
   SetOutPath "$INSTDIR"
   SetOverwrite on
+
+  ; An upgrade keeps the previous install folder; remove the old name's shortcuts and executable.
+  Delete "$DESKTOP\${LEGACY_NAME}.lnk"
+  Delete "$SMPROGRAMS\${LEGACY_NAME}\${LEGACY_NAME}.lnk"
+  Delete "$SMPROGRAMS\${LEGACY_NAME}\Uninstall.lnk"
+  RMDir  "$SMPROGRAMS\${LEGACY_NAME}"
+  Delete "$INSTDIR\${LEGACY_NAME}.exe"
 
   ; Electron binaries and resources
   File /r "${SOURCE_DIR}\*.*"

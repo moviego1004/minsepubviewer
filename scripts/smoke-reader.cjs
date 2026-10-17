@@ -9,6 +9,8 @@ const assert = require("node:assert/strict");
 const deadlineTimer = setTimeout(() => { console.error("Reader smoke test timed out"); app.exit(1); }, 90000);
 
 const root = path.resolve(__dirname, "..");
+const { createSamplePdf } = require("./sample-pdf.cjs");
+const samplePdf = createSamplePdf();
 let server;
 let temp;
 app.whenReady().then(async () => {
@@ -28,12 +30,24 @@ app.whenReady().then(async () => {
     const epubBytes = Uint8Array.from(atob('${epub}'), value => value.charCodeAt(0)).buffer;
     const epubFile = { path: '/app/documents/test.epub', name: '검사.epub', bytes: epubBytes, size: epubBytes.byteLength };
     ${process.env.READER_BINARY_SMOKE ? "" : `epubFile.epubUrl = window.location.origin + '/_epub/'; epubFile.bookId = '${bookId}'; delete epubFile.bytes;`}
+    // The assertions below check Korean UI text; English is checked separately at the end.
+    if (!localStorage.getItem("minsepubviewer.language")) localStorage.setItem("minsepubviewer.language", "ko");
+    // PDF.js comes from the mobile build output, as on Android (run npm run build:mobile first).
+    window.MINS_PDFJS_BASE = '/dist/mobile/vendor/pdfjs/';
+    const pdfFile = { path: '/app/documents/sample.pdf', name: 'sample.pdf', size: ${samplePdf.length}, pdfUrl: window.location.origin + '/_pdf/sample.pdf', type: 'application/pdf' };
     window.minsePlatform = {
       kind: 'android', isMobile: true, storage: window.localStorage,
       log() {}, flush: async () => {},
       openMarkdownFile: async () => ({ ...document }),
       openEpubFile: async () => ({ ...epubFile }),
-      openFile: async () => ({ kind: 'epub', file: { ...epubFile } }),
+      // The toolbar's 파일 열기 uses openFile; tests choose Markdown with window.__nextOpenKind.
+      openFile: async () => {
+        const kind = window.__nextOpenKind;
+        window.__nextOpenKind = '';
+        if (kind === 'markdown') return { kind, document: { ...document } };
+        if (kind === 'pdf') return { kind, file: { ...pdfFile } };
+        return { kind: 'epub', file: { ...epubFile } };
+      },
       setFullscreen: async enabled => { window.__immersive = enabled; },
       onExternalDocument: callback => {
         window.__external = callback;
@@ -42,7 +56,7 @@ app.whenReady().then(async () => {
           return callback({kind:'markdown',document:{...document,path:'/app/documents/shared.md',name:'shared.md',content:'# 공유 받은 문서',viewMode:'view'}});
         }
       },
-      openRecentFile: async (path) => path.endsWith('.epub') ? { kind: 'epub', file: { ...epubFile } } : { kind: 'markdown', document: { ...document } },
+      openRecentFile: async (path) => path.endsWith('.pdf') ? { kind: 'pdf', file: { ...pdfFile } } : path.endsWith('.epub') ? { kind: 'epub', file: { ...epubFile } } : { kind: 'markdown', document: { ...document } },
       getRecentFiles: async () => [{ path: document.path, name: document.name }, { path: epubFile.path, name: epubFile.name }],
       onBackground(callback) { window.__background = callback; },
       onBackButton(callback) { window.__back = callback; },
@@ -50,9 +64,14 @@ app.whenReady().then(async () => {
       exit: async () => {},
     };
   `);
-  const mime = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".xhtml": "application/xhtml+xml", ".xml": "application/xml", ".opf": "application/xml" };
+  const mime = { ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm", ".css": "text/css", ".html": "text/html", ".xhtml": "application/xhtml+xml", ".xml": "application/xml", ".opf": "application/xml" };
   server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
+    if (url.pathname === "/_pdf/sample.pdf") {
+      response.setHeader("Content-Type", "application/pdf");
+      response.end(samplePdf);
+      return;
+    }
     if (url.pathname.startsWith("/_epub/")) {
       const entry = zip.file(url.pathname.slice("/_epub/".length));
       if (!entry) { response.writeHead(404).end(); return; }
@@ -105,7 +124,7 @@ app.whenReady().then(async () => {
   await win.loadURL(`http://127.0.0.1:${server.address().port}/`);
   console.log("Reader page loaded");
   await waitFor("!!window.__back");
-  await run(`document.body.classList.add('platform-android'); const css = document.createElement('link'); css.rel='stylesheet'; css.href='/web/mobile.css'; document.head.append(css); document.querySelector('#openMarkdownButton').click()`);
+  await run(`document.body.classList.add('platform-android'); const css = document.createElement('link'); css.rel='stylesheet'; css.href='/web/mobile.css'; document.head.append(css); window.__nextOpenKind = 'markdown'; document.querySelector('#openFileButton').click()`);
   await waitFor("document.querySelector('#markdownViewer .toastui-editor-contents h1')?.textContent === '모바일 읽기 검사'");
   await run("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
   assert.equal(await run("document.body.classList.contains('sidebar-collapsed') && document.body.classList.contains('settings-collapsed')"), true);
@@ -224,7 +243,7 @@ app.whenReady().then(async () => {
   await fs.writeFile(path.join(root, 'build/mobile-fullscreen-smoke.png'), (await win.webContents.capturePage()).toPNG());
   await run('window.__back()');
   await waitFor("!document.body.classList.contains('mobile-fullscreen')");
-  await run("document.querySelector('#openMarkdownButton').click()");
+  await run("window.__nextOpenKind = 'markdown'; document.querySelector('#openFileButton').click()");
   await waitFor("document.querySelector('#markdownViewer')?.textContent.includes('모바일 읽기 검사')");
   const mdFont = "JSON.parse(localStorage.getItem('minsepubviewer.reading-settings:/app/documents/test.md') || '{}').fontSize";
   await pinch(80,120,'#markdownViewer');
@@ -253,8 +272,20 @@ app.whenReady().then(async () => {
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.querySelector('#markdownViewer')?.textContent.includes('공유 받은 문서')");
   assert.ok(await run("document.querySelector('.document-tab.is-active').textContent.includes('shared.md')"), 'Incoming document takes priority after session restoration');
+  await run("window.__nextOpenKind = 'pdf'; document.querySelector('#mobileOpenFile').click()");
+  await waitFor("document.body.classList.contains('pdf-mode') && document.querySelector('#mobilePageLabel').textContent === '1 / 3' && document.querySelector('#pdfViewer .page canvas')");
+  const pdfBox = await run("(() => { const r = document.querySelector('#pdfContainer').getBoundingClientRect(); return { x: r.left + r.width / 2, bottom: r.top + r.height * 0.85 }; })()");
+  await touch({ x: pdfBox.x, y: pdfBox.bottom });
+  await waitFor("document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
+  await run("window.__background()");
+  await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
+  await waitFor("document.body.classList.contains('pdf-mode') && document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
+  await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");
+  await waitFor("document.documentElement.lang === 'en' && document.querySelector('#mobileOpenFile').textContent === 'Open file' && document.querySelector('#bookmarksTab').textContent === 'Bookmarks' && document.querySelector('#mobilePrevButton').textContent === 'Prev'");
+  await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
+  await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, pinch in/out, fullscreen and center tap, full reader height, recent/open documents menus, page gestures, bookmarks and draft recovery (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, pinch in/out, fullscreen and center tap, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);

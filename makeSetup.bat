@@ -61,7 +61,7 @@ if %BUILD_SEQ% LSS 10 (
 )
 set "BUILD_NUMBER=%BUILD_DATE%.%SEQ_PAD%"
 set "DISPLAY_VERSION=%APP_VERSION%.%BUILD_NUMBER%"
-set "OUT_FILE=MinsEpubViewer-%DISPLAY_VERSION%-setup.exe"
+set "OUT_FILE=MinsReader-%DISPLAY_VERSION%-setup.exe"
 
 echo Preparing setup build %DISPLAY_VERSION%
 
@@ -81,8 +81,8 @@ echo Building Electron package...
 call npm.cmd run build
 if errorlevel 1 exit /b 1
 
-if not exist "%BUILD_DIR%\win-unpacked\Mins EPUB Viewer.exe" (
-  echo Expected Electron build output was not found: %BUILD_DIR%\win-unpacked\Mins EPUB Viewer.exe
+if not exist "%BUILD_DIR%\win-unpacked\Mins Reader.exe" (
+  echo Expected Electron build output was not found: %BUILD_DIR%\win-unpacked\Mins Reader.exe
   exit /b 1
 )
 

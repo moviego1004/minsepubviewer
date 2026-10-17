@@ -1,6 +1,6 @@
 {
   "appId": "com.mins.epubviewer",
-  "appName": "Mins EPUB Viewer",
+  "appName": "Mins Reader",
   "webDir": "dist/mobile",
   "android": {
     "allowMixedContent": false

@@ -1,3 +1,4 @@
+import { setAttributeText, setText } from "../../web/i18n.js";
 import { getTouchNavigation } from "../core/touchNavigation.js";
 
 export function installReaderTouch(target, { viewport, frame = null, enabled, paginated = () => true, navigate, center = () => {}, fontSize, previewFont = () => {}, setFont, onError = console.error }) {
@@ -76,21 +77,21 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
 export function createMobileNavigation({ app, previous, next, bookmark }) {
   const bar = document.createElement("nav");
   bar.className = "mobile-reader-navigation";
-  bar.setAttribute("aria-label", "페이지 이동");
+  setAttributeText(bar, "aria-label", "mobile.pageNavigation");
   const button = (id, text, action) => {
     const control = document.createElement("button");
     control.id = id;
     control.type = "button";
-    control.textContent = text;
+    setText(control, text);
     control.addEventListener("click", () => void Promise.resolve(action()).catch(console.error));
     return control;
   };
   const label = document.createElement("span");
   label.id = "mobilePageLabel";
   label.setAttribute("aria-live", "polite");
-  const prev = button("mobilePrevButton", "이전", previous);
-  const mark = button("mobileBookmarkButton", "책갈피", bookmark);
-  const following = button("mobileNextButton", "다음", next);
+  const prev = button("mobilePrevButton", "mobile.previous", previous);
+  const mark = button("mobileBookmarkButton", "mobile.bookmark", bookmark);
+  const following = button("mobileNextButton", "mobile.next", next);
   bar.append(prev, label, mark, following);
   app.append(bar);
   return { bar, label, prev, mark, next: following };

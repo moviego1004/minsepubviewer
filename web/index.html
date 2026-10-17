@@ -3,137 +3,155 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Mins EPUB Viewer</title>
+    <title>Mins Reader</title>
     <link rel="stylesheet" href="/web/vendor/toastui-editor-bundle.css">
     <link rel="stylesheet" href="/web/styles.css">
   </head>
   <body>
     <div id="app" class="app">
       <header class="toolbar">
-        <div class="toolbar-tools" aria-label="Reader tools">
-          <label id="openBookButton" class="icon-button file-icon-button" title="Open EPUB" aria-label="Open EPUB">
+        <div class="toolbar-tools" data-i18n-aria-label="toolbar.tools">
+          <label id="openBookButton" class="icon-button file-icon-button" data-i18n-title="toolbar.openBook" data-i18n-aria-label="toolbar.openBook">
             <span class="folder-icon" aria-hidden="true"></span>
-            <input id="bookInput" type="file" multiple accept=".epub,application/epub+zip">
+            <input id="bookInput" type="file" multiple accept=".epub,application/epub+zip,.pdf,application/pdf">
           </label>
 
-          <button id="newMarkdownButton" class="toolbar-action-button" type="button" title="새 Markdown 문서 만들기">새 MD</button>
-          <label id="openMarkdownButton" class="toolbar-action-button markdown-file-button" title="Markdown 파일 열기">
-            MD 열기
-            <input id="markdownInput" type="file" multiple accept=".md,.markdown,.txt,text/markdown,text/plain">
+          <button id="newMarkdownButton" class="toolbar-action-button" type="button" data-i18n="toolbar.newMarkdown" data-i18n-title="toolbar.newMarkdownTitle"></button>
+          <label id="openFileButton" class="toolbar-action-button markdown-file-button" data-i18n-title="toolbar.openFileTitle">
+            <span data-i18n="toolbar.openFile"></span>
+            <input id="fileInput" type="file" multiple accept=".epub,.pdf,.md,.markdown,.txt,application/epub+zip,application/pdf,text/markdown,text/plain">
           </label>
 
           <div class="recent-menu-wrap">
-            <button id="recentFilesButton" class="toolbar-action-button" type="button" aria-haspopup="menu" aria-expanded="false">최근 파일</button>
+            <button id="recentFilesButton" class="toolbar-action-button" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n="toolbar.recent"></button>
             <div id="recentFilesMenu" class="recent-files-menu" role="menu" hidden></div>
           </div>
 
-          <button id="leftPanelToggle" class="icon-button panel-toggle" type="button" title="Toggle contents panel" aria-label="Toggle contents panel" aria-pressed="true">
+          <button id="leftPanelToggle" class="icon-button panel-toggle" type="button" data-i18n-title="toolbar.toggleContents" data-i18n-aria-label="toolbar.toggleContents" aria-pressed="true">
             <span class="panel-icon panel-icon-left" aria-hidden="true"></span>
           </button>
 
-          <button id="rightPanelToggle" class="icon-button panel-toggle" type="button" title="Toggle view settings" aria-label="Toggle view settings" aria-pressed="true">
+          <button id="rightPanelToggle" class="icon-button panel-toggle" type="button" data-i18n-title="toolbar.toggleSettings" data-i18n-aria-label="toolbar.toggleSettings" aria-pressed="true">
             <span class="panel-icon panel-icon-right" aria-hidden="true"></span>
           </button>
 
           <span class="toolbar-separator" aria-hidden="true"></span>
 
-          <button id="prevButton" class="icon-button" type="button" title="Previous page" aria-label="Previous page">
+          <button id="prevButton" class="icon-button" type="button" data-i18n-title="toolbar.previousPage" data-i18n-aria-label="toolbar.previousPage">
             <span class="chevron-icon chevron-left" aria-hidden="true"></span>
           </button>
           <span id="pageLabel" class="page-label">1 / 5</span>
-          <button id="nextButton" class="icon-button" type="button" title="Next page" aria-label="Next page">
+          <button id="nextButton" class="icon-button" type="button" data-i18n-title="toolbar.nextPage" data-i18n-aria-label="toolbar.nextPage">
             <span class="chevron-icon chevron-right" aria-hidden="true"></span>
           </button>
 
-          <button id="bookmarkButton" class="icon-button" type="button" title="Bookmark" aria-label="Bookmark">
+          <button id="bookmarkButton" class="icon-button" type="button" data-i18n-title="toolbar.bookmark" data-i18n-aria-label="toolbar.bookmark">
             <span class="bookmark-icon" aria-hidden="true"></span>
           </button>
 
           <span class="toolbar-separator" aria-hidden="true"></span>
 
-          <button id="prevSearchResultButton" class="icon-button search-nav-button" type="button" title="Previous search result" aria-label="Previous search result">
+          <button id="prevSearchResultButton" class="icon-button search-nav-button" type="button" data-i18n-title="toolbar.previousResult" data-i18n-aria-label="toolbar.previousResult">
             <span class="search-step-icon search-step-up" aria-hidden="true"></span>
           </button>
-          <button id="nextSearchResultButton" class="icon-button search-nav-button" type="button" title="Next search result" aria-label="Next search result">
+          <button id="nextSearchResultButton" class="icon-button search-nav-button" type="button" data-i18n-title="toolbar.nextResult" data-i18n-aria-label="toolbar.nextResult">
             <span class="search-step-icon search-step-down" aria-hidden="true"></span>
           </button>
 
           <span class="toolbar-separator" aria-hidden="true"></span>
 
-          <div class="view-mode-toggle" role="group" aria-label="Reading mode">
-            <button id="paginatedModeButton" class="view-mode-button" type="button">Page</button>
-            <button id="continuousModeButton" class="view-mode-button" type="button">Scroll</button>
+          <div class="view-mode-toggle" role="group" data-i18n-aria-label="toolbar.readingMode">
+            <button id="paginatedModeButton" class="view-mode-button" type="button" data-i18n="toolbar.paginated"></button>
+            <button id="continuousModeButton" class="view-mode-button" type="button" data-i18n="toolbar.continuous"></button>
           </div>
 
-          <button id="textOnlyToolbarButton" class="icon-button text-only-toolbar-button" type="button" title="Text only" aria-label="Text only" aria-pressed="false">
+          <button id="textOnlyToolbarButton" class="icon-button text-only-toolbar-button" type="button" data-i18n-title="toolbar.textOnly" data-i18n-aria-label="toolbar.textOnly" aria-pressed="false">
             <span class="text-only-icon" aria-hidden="true"></span>
           </button>
 
-          <button id="exportMarkdownButton" class="toolbar-action-button" type="button" title="EPUB 내용을 Markdown 파일로 변환" disabled>md 파일 변환</button>
+          <div id="pdfActions" class="pdf-actions" role="group" data-i18n-aria-label="pdf.tools" hidden>
+            <button id="pdfZoomOutButton" class="toolbar-action-button pdf-icon-button" type="button" data-i18n-title="pdf.zoomOut" data-i18n-aria-label="pdf.zoomOut">−</button>
+            <select id="pdfZoomSelect" class="pdf-zoom-select" data-i18n-title="pdf.zoom" data-i18n-aria-label="pdf.zoom">
+              <option value="auto" data-i18n="pdf.zoomAuto"></option>
+              <option value="page-width" data-i18n="pdf.zoomWidth"></option>
+              <option value="page-fit" data-i18n="pdf.zoomPage"></option>
+              <option value="page-actual" data-i18n="pdf.zoomActual"></option>
+              <option value="custom" hidden></option>
+            </select>
+            <button id="pdfZoomInButton" class="toolbar-action-button pdf-icon-button" type="button" data-i18n-title="pdf.zoomIn" data-i18n-aria-label="pdf.zoomIn">+</button>
+            <button id="pdfRotateButton" class="toolbar-action-button pdf-icon-button" type="button" data-i18n-title="pdf.rotate" data-i18n-aria-label="pdf.rotate">↻</button>
+            <button id="pdfSpreadButton" class="toolbar-action-button" type="button" aria-pressed="false" data-i18n="pdf.spread"></button>
+          </div>
+
+          <button id="fullscreenButton" class="icon-button fullscreen-button" type="button" data-i18n-title="toolbar.fullscreen" data-i18n-aria-label="toolbar.fullscreen" aria-pressed="false">
+            <span class="fullscreen-icon" aria-hidden="true"></span>
+          </button>
+
+          <button id="exportMarkdownButton" class="toolbar-action-button" type="button" data-i18n-title="toolbar.exportMarkdownTitle" disabled></button>
           <div id="markdownActions" class="markdown-actions" hidden>
-            <button id="markdownEditButton" class="toolbar-action-button is-active" type="button">편집</button>
-            <button id="markdownViewButton" class="toolbar-action-button" type="button">보기</button>
-            <button id="markdownLargeModeButton" class="toolbar-action-button" type="button" hidden>대용량 모드</button>
-            <button id="saveMarkdownButton" class="toolbar-action-button" type="button">저장</button>
-            <button id="saveMarkdownAsButton" class="toolbar-action-button" type="button">다른 이름으로</button>
-            <button id="closeMarkdownButton" class="toolbar-action-button" type="button">탭 닫기</button>
+            <button id="markdownEditButton" class="toolbar-action-button is-active" type="button" data-i18n="markdown.edit"></button>
+            <button id="markdownViewButton" class="toolbar-action-button" type="button" data-i18n="markdown.view"></button>
+            <button id="markdownLargeModeButton" class="toolbar-action-button" type="button" data-i18n="markdown.largeMode" hidden></button>
+            <button id="saveMarkdownButton" class="toolbar-action-button" type="button" data-i18n="markdown.save"></button>
+            <button id="saveMarkdownAsButton" class="toolbar-action-button" type="button" data-i18n="markdown.saveAs"></button>
+            <button id="closeMarkdownButton" class="toolbar-action-button" type="button" data-i18n="markdown.closeTab"></button>
           </div>
         </div>
 
         <div class="book-title">
-          <span id="bookTitle">Open a book</span>
-          <small id="bookMeta">Choose an EPUB file to render the book body.</small>
+          <span id="bookTitle"></span>
+          <small id="bookMeta"></small>
         </div>
       </header>
 
-      <nav id="documentTabs" class="document-tabs" aria-label="열린 문서" hidden></nav>
+      <nav id="documentTabs" class="document-tabs" data-i18n-aria-label="tabs.label" hidden></nav>
 
       <section class="workspace">
         <aside class="sidebar">
           <div class="brand">
             <span class="brand-mark">M</span>
             <div>
-              <strong>Minse EPUB</strong>
-              <small>PC Reader</small>
+              <strong data-i18n="app.name"></strong>
+              <small data-i18n="app.platformDesktop"></small>
             </div>
           </div>
 
-          <div class="sidebar-tabs" role="tablist" aria-label="Book panels">
-            <button id="tocTab" class="sidebar-tab" type="button" role="tab" aria-controls="tocPanel">목차</button>
-            <button id="searchTab" class="sidebar-tab" type="button" role="tab" aria-controls="searchPanel">검색</button>
-            <button id="bookmarksTab" class="sidebar-tab" type="button" role="tab" aria-controls="bookmarksPanel">북마크</button>
+          <div class="sidebar-tabs" role="tablist" data-i18n-aria-label="sidebar.panels">
+            <button id="tocTab" class="sidebar-tab" type="button" role="tab" aria-controls="tocPanel" data-i18n="sidebar.toc"></button>
+            <button id="searchTab" class="sidebar-tab" type="button" role="tab" aria-controls="searchPanel" data-i18n="sidebar.search"></button>
+            <button id="bookmarksTab" class="sidebar-tab" type="button" role="tab" aria-controls="bookmarksPanel" data-i18n="sidebar.bookmarks"></button>
           </div>
 
           <section id="tocPanel" class="panel sidebar-tab-panel" role="tabpanel" aria-labelledby="tocTab">
-            <h2>Contents</h2>
-            <div id="tocList" class="empty">Open an EPUB to load its contents.</div>
+            <h2 data-i18n="toc.heading"></h2>
+            <div id="tocList" class="empty"></div>
           </section>
 
           <section id="searchPanel" class="panel sidebar-tab-panel search-panel" role="tabpanel" aria-labelledby="searchTab">
-            <h2>Search</h2>
+            <h2 data-i18n="search.heading"></h2>
             <form id="searchForm" class="search-form">
-              <input id="searchInput" type="search" placeholder="Find in book" autocomplete="off">
-              <button id="searchButton" class="secondary-button" type="submit">Search</button>
+              <input id="searchInput" type="search" data-i18n-placeholder="search.placeholder" autocomplete="off">
+              <button id="searchButton" class="secondary-button" type="submit" data-i18n="search.button"></button>
             </form>
-            <div id="searchStatus" class="empty">Open an EPUB to search.</div>
+            <div id="searchStatus" class="empty"></div>
             <div id="searchResults" class="search-results"></div>
           </section>
 
           <section id="bookmarksPanel" class="panel sidebar-tab-panel" role="tabpanel" aria-labelledby="bookmarksTab">
-            <h2>Bookmarks</h2>
-            <div id="bookmarkList" class="empty">No bookmarks yet.</div>
+            <h2 data-i18n="bookmarks.heading"></h2>
+            <div id="bookmarkList" class="empty"></div>
             <div id="markdownHighlights" class="markdown-highlights" hidden>
-              <h2>Highlights</h2>
-              <div id="markdownHighlightList" class="empty">No highlights yet.</div>
+              <h2 data-i18n="highlights.heading"></h2>
+              <div id="markdownHighlightList" class="empty"></div>
             </div>
           </section>
         </aside>
 
         <main class="reader-shell">
         <div id="selectionToolbar" class="selection-toolbar" hidden>
-          <button id="yellowSelectionButton" class="selection-tool-button swatch-yellow" type="button" title="Yellow highlight" aria-label="Yellow highlight"></button>
-          <button id="orangeSelectionButton" class="selection-tool-button swatch-orange" type="button" title="Orange highlight" aria-label="Orange highlight"></button>
-          <button id="underlineSelectionButton" class="selection-tool-button underline-tool" type="button" title="Underline" aria-label="Underline"></button>
+          <button id="yellowSelectionButton" class="selection-tool-button swatch-yellow" type="button" data-i18n-title="selection.yellow" data-i18n-aria-label="selection.yellow"></button>
+          <button id="orangeSelectionButton" class="selection-tool-button swatch-orange" type="button" data-i18n-title="selection.orange" data-i18n-aria-label="selection.orange"></button>
+          <button id="underlineSelectionButton" class="selection-tool-button underline-tool" type="button" data-i18n-title="selection.underline" data-i18n-aria-label="selection.underline"></button>
         </div>
         <section id="markdownWorkspace" class="markdown-workspace" hidden>
           <div id="markdownEditor" class="markdown-editor"></div>
@@ -142,27 +160,35 @@
         <section id="contentRow" class="content-row">
           <article id="reader" class="reader" tabindex="0">
             <div class="sample-image" aria-hidden="true"></div>
-            <h1>Minse EPUB Viewer</h1>
-            <p>
-              Open an EPUB file and the actual book body will render here.
-            </p>
-            <p>
-              Use the mouse wheel or arrow keys to turn pages. Use Ctrl + wheel to zoom.
-              Settings, bookmarks, and the last reading position are saved per book.
-            </p>
-            <blockquote>
-              Text-only mode hides images and background styling so the body text stays central.
-            </blockquote>
+            <h1 data-i18n="app.name"></h1>
+            <p data-i18n="reader.welcome1"></p>
+            <p data-i18n="reader.welcome2"></p>
+            <blockquote data-i18n="reader.welcome3"></blockquote>
           </article>
 
+          <section id="pdfWorkspace" class="pdf-workspace" hidden>
+            <div id="pdfContainer" class="pdf-container" tabindex="0">
+              <div id="pdfViewer" class="pdfViewer"></div>
+            </div>
+          </section>
+
           <aside class="settings">
-            <h2>View Settings</h2>
+            <h2 data-i18n="settings.heading"></h2>
 
             <label>
-              Font
+              <span data-i18n="settings.language"></span>
+              <select id="languageSelect">
+                <option value="system" data-i18n="settings.languageSystem"></option>
+                <option value="ko">한국어</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+
+            <label class="epub-only">
+              <span data-i18n="settings.font"></span>
               <select id="fontFamily">
-                <option value="original">Original</option>
-                <option value="system">System</option>
+                <option value="original" data-i18n="font.original"></option>
+                <option value="system" data-i18n="font.system"></option>
                 <option value="kopub-batang">KoPubWorld Batang</option>
                 <option value="kopub-dotum">KoPubWorld Dotum</option>
                 <option value="noto-serif-kr">Noto Serif KR</option>
@@ -173,75 +199,75 @@
               <small id="fontStatus" class="font-status"></small>
             </label>
 
-            <label>
-              Font size
+            <label class="epub-only">
+              <span data-i18n="settings.fontSize"></span>
               <input id="fontSize" type="range" min="10" max="42" value="18">
             </label>
 
-            <label>
-              Line height
+            <label class="epub-only">
+              <span data-i18n="settings.lineHeight"></span>
               <input id="lineHeight" type="range" min="1.1" max="2.4" step="0.1" value="1.6">
             </label>
 
-            <label>
-              Margin
+            <label class="epub-only">
+              <span data-i18n="settings.margin"></span>
               <input id="margin" type="range" min="0" max="96" value="24">
             </label>
 
             <label>
-              Theme
+              <span data-i18n="settings.theme"></span>
               <select id="theme">
-                <option value="light">Light</option>
-                <option value="sepia">Sepia</option>
-                <option value="dark">Dark</option>
+                <option value="light" data-i18n="theme.light"></option>
+                <option value="sepia" data-i18n="theme.sepia"></option>
+                <option value="dark" data-i18n="theme.dark"></option>
               </select>
             </label>
 
-            <label class="toggle-row">
+            <label class="toggle-row epub-only">
               <input id="textOnly" type="checkbox">
-              Text only
+              <span data-i18n="settings.textOnly"></span>
             </label>
 
             <dl class="status-grid">
               <div>
-                <dt>Zoom</dt>
+                <dt data-i18n="settings.zoom"></dt>
                 <dd id="zoomLabel">100%</dd>
               </div>
               <div>
-                <dt>Location</dt>
+                <dt data-i18n="settings.location"></dt>
                 <dd id="locationLabel">page-1</dd>
               </div>
             </dl>
 
             <section class="annotation-tools">
-              <h2>Annotations</h2>
+              <h2 data-i18n="annotations.heading"></h2>
 
-              <p id="selectionStatus" class="empty">Select text in the book.</p>
+              <p id="selectionStatus" class="empty"></p>
 
               <label>
-                Highlight color
+                <span data-i18n="annotations.highlightColor"></span>
                 <select id="highlightColor">
-                  <option value="yellow">Yellow</option>
-                  <option value="orange">Orange</option>
-                  <option value="green">Green</option>
-                  <option value="pink">Pink</option>
-                  <option value="blue">Blue</option>
-                  <option value="underline">Underline</option>
+                  <option value="yellow" data-i18n="color.yellow"></option>
+                  <option value="orange" data-i18n="color.orange"></option>
+                  <option value="green" data-i18n="color.green"></option>
+                  <option value="pink" data-i18n="color.pink"></option>
+                  <option value="blue" data-i18n="color.blue"></option>
+                  <option value="underline" data-i18n="color.underline"></option>
                 </select>
               </label>
 
-              <button id="highlightButton" class="action-button" type="button" disabled>Add highlight</button>
+              <button id="highlightButton" class="action-button" type="button" data-i18n="annotations.addHighlight" disabled></button>
 
               <label>
-                Note
-                <textarea id="noteBody" rows="4" placeholder="Write a note for the selected text"></textarea>
+                <span data-i18n="annotations.note"></span>
+                <textarea id="noteBody" rows="4" data-i18n-placeholder="annotations.notePlaceholder"></textarea>
               </label>
 
-              <button id="noteButton" class="action-button" type="button" disabled>Add note</button>
+              <button id="noteButton" class="action-button" type="button" data-i18n="annotations.addNote" disabled></button>
 
-              <button id="exportAnnotationsButton" class="secondary-button" type="button" disabled>Export annotations</button>
+              <button id="exportAnnotationsButton" class="secondary-button" type="button" data-i18n="annotations.export" disabled></button>
 
-              <div id="annotationList" class="annotation-list empty">No annotations yet.</div>
+              <div id="annotationList" class="annotation-list empty"></div>
             </section>
           </aside>
         </section>
@@ -250,8 +276,8 @@
     </div>
 
     <div id="fileDropOverlay" class="file-drop-overlay" hidden>
-      <strong>EPUB 또는 Markdown 파일을 여기에 놓으세요</strong>
-      <span>.epub, .md, .markdown</span>
+      <strong data-i18n="drop.title"></strong>
+      <span>.epub, .pdf, .md, .markdown</span>
     </div>
 
     <script src="/node_modules/jszip/dist/jszip.min.js"></script>

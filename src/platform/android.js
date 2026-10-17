@@ -2,8 +2,11 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { createPersistentStorage } from "./storage.js";
 import { hydrateMobileFile } from "./mobile-files.js";
+import { errorText, initI18n, setText, t } from "../../web/i18n.js";
 
 const Documents = registerPlugin("ReaderDocuments");
+// PDF.js legacy build copied by scripts/build-mobile.js, for older Android WebViews.
+globalThis.MINS_PDFJS_BASE = "/vendor/pdfjs/";
 let preview = null;
 
 function closeImagePreview() {
@@ -12,13 +15,13 @@ function closeImagePreview() {
   return true;
 }
 
-async function openImageWindow({ src, alt = "", title = "이미지" }) {
+async function openImageWindow({ src, alt = "", title = t("image.title") }) {
   closeImagePreview();
   const dialog = document.createElement("dialog");
   dialog.className = "mobile-image-preview";
   dialog.setAttribute("aria-label", title);
   const close = document.createElement("button");
-  close.textContent = "닫기";
+  close.textContent = t("common.close");
   close.addEventListener("click", () => dialog.close());
   const image = document.createElement("img");
   image.src = src;
@@ -34,7 +37,7 @@ async function openImageWindow({ src, alt = "", title = "이미지" }) {
 }
 
 async function bootstrap() {
-  if (!Capacitor.isNativePlatform()) throw new Error("Android 앱에서 실행해 주세요.");
+  if (!Capacitor.isNativePlatform()) throw new Error(t("android.runInApp"));
   let storageErrorShown = false;
   const storage = await createPersistentStorage({
     read: async () => (await Documents.readState()).values || {},
@@ -43,7 +46,7 @@ async function bootstrap() {
       console.error("Reading data could not be saved", error);
       if (!storageErrorShown) {
         storageErrorShown = true;
-        window.alert("읽기 기록을 저장하지 못했습니다. 기기의 저장 공간을 확인해 주세요.");
+        window.alert(t("android.storageFailed"));
       }
     }
   });
@@ -73,13 +76,19 @@ async function bootstrap() {
       let pending = Promise.resolve();
       return Documents.addListener("externalDocument", event => {
         pending = pending.then(async () => {
-          if (event.error) throw new Error(event.error);
+          if (event.error) throw new Error(event.detail ? `${errorText({ message: event.error })}
+${errorText({ message: event.detail })}` : event.error);
           await callback(await hydrate(event.file));
-        }).catch(error => window.alert(error.message || "공유 파일을 열지 못했습니다."));
+        }).catch(error => window.alert(error?.message ? errorText(error) : t("native.sharedOpenFailed")));
       });
     },
     log: (payload) => console.debug(payload.event, payload.details),
-    openEpubFile: async () => (await pick("epub"))?.file || null,
+    // The book button opens EPUB or PDF; the reader picks the tab kind from the file name.
+    openEpubFile: async () => {
+      const result = await pick(null);
+      if (result && result.kind === "markdown") throw new Error("native.kindMismatch");
+      return result?.file || null;
+    },
     openMarkdownFile: async () => (await pick("markdown"))?.document || null,
     openRecentFile: async (path) => hydrate(await Documents.openRecent({ path })),
     getRecentFiles: async () => (await Documents.listRecent()).files || [],
@@ -102,10 +111,12 @@ async function bootstrap() {
     exit: async () => { await storage.flush(); await App.exitApp(); }
   };
   document.body.classList.add("platform-android");
-  document.querySelector(".brand small").textContent = "Android Reader";
-  document.querySelector("#saveMarkdownButton").textContent = "사본 저장";
-  document.querySelector("#saveMarkdownButton").title = "앱 내부 사본에 저장합니다";
-  document.querySelector("#saveMarkdownAsButton").textContent = "파일로 내보내기";
+  initI18n(storage);
+  setText(document.querySelector(".brand small"), "app.platformAndroid");
+  setText(document.querySelector("#saveMarkdownButton"), "markdown.saveCopy");
+  document.querySelector("#saveMarkdownButton").dataset.i18nTitle = "markdown.saveCopyTitle";
+  document.querySelector("#saveMarkdownButton").title = t("markdown.saveCopyTitle");
+  setText(document.querySelector("#saveMarkdownAsButton"), "markdown.exportFile");
   await import("../../web/app.js");
 }
 
@@ -113,6 +124,6 @@ bootstrap().catch((error) => {
   console.error(error);
   const message = document.createElement("p");
   message.className = "mobile-startup-error";
-  message.textContent = `앱을 시작하지 못했습니다. 앱을 다시 실행해 주세요. ${error.message || ""}`;
+  message.textContent = t("android.startFailed", { detail: error?.message ? errorText(error) : "" });
   document.body.replaceChildren(message);
 });

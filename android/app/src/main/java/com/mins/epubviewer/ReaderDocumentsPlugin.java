@@ -43,6 +43,7 @@ public class ReaderDocumentsPlugin extends Plugin {
         });
     }
     private static final long EPUB_LIMIT = EpubArchive.MAX_ARCHIVE;
+    private static final long PDF_LIMIT = 512L * 1024 * 1024;
     private static final long MARKDOWN_LIMIT = 16L * 1024 * 1024;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private volatile boolean pickerActive = false;
@@ -72,20 +73,20 @@ public class ReaderDocumentsPlugin extends Plugin {
                 }
             }
         } catch (RuntimeException error) {
-            notifyListeners("externalDocument", new JSObject().put("error", "전달받은 파일 정보를 읽지 못했습니다."), true);
+            notifyListeners("externalDocument", new JSObject().put("error", "native.sharedInfoFailed"), true);
             return;
         }
         if (uris.isEmpty()) {
-            notifyListeners("externalDocument", new JSObject().put("error", "파일 첨부를 선택해 공유해 주세요. 텍스트 메시지는 파일로 열 수 없습니다."), true);
+            notifyListeners("externalDocument", new JSObject().put("error", "native.shareTextNotFile"), true);
             return;
         }
         io.execute(() -> {
             for (Uri uri : uris) {
                 try {
-                    if (!"content".equals(uri.getScheme()) || (getContext().getPackageName() + ".fileprovider").equals(uri.getAuthority())) throw new IOException("외부 앱이 공유한 문서 파일을 선택해 주세요.");
+                    if (!"content".equals(uri.getScheme()) || (getContext().getPackageName() + ".fileprovider").equals(uri.getAuthority())) throw new IOException("native.selectSharedFile");
                     notifyListeners("externalDocument", new JSObject().put("file", importDocument(uri, null)), true);
                 } catch (Exception error) {
-                    notifyListeners("externalDocument", new JSObject().put("error", "공유한 파일을 열지 못했습니다. " + error.getMessage()), true);
+                    notifyListeners("externalDocument", new JSObject().put("error", "native.sharedOpenFailed").put("detail", error.getMessage()), true);
                 }
             }
         });
@@ -102,7 +103,7 @@ public class ReaderDocumentsPlugin extends Plugin {
 
     private File documentsDir() throws IOException {
         File dir = new File(getContext().getFilesDir(), "reader-documents");
-        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("문서 보관함을 만들지 못했습니다.");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("native.libraryCreateFailed");
         return dir;
     }
 
@@ -135,8 +136,9 @@ public class ReaderDocumentsPlugin extends Plugin {
     private String documentKind(String name) throws IOException {
         String lower = name.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".epub")) return "epub";
+        if (lower.endsWith(".pdf")) return "pdf";
         if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".txt")) return "markdown";
-        throw new IOException("EPUB 또는 Markdown 파일을 선택해 주세요.");
+        throw new IOException("native.chooseSupportedFile");
     }
 
     private String displayName(Uri uri) {
@@ -189,26 +191,27 @@ public class ReaderDocumentsPlugin extends Plugin {
     private JSObject importDocument(Uri uri, String requestedKind) throws Exception {
         String name = displayName(uri);
         String kind = documentKind(name);
-        if (requestedKind != null && !requestedKind.equals(kind)) throw new IOException("선택한 파일 형식을 확인해 주세요.");
-        long limit = kind.equals("epub") ? EPUB_LIMIT : MARKDOWN_LIMIT;
+        if (requestedKind != null && !requestedKind.equals(kind)) throw new IOException("native.kindMismatch");
+        long limit = kind.equals("epub") ? EPUB_LIMIT : kind.equals("pdf") ? PDF_LIMIT : MARKDOWN_LIMIT;
         // Stable within this installation, even when two documents have the same name.
-        File destination = new File(documentsDir(), uriId(uri) + (kind.equals("epub") ? ".epub" : ".md"));
+        File destination = new File(documentsDir(), uriId(uri) + (kind.equals("markdown") ? ".md" : "." + kind));
         // Re-selecting an imported document opens the saved app copy, preserving edits.
         if (!destination.exists()) {
             AtomicFile target = new AtomicFile(destination);
             FileOutputStream output = null;
             try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
-                if (input == null) throw new IOException("문서를 읽지 못했습니다.");
+                if (input == null) throw new IOException("native.readFailed");
                 output = target.startWrite();
                 byte[] buffer = new byte[64 * 1024];
                 long total = 0;
                 int count;
                 while ((count = input.read(buffer)) != -1) {
                     total += count;
-                    if (total > limit) throw new IOException(kind.equals("epub") ? "EPUB은 512MB 이하만 열 수 있습니다." : "Markdown은 16MB 이하만 열 수 있습니다.");
+                    if (total > limit) throw new IOException("native." + kind + "TooLarge");
                     output.write(buffer, 0, count);
                 }
-                if (total == 0 && kind.equals("epub")) throw new IOException("빈 EPUB 파일입니다.");
+                if (total == 0 && kind.equals("epub")) throw new IOException("native.emptyEpub");
+                if (total == 0 && kind.equals("pdf")) throw new IOException("native.emptyPdf");
                 target.finishWrite(output);
                 output = null;
             } catch (Exception error) {
@@ -222,10 +225,10 @@ public class ReaderDocumentsPlugin extends Plugin {
     }
 
     private boolean startPicker(PluginCall call, Intent intent, String callback) {
-        if (pickerActive) { call.reject("이미 파일 선택 창이 열려 있습니다."); return false; }
+        if (pickerActive) { call.reject("native.pickerBusy"); return false; }
         pickerActive = true;
         try { startActivityForResult(call, intent, callback); return true; }
-        catch (Exception error) { pickerActive = false; call.reject("파일 선택 창을 열지 못했습니다.", error); return false; }
+        catch (Exception error) { pickerActive = false; call.reject("native.pickerFailed", error); return false; }
     }
 
     @PluginMethod
@@ -266,7 +269,7 @@ public class ReaderDocumentsPlugin extends Plugin {
     public void openRecent(PluginCall call) {
         work(call, () -> {
             File file = managedFile(call.getString("path"));
-            if (!file.isFile()) throw new IOException("보관함에서 문서를 찾지 못했습니다.");
+            if (!file.isFile()) throw new IOException("native.libraryFileMissing");
             JSONArray entries = readJson("reader-recent.json").optJSONArray("files");
             if (entries != null) for (int i = 0; i < entries.length(); i++) {
                 JSONObject entry = entries.getJSONObject(i);
@@ -277,7 +280,7 @@ public class ReaderDocumentsPlugin extends Plugin {
                     return;
                 }
             }
-            throw new IOException("최근 문서 정보를 찾지 못했습니다.");
+            throw new IOException("native.recentMissing");
         });
     }
 
@@ -285,7 +288,7 @@ public class ReaderDocumentsPlugin extends Plugin {
     public void prepareEpub(PluginCall call) {
         work(call, () -> {
             File file = managedFile(call.getString("path"));
-            if (!file.isFile() || !file.getName().endsWith(".epub")) throw new IOException("보관함의 EPUB 파일을 찾지 못했습니다.");
+            if (!file.isFile() || !file.getName().endsWith(".epub")) throw new IOException("native.libraryEpubMissing");
             EpubArchive.Prepared prepared = EpubArchive.prepare(file, new File(getContext().getCacheDir(), "reader-epubs"));
             call.resolve(new JSObject().put("rootPath", prepared.directory.getAbsolutePath() + "/").put("bookId", prepared.bookId));
         });
@@ -299,10 +302,10 @@ public class ReaderDocumentsPlugin extends Plugin {
 
     private JSObject saveCopy(PluginCall call, boolean newCopy) throws Exception {
         byte[] bytes = call.getString("content", "").getBytes(StandardCharsets.UTF_8);
-        if (bytes.length > MARKDOWN_LIMIT) throw new IOException("Markdown은 16MB 이하만 저장할 수 있습니다.");
+        if (bytes.length > MARKDOWN_LIMIT) throw new IOException("native.markdownSaveTooLarge");
         String path = call.getString("path", "");
         File target = newCopy || path.isEmpty() ? new File(documentsDir(), UUID.randomUUID() + ".md") : managedFile(path);
-        if (!target.getName().endsWith(".md")) throw new IOException("Markdown 사본만 저장할 수 있습니다.");
+        if (!target.getName().endsWith(".md")) throw new IOException("native.markdownCopyOnly");
         writeBytes(new AtomicFile(target), bytes);
         JSObject entry = descriptor(target, markdownName(call.getString("suggestedName")), "markdown");
         remember(entry);
@@ -325,7 +328,7 @@ public class ReaderDocumentsPlugin extends Plugin {
 
     private void createDocument(PluginCall call, String name, String type) {
         if (call.getString("content", "").getBytes(StandardCharsets.UTF_8).length > MARKDOWN_LIMIT) {
-            call.reject("내보내기는 16MB 이하만 지원합니다."); return;
+            call.reject("native.exportTooLarge"); return;
         }
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -344,7 +347,7 @@ public class ReaderDocumentsPlugin extends Plugin {
         Uri uri = result.getData().getData();
         work(call, () -> {
             try (OutputStream output = getContext().getContentResolver().openOutputStream(uri, "wt")) {
-                if (output == null) throw new IOException("파일을 저장할 수 없습니다.");
+                if (output == null) throw new IOException("native.saveFailed");
                 output.write(call.getString("content", "").getBytes(StandardCharsets.UTF_8));
             }
             if ("saveMarkdown".equals(call.getMethodName())) call.resolve(saveCopy(call, true));
@@ -361,7 +364,7 @@ public class ReaderDocumentsPlugin extends Plugin {
     public void writeState(PluginCall call) {
         work(call, () -> {
             JSObject values = call.getObject("values");
-            if (values == null) throw new IOException("저장할 읽기 기록이 없습니다.");
+            if (values == null) throw new IOException("native.noStateToSave");
             writeJson("reader-state.json", values);
             call.resolve();
         });

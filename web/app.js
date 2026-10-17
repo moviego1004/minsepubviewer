@@ -60,11 +60,25 @@ import {
 } from "../src/core/search.js";
 import { DEFAULT_READING_SETTINGS, mergeReadingSettings } from "../src/core/settings.js";
 import { buildTextOnlyCss } from "../src/core/textOnly.js";
+import {
+  errorText,
+  getLanguagePreference,
+  getLocale,
+  initI18n,
+  onLanguageChange,
+  setLanguagePreference,
+  t,
+  tOptional
+} from "./i18n.js";
+import { PdfReader } from "./pdf-reader.js";
+import { formatPdfLocation, isPdfLocation, isPdfRange, parsePdfLocation } from "../src/core/pdfLocation.js";
 
 const STORAGE_KEY = "minsepubviewer.library";
 const STORAGE_BACKUP_KEY = "minsepubviewer.library.backup";
 const UI_STORAGE_KEY = "minsepubviewer.ui";
 const MARKDOWN_ANNOTATIONS_KEY = "minsepubviewer.markdown-annotations";
+
+initI18n(storage);
 let mobileSessionTimer = null;
 let restoringMobileSession = false;
 let savingMobileSession = false;
@@ -90,7 +104,7 @@ function installMobileTouch(target, frame = null) {
     fontSize: () => mergeReadingSettings(state.book.settings, {}).fontSize,
     previewFont: size => mobileUI?.previewFont(size),
     setFont: size => updateSettings({ fontSize: size }),
-    onError: (error) => window.alert(`페이지를 이동하지 못했습니다.\n${error.message || error}`)
+    onError: (error) => window.alert(t("error.pageTurn", { detail: errorText(error) }))
   });
 }
 
@@ -104,6 +118,7 @@ function scheduleMobileSessionSave() {
 
 function saveMobileSession() {
   if (!platform.isMobile || restoringMobileSession) return;
+  flushPdfLocation();
   clearTimeout(mobileSessionTimer);
   savingMobileSession = true;
   try {
@@ -138,7 +153,7 @@ async function restoreMobileSession() {
       if (existing) await activateDocumentTab(existing.id);
       else {
         try { await addDocumentTab(await platform.openRecentFile(lastPath)); }
-        catch (error) { window.alert(`마지막 문서를 다시 열지 못했습니다. 최근 파일에서 선택해 주세요.\n${error.message || error}`); }
+        catch (error) { window.alert(t("error.restoreLast", { detail: errorText(error) })); }
       }
     }
     renderDocumentTabs();
@@ -241,10 +256,13 @@ const state = {
   library: loadLibrary(),
   book: createBookRecord({
     bookId: "sample-book",
-    title: "Minse EPUB Viewer",
+    title: "Mins Reader",
     settings: DEFAULT_READING_SETTINGS
   }),
   epubBook: null,
+  pdf: null,
+  pdfSelection: null,
+  pdfMeta: null,
   rendition: null,
   renditionEventsInstalled: false,
   publicationLayoutMode: "reflowable",
@@ -256,7 +274,7 @@ const state = {
   page: 1,
   pageCount: 5,
   progressLabel: "",
-  bookMeta: "Choose an EPUB file to render the book body.",
+  bookMeta: "",
   contentSamples: new Map(),
   contentWarning: "",
   searchQuery: "",
@@ -306,8 +324,8 @@ const elements = {
   documentTabs: document.querySelector("#documentTabs"),
   bookInput: document.querySelector("#bookInput"),
   newMarkdownButton: document.querySelector("#newMarkdownButton"),
-  openMarkdownButton: document.querySelector("#openMarkdownButton"),
-  markdownInput: document.querySelector("#markdownInput"),
+  openFileButton: document.querySelector("#openFileButton"),
+  fileInput: document.querySelector("#fileInput"),
   fileDropOverlay: document.querySelector("#fileDropOverlay"),
   markdownActions: document.querySelector("#markdownActions"),
   markdownEditButton: document.querySelector("#markdownEditButton"),
@@ -328,6 +346,17 @@ const elements = {
   lineHeight: document.querySelector("#lineHeight"),
   margin: document.querySelector("#margin"),
   theme: document.querySelector("#theme"),
+  languageSelect: document.querySelector("#languageSelect"),
+  pdfWorkspace: document.querySelector("#pdfWorkspace"),
+  pdfContainer: document.querySelector("#pdfContainer"),
+  pdfViewer: document.querySelector("#pdfViewer"),
+  pdfActions: document.querySelector("#pdfActions"),
+  pdfZoomOutButton: document.querySelector("#pdfZoomOutButton"),
+  pdfZoomInButton: document.querySelector("#pdfZoomInButton"),
+  pdfZoomSelect: document.querySelector("#pdfZoomSelect"),
+  pdfRotateButton: document.querySelector("#pdfRotateButton"),
+  pdfSpreadButton: document.querySelector("#pdfSpreadButton"),
+  fullscreenButton: document.querySelector("#fullscreenButton"),
   textOnly: document.querySelector("#textOnly"),
   zoomLabel: document.querySelector("#zoomLabel"),
   locationLabel: document.querySelector("#locationLabel"),
@@ -377,12 +406,17 @@ function persistBook() {
 }
 
 function getCurrentBookmarkLocation() {
+  if (state.mode === "pdf" && state.pdf) return formatPdfLocation({ pageNumber: state.pdf.pageNumber });
   return state.book.lastLocation || `page-${state.page}`;
 }
 
 function hasBookmarkAtCurrentLocation() {
   if (state.mode === "markdown") {
     return getCurrentMarkdownAnnotations().bookmarks.some((bookmark) => bookmark.line === state.markdownCurrentLine);
+  }
+  if (state.mode === "pdf") {
+    const page = state.pdf?.pageNumber;
+    return Boolean(page) && state.book.bookmarks.some((bookmark) => parsePdfLocation(bookmark.location)?.pageNumber === page);
   }
   const location = getCurrentBookmarkLocation();
 
@@ -435,14 +469,14 @@ function getPrimaryFontName(settings) {
 function getFontStatus(settings) {
   if (settings.fontFamily === "original") {
     return {
-      message: "Using the publisher's original font.",
+      message: t("fontStatus.original"),
       warning: false
     };
   }
 
   if (settings.fontFamily === "system") {
     return {
-      message: "Using the system fallback font.",
+      message: t("fontStatus.system"),
       warning: false
     };
   }
@@ -451,7 +485,7 @@ function getFontStatus(settings) {
 
   if (!fontName || !document.fonts?.check) {
     return {
-      message: "Font availability cannot be checked in this environment.",
+      message: t("fontStatus.unknown"),
       warning: false
     };
   }
@@ -460,8 +494,8 @@ function getFontStatus(settings) {
 
   return {
     message: available
-      ? `${fontName} is available.`
-      : `${fontName} is not installed; fallback fonts will be used.`,
+      ? t("fontStatus.available", { font: fontName })
+      : t("fontStatus.missing", { font: fontName }),
     warning: !available
   };
 }
@@ -942,7 +976,10 @@ function showReaderMessage(message) {
 }
 
 function showFileOpenProblem(fileLike, error) {
-  const message = error?.message || "Could not open this EPUB.";
+  const message = tOptional(
+    `epub.problem.${error?.code}`,
+    error?.message ? errorText(error) : t("epub.problem.open-failed")
+  );
 
   showReaderMessage(message);
   state.bookMeta = fileLike?.name
@@ -983,7 +1020,7 @@ function updateContentDiagnostics() {
   const summary = summarizeEpubContent([...state.contentSamples.values()]);
   const warning = summary.warnings[0] || null;
 
-  state.contentWarning = warning?.message || "";
+  state.contentWarning = warning ? tOptional(`epub.warning.${warning.code}`, warning.message) : "";
 
   if (warning) {
     logClient("epub.content.warning", {
@@ -1020,7 +1057,7 @@ function syncRenditionLocation(location = getRenditionLocation()) {
   const percentage = state.epubBook?.locations?.percentageFromCfi?.(cfi);
   const displayed = location?.start?.displayed;
   state.progressLabel = platform.isMobile && displayed
-    ? `${(location.start.index || 0) + 1}장 · ${displayed.page}/${displayed.total}`
+    ? t("epub.progressChapter", { chapter: (location.start.index || 0) + 1, page: displayed.page, total: displayed.total })
     : Number.isFinite(percentage)
     ? `${Math.max(1, Math.round(percentage * 100))}%`
     : state.progressLabel || "EPUB";
@@ -1040,7 +1077,7 @@ async function openEpub(file, arrayBuffer) {
     });
 
     await destroyEpub();
-    showReaderMessage("Opening EPUB...");
+    showReaderMessage(t("epub.opening"));
     elements.reader.classList.add("epub-loaded");
     elements.reader.replaceChildren();
 
@@ -1147,6 +1184,11 @@ function setPage(nextPage) {
 }
 
 async function goToBookmark(bookmark) {
+  if (state.pdf && isPdfLocation(bookmark.location)) {
+    state.pdf.goToLocation(bookmark.location, { keepView: true });
+    return;
+  }
+
   if (state.rendition && isEpubCfi(bookmark.location)) {
     await state.rendition.display(bookmark.location);
     syncRenditionLocation();
@@ -1161,6 +1203,11 @@ async function goToBookmark(bookmark) {
 }
 
 async function goToTocItem(item) {
+  if (state.pdf) {
+    await state.pdf.goToOutlineItem(item);
+    return;
+  }
+
   if (!state.rendition || !item?.href) {
     return;
   }
@@ -1171,6 +1218,11 @@ async function goToTocItem(item) {
 }
 
 async function goPrevious() {
+  if (state.mode === "pdf") {
+    state.pdf?.previous();
+    return;
+  }
+
   if (state.mode === "markdown") {
     navigateMarkdownPage("previous");
     return;
@@ -1187,6 +1239,11 @@ async function goPrevious() {
 }
 
 async function goNext() {
+  if (state.mode === "pdf") {
+    state.pdf?.next();
+    return;
+  }
+
   if (state.mode === "markdown") {
     navigateMarkdownPage("next");
     return;
@@ -1337,6 +1394,14 @@ async function updateSettings(patch) {
     render();
     if (viewer) viewer.scrollTop = ratio * viewer.scrollHeight;
     saveMobileSession();
+    return;
+  }
+  if (state.mode === "pdf") {
+    state.book = updateBookSettings(state.book, patch);
+    persistBook();
+    if (patch.viewMode) state.pdf?.setViewMode(patch.viewMode);
+    render();
+    if (patch.theme) await state.pdf?.setTheme(patch.theme);
     return;
   }
   const previousSettings = mergeReadingSettings(state.book.settings, {});
@@ -1490,14 +1555,17 @@ function renderBookmarks() {
     elements.markdownHighlights.hidden = false;
     if (!annotations.bookmarks.length) {
       elements.bookmarkList.className = "empty";
-      elements.bookmarkList.textContent = "북마크가 없습니다.";
+      elements.bookmarkList.textContent = t("bookmarks.empty");
     } else {
       elements.bookmarkList.className = "";
       elements.bookmarkList.replaceChildren(...annotations.bookmarks.map((bookmark) => {
         const button = document.createElement("button");
         button.className = "list-item";
         button.type = "button";
-        button.textContent = bookmark.label || `${bookmark.line}번 줄`;
+        // Older bookmarks stored the Korean default label; show it in the current language.
+        button.textContent = bookmark.label && !/^\d+번 줄$/.test(bookmark.label)
+          ? bookmark.label
+          : t("markdown.line", { line: bookmark.line });
         button.addEventListener("click", () => goToMarkdownLine(bookmark.line));
         return button;
       }));
@@ -1510,7 +1578,7 @@ function renderBookmarks() {
 
   if (!bookmarks.length) {
     elements.bookmarkList.className = "empty";
-    elements.bookmarkList.textContent = "No bookmarks yet.";
+    elements.bookmarkList.textContent = t("bookmarks.empty");
     return;
   }
 
@@ -1520,7 +1588,10 @@ function renderBookmarks() {
       const button = document.createElement("button");
       button.className = "list-item";
       button.type = "button";
-      button.textContent = bookmark.label || bookmark.location;
+      const pdfLocation = parsePdfLocation(bookmark.location);
+      button.textContent = pdfLocation
+        ? t("bookmarks.pageLabel", { page: pdfLocation.pageNumber })
+        : bookmark.label || bookmark.location;
       button.addEventListener("click", () => {
         goToBookmark(bookmark);
       });
@@ -1532,7 +1603,7 @@ function renderBookmarks() {
 function renderMarkdownHighlights(highlights) {
   if (!highlights.length) {
     elements.markdownHighlightList.className = "empty";
-    elements.markdownHighlightList.textContent = "형광펜이 없습니다.";
+    elements.markdownHighlightList.textContent = t("highlights.empty");
     return;
   }
   elements.markdownHighlightList.className = "";
@@ -1545,11 +1616,13 @@ function renderMarkdownHighlights(highlights) {
     quote.textContent = highlight.quote;
     quote.addEventListener("click", () => goToMarkdownLine(highlight.startLine));
     const meta = document.createElement("small");
-    meta.textContent = `${highlight.startLine}${highlight.endLine !== highlight.startLine ? `–${highlight.endLine}` : ""}번 줄`;
+    meta.textContent = highlight.endLine !== highlight.startLine
+      ? t("markdown.lines", { start: highlight.startLine, end: highlight.endLine })
+      : t("markdown.line", { line: highlight.startLine });
     const remove = document.createElement("button");
     remove.className = "annotation-remove";
     remove.type = "button";
-    remove.textContent = "삭제";
+    remove.textContent = t("common.remove");
     remove.addEventListener("click", () => {
       const annotations = getCurrentMarkdownAnnotations();
       saveCurrentMarkdownAnnotations({ ...annotations, highlights: annotations.highlights.filter((entry) => entry.id !== highlight.id) });
@@ -1579,7 +1652,7 @@ function addCurrentHighlight(style = elements.highlightColor.value) {
 
   const highlight = createHighlight({
     bookId: state.book.bookId,
-    location: state.selectedRange,
+    location: state.pdfSelection?.range === state.selectedRange ? state.pdfSelection.location : state.selectedRange,
     range: state.selectedRange,
     quote: state.selectedQuote,
     color: style
@@ -1601,6 +1674,7 @@ function addCurrentHighlight(style = elements.highlightColor.value) {
     );
   }
 
+  if (state.pdf) finishPdfAnnotation();
   hideSelectionToolbar();
   render();
 }
@@ -1612,7 +1686,7 @@ function addCurrentNote() {
 
   const note = createTextNote({
     bookId: state.book.bookId,
-    location: state.selectedRange,
+    location: state.pdfSelection?.range === state.selectedRange ? state.pdfSelection.location : state.selectedRange,
     range: state.selectedRange,
     quote: state.selectedQuote,
     body: elements.noteBody.value
@@ -1635,10 +1709,15 @@ function addCurrentNote() {
     );
   }
 
+  if (state.pdf) finishPdfAnnotation();
   render();
 }
 
 async function goToAnnotation(annotation) {
+  if (state.pdf && isPdfRange(annotation.range)) {
+    state.pdf.goToRange(annotation.range);
+    return;
+  }
   if (state.rendition && isEpubCfi(annotation.range)) {
     await state.rendition.display(annotation.range);
     syncRenditionLocation();
@@ -1647,6 +1726,10 @@ async function goToAnnotation(annotation) {
 }
 
 async function goToSearchResult(result) {
+  if (state.pdf && result.pdfPage) {
+    state.pdf.goToPage(result.pdfPage);
+    return;
+  }
   if (state.rendition && isEpubCfi(result.cfi)) {
     await state.rendition.display(result.cfi);
     syncRenditionLocation();
@@ -1672,6 +1755,11 @@ async function activateSearchResult(index) {
 }
 
 async function moveSearchResult(direction) {
+  if (state.pdf) {
+    if (state.searchQuery) state.pdf.find(state.searchQuery, { again: true, previous: direction === "previous" });
+    return;
+  }
+
   const nextIndex = getSearchNavigationIndex(
     state.activeSearchResultIndex,
     state.searchResults.length,
@@ -1691,7 +1779,7 @@ function getTocLabelByHref(href) {
     normalizedHref && String(item.href || "").split("#")[0] === normalizedHref
   ));
 
-  return match?.item?.label || normalizedHref || "Search result";
+  return match?.item?.label || normalizedHref || t("search.resultFallback");
 }
 
 async function searchSection(section, query, indexOffset) {
@@ -1721,21 +1809,26 @@ async function searchBook(query) {
   state.activeSearchResultIndex = -1;
   clearSearchHighlights();
 
-  if (!state.epubBook || !state.rendition) {
-    state.searchStatus = "Open an EPUB to search.";
+  if (!state.pdf && (!state.epubBook || !state.rendition)) {
+    state.searchStatus = t("search.openFirst");
     renderSearch();
     return;
   }
 
   if (!canSearch(normalizedQuery)) {
-    state.searchStatus = "Enter at least 2 characters.";
+    state.searchStatus = t("search.minLength");
     renderSearch();
     return;
   }
 
   state.searching = true;
-  state.searchStatus = "Searching...";
+  state.searchStatus = t("search.searching");
   renderSearch();
+
+  if (state.pdf) {
+    state.pdf.find(normalizedQuery);
+    return;
+  }
 
   try {
     const sections = state.epubBook.spine?.spineItems || [];
@@ -1758,15 +1851,15 @@ async function searchBook(query) {
     state.activeSearchResultIndex = results.length ? 0 : -1;
     applySearchHighlights();
     state.searchStatus = results.length
-      ? `${results.length} result${results.length === 1 ? "" : "s"}`
-      : "No results.";
+      ? (results.length === 1 ? t("search.resultsOne") : t("search.results", { count: results.length }))
+      : t("search.noResults");
     logClient("epub.search.done", {
       queryLength: normalizedQuery.length,
       results: results.length
     });
   } catch (error) {
     state.searchResults = [];
-    state.searchStatus = "Search failed for this EPUB.";
+    state.searchStatus = t("search.failed");
     logClient("epub.search.failed", {
       queryLength: normalizedQuery.length,
       error: formatError(error)
@@ -1796,6 +1889,7 @@ function removeAnnotation(annotation) {
     state.rendition.annotations.remove(annotation.range, "highlight");
     applyStoredAnnotations();
   }
+  state.pdf?.refreshHighlights();
 
   persistBook();
   render();
@@ -2177,7 +2271,7 @@ function applyPlainMarkdownEdit(result) {
   textarea.focus();
 }
 
-function applyPlainMarkdownInline(before, after = before, placeholder = "텍스트") {
+function applyPlainMarkdownInline(before, after = before, placeholder = t("mdTool.placeholder")) {
   const textarea = state.markdownTextEditor;
   if (!textarea) return;
 
@@ -2219,14 +2313,14 @@ function renderLargeMarkdownImagePreview() {
   if (!images.length) {
     const empty = document.createElement("p");
     empty.className = "markdown-image-preview-empty";
-    empty.textContent = "Base64 이미지가 없습니다.";
+    empty.textContent = t("mdTool.noImages");
     panel.replaceChildren(empty);
     return;
   }
 
   const header = document.createElement("div");
   header.className = "markdown-image-preview-header";
-  header.textContent = `이미지 미리보기 · ${images.length}개`;
+  header.textContent = t("mdTool.imageHeader", { count: images.length });
   const cards = images.map((item, index) => {
     const figure = document.createElement("figure");
     figure.className = "markdown-image-card";
@@ -2236,7 +2330,7 @@ function renderLargeMarkdownImagePreview() {
     image.loading = "lazy";
     image.decoding = "async";
     const caption = document.createElement("figcaption");
-    caption.textContent = item.alt || `이미지 ${index + 1}`;
+    caption.textContent = item.alt || t("mdTool.imageCaption", { index: index + 1 });
     figure.append(image, caption);
     return figure;
   });
@@ -2256,16 +2350,16 @@ function createLargeMarkdownFormattingToolbar() {
   const toolbar = document.createElement("div");
   toolbar.className = "markdown-large-toolbar";
   toolbar.setAttribute("role", "toolbar");
-  toolbar.setAttribute("aria-label", "대용량 Markdown 서식 도구");
+  toolbar.setAttribute("aria-label", t("mdTool.toolbar"));
 
   const heading = document.createElement("select");
   heading.className = "markdown-format-select";
-  heading.setAttribute("aria-label", "문단 서식");
+  heading.setAttribute("aria-label", t("mdTool.paragraph"));
   [
-    ["", "본문"],
-    ["1", "제목 1"],
-    ["2", "제목 2"],
-    ["3", "제목 3"]
+    ["", t("mdTool.body")],
+    ["1", t("mdTool.heading", { level: 1 })],
+    ["2", t("mdTool.heading", { level: 2 })],
+    ["3", t("mdTool.heading", { level: 3 })]
   ].forEach(([value, label]) => {
     const option = document.createElement("option");
     option.value = value;
@@ -2279,8 +2373,8 @@ function createLargeMarkdownFormattingToolbar() {
   });
 
   const imageToggle = createLargeMarkdownToolbarButton(
-    "이미지 보기",
-    "Base64 이미지 미리보기",
+    t("mdTool.images"),
+    t("mdTool.imagesTitle"),
     toggleLargeMarkdownImagePreview,
     "markdown-image-toggle"
   );
@@ -2288,21 +2382,21 @@ function createLargeMarkdownFormattingToolbar() {
 
   toolbar.append(
     heading,
-    createLargeMarkdownToolbarButton("B", "굵게", () => applyPlainMarkdownInline("**", "**", "굵은 텍스트"), "is-bold"),
-    createLargeMarkdownToolbarButton("I", "기울임꼴", () => applyPlainMarkdownInline("*", "*", "기울임 텍스트"), "is-italic"),
-    createLargeMarkdownToolbarButton("S", "취소선", () => applyPlainMarkdownInline("~~", "~~", "취소선 텍스트"), "is-strike"),
-    createLargeMarkdownToolbarButton("인용", "인용구", () => applyPlainMarkdownBlock("> ")),
-    createLargeMarkdownToolbarButton("• 목록", "글머리 기호", () => applyPlainMarkdownBlock("- ")),
-    createLargeMarkdownToolbarButton("1. 목록", "번호 매기기", () => applyPlainMarkdownBlock((index) => `${index + 1}. `)),
-    createLargeMarkdownToolbarButton("☐", "체크박스", () => applyPlainMarkdownBlock("- [ ] ")),
-    createLargeMarkdownToolbarButton("`코드`", "인라인 코드", () => applyPlainMarkdownInline("`", "`", "code")),
-    createLargeMarkdownToolbarButton("코드 블록", "코드 블록", () => applyPlainMarkdownInline("```\n", "\n```", "code")),
-    createLargeMarkdownToolbarButton("링크", "링크 삽입", () => {
-      const url = window.prompt("링크 주소를 입력하세요.", "https://");
-      if (url) applyPlainMarkdownInline("[", `](${url})`, "링크 텍스트");
+    createLargeMarkdownToolbarButton("B", t("mdTool.bold"), () => applyPlainMarkdownInline("**", "**", t("mdTool.boldText")), "is-bold"),
+    createLargeMarkdownToolbarButton("I", t("mdTool.italic"), () => applyPlainMarkdownInline("*", "*", t("mdTool.italicText")), "is-italic"),
+    createLargeMarkdownToolbarButton("S", t("mdTool.strike"), () => applyPlainMarkdownInline("~~", "~~", t("mdTool.strikeText")), "is-strike"),
+    createLargeMarkdownToolbarButton(t("mdTool.quote"), t("mdTool.quoteTitle"), () => applyPlainMarkdownBlock("> ")),
+    createLargeMarkdownToolbarButton(t("mdTool.bullet"), t("mdTool.bulletTitle"), () => applyPlainMarkdownBlock("- ")),
+    createLargeMarkdownToolbarButton(t("mdTool.numbered"), t("mdTool.numberedTitle"), () => applyPlainMarkdownBlock((index) => `${index + 1}. `)),
+    createLargeMarkdownToolbarButton("☐", t("mdTool.checkbox"), () => applyPlainMarkdownBlock("- [ ] ")),
+    createLargeMarkdownToolbarButton(t("mdTool.inlineCode"), t("mdTool.inlineCodeTitle"), () => applyPlainMarkdownInline("`", "`", "code")),
+    createLargeMarkdownToolbarButton(t("mdTool.codeBlock"), t("mdTool.codeBlock"), () => applyPlainMarkdownInline("```\n", "\n```", "code")),
+    createLargeMarkdownToolbarButton(t("mdTool.link"), t("mdTool.linkTitle"), () => {
+      const url = window.prompt(t("mdTool.linkPrompt"), "https://");
+      if (url) applyPlainMarkdownInline("[", `](${url})`, t("mdTool.linkText"));
     }),
     imageToggle,
-    createLargeMarkdownToolbarButton("WYSIWYG 편집", "WYSIWYG 편집기로 전환", () => {
+    createLargeMarkdownToolbarButton(t("mdTool.wysiwyg"), t("mdTool.wysiwygTitle"), () => {
       void switchLargeMarkdownToWysiwyg();
     }, "markdown-wysiwyg-button")
   );
@@ -2323,13 +2417,13 @@ function createPlainTextMarkdownEditor(content, selectionStart = 0, selectionEnd
   body.className = "markdown-large-editor-body";
   const textarea = document.createElement("textarea");
   textarea.className = "markdown-plain-text-editor";
-  textarea.setAttribute("aria-label", "대용량 Markdown 텍스트 편집기");
+  textarea.setAttribute("aria-label", t("mdTool.textEditor"));
   textarea.spellcheck = false;
   textarea.value = content;
   textarea.addEventListener("input", scheduleMarkdownDocumentSync);
   const imagePreview = document.createElement("aside");
   imagePreview.className = "markdown-image-preview";
-  imagePreview.setAttribute("aria-label", "Markdown 이미지 미리보기");
+  imagePreview.setAttribute("aria-label", t("mdTool.imagePreview"));
   body.append(textarea, imagePreview);
   wrapper.append(toolbar, body);
   elements.markdownEditor.appendChild(wrapper);
@@ -2372,7 +2466,7 @@ function createMarkdownEditor() {
     initialEditType: "wysiwyg",
     previewStyle: "vertical",
     initialValue: state.markdown.content,
-    language: "ko-KR",
+    language: getLocale() === "ko" ? "ko-KR" : "en-US",
     usageStatistics: false,
     autofocus: false,
     events: {
@@ -2402,7 +2496,7 @@ async function switchLargeMarkdownToWysiwyg() {
 
   state.markdownTextEditor = null;
   elements.markdownEditor.replaceChildren();
-  renderMarkdownChrome("WYSIWYG 편집기로 전환 중...");
+  renderMarkdownChrome(t("markdown.switchingWysiwyg"));
   await waitForUiPaint();
   createMarkdownEditor();
   renderMarkdownChrome();
@@ -2412,7 +2506,7 @@ async function switchLargeMarkdownToWysiwyg() {
 async function switchWysiwygToLargeMarkdown() {
   if (!state.markdownEditor || !state.markdown.largeDocument || state.markdown.saving) return;
 
-  renderMarkdownChrome("대용량 텍스트 모드로 전환 중...");
+  renderMarkdownChrome(t("markdown.switchingText"));
   await waitForUiPaint();
   const content = state.markdownEditor.getMarkdown();
   state.markdown.content = content;
@@ -2455,7 +2549,7 @@ function handleLargeMarkdownPaste(event) {
     textarea.focus();
   } catch (error) {
     logClient("markdown.large-paste.failed", { error: formatError(error) });
-    window.alert("대용량 텍스트 편집기로 전환하지 못했습니다. 문서를 다시 열고 붙여넣어 주세요.");
+    window.alert(t("error.switchLargeEditor"));
   }
 }
 
@@ -2549,7 +2643,7 @@ function renderDocumentTabs() {
     detach.className = "document-tab-action";
     detach.type = "button";
     detach.textContent = "↗";
-    detach.title = "새 창에서 열기";
+    detach.title = t("tabs.openInNewWindow");
     detach.hidden = !tab.path || Boolean(dirty) || !platform?.openFileInNewWindow;
     detach.addEventListener("click", () => void platform.openFileInNewWindow(tab.path));
 
@@ -2557,7 +2651,7 @@ function renderDocumentTabs() {
     close.className = "document-tab-action";
     close.type = "button";
     close.textContent = "×";
-    close.title = "탭 닫기";
+    close.title = t("tabs.close");
     close.addEventListener("click", () => void closeDocumentTab(tab.id));
     item.replaceChildren(label, detach, close);
     return item;
@@ -2572,10 +2666,18 @@ async function activateDocumentTab(tabId) {
   snapshotActiveTab();
   destroyMarkdownInstances();
   await destroyEpub();
+  await destroyPdf();
   if (sequence !== state.tabActivationSequence) return;
   state.activeTabId = tab.id;
   if (platform.isMobile && tab.path) storage.setItem("minsepubviewer.last-document", tab.path);
   renderDocumentTabs();
+
+  if (tab.kind === "pdf") {
+    state.mode = "pdf";
+    await openPdfFile(tab.payload.file);
+    if (sequence === state.tabActivationSequence) renderDocumentTabs();
+    return;
+  }
 
   if (tab.kind === "epub") {
     state.mode = "epub";
@@ -2596,7 +2698,7 @@ async function activateDocumentTab(tabId) {
 
 async function addDocumentTab(payload) {
   if (!payload) return;
-  const source = payload.kind === "epub" ? payload.file : payload.document;
+  const source = payload.kind === "markdown" ? payload.document : payload.file;
   if (!source) return;
   const path = source.path || "";
   const duplicate = path && state.tabs.find((tab) => tab.path.toLowerCase() === path.toLowerCase());
@@ -2605,7 +2707,7 @@ async function addDocumentTab(payload) {
     return;
   }
   const tab = {
-    id: createTabId(), kind: payload.kind, title: source.name || "문서", path, payload,
+    id: createTabId(), kind: payload.kind, title: source.name || t("common.document"), path, payload,
     markdown: payload.kind === "markdown" ? {
       name: source.name || "document.md", path, content: source.content || "", savedContent: source.content || "", dirty: false,
       viewMode: source.viewMode === "view" ? "view" : "edit", saving: false, currentLine: 1, scrollTop: 0
@@ -2625,13 +2727,13 @@ async function addDocumentTab(payload) {
 async function askHowToCloseChangedDocument(tab) {
   if (platform?.confirmSaveChanges) {
     return platform.confirmSaveChanges({
-      name: tab.title || tab.markdown?.name || "문서",
+      name: tab.title || tab.markdown?.name || t("common.document"),
       kind: tab.kind
     });
   }
 
-  if (window.confirm(`${tab.title}의 변경 내용을 저장하시겠습니까?`)) return "save";
-  return window.confirm("저장하지 않고 닫으시겠습니까?") ? "discard" : "cancel";
+  if (window.confirm(t("confirm.saveChanges", { name: tab.title }))) return "save";
+  return window.confirm(t("confirm.discard")) ? "discard" : "cancel";
 }
 
 async function resolveUnsavedMarkdownTab(tab) {
@@ -2644,7 +2746,7 @@ async function resolveUnsavedMarkdownTab(tab) {
 
   if (tab.id !== state.activeTabId) {
     const activeTab = getActiveTab();
-    if (activeTab?.kind === "epub" && !await resolveUnsavedEpubTab(activeTab)) return false;
+    if ((activeTab?.kind === "epub" || activeTab?.kind === "pdf") && !await resolveUnsavedEpubTab(activeTab)) return false;
     await activateDocumentTab(tab.id);
   }
 
@@ -2652,7 +2754,7 @@ async function resolveUnsavedMarkdownTab(tab) {
 }
 
 function getPendingEpubEdits(tab) {
-  if (tab.id !== state.activeTabId || tab.kind !== "epub" || state.mode !== "epub") return null;
+  if (tab.id !== state.activeTabId || tab.kind !== state.mode || !["epub", "pdf"].includes(tab.kind)) return null;
 
   const note = state.book.notes.find((item) => item.id === state.editingNoteId) || null;
   const textarea = note ? elements.annotationList.querySelector(".annotation-edit-input") : null;
@@ -2680,7 +2782,7 @@ async function resolveUnsavedEpubTab(tab) {
 
   if (pending.hasEditedNote) {
     if (!pending.editedBody) {
-      window.alert("메모 내용을 입력한 후 저장해 주세요.");
+      window.alert(t("error.noteEmpty"));
       pending.textarea.focus();
       return false;
     }
@@ -2692,7 +2794,7 @@ async function resolveUnsavedEpubTab(tab) {
 
 async function resolveUnsavedDocumentTab(tab) {
   if (tab.kind === "markdown") return resolveUnsavedMarkdownTab(tab);
-  if (tab.kind === "epub") return resolveUnsavedEpubTab(tab);
+  if (tab.kind === "epub" || tab.kind === "pdf") return resolveUnsavedEpubTab(tab);
   return true;
 }
 
@@ -2711,14 +2813,215 @@ async function closeDocumentTab(tabId) {
   state.activeTabId = "";
   destroyMarkdownInstances();
   await destroyEpub();
+  await destroyPdf();
   const next = state.tabs[Math.min(index, state.tabs.length - 1)];
   if (next) await activateDocumentTab(next.id);
   else {
     if (platform.isMobile) storage.removeItem("minsepubviewer.last-document");
     state.mode = "epub";
-    showReaderMessage("EPUB 또는 Markdown 파일을 열어 주세요.");
+    showReaderMessage(t("reader.openPrompt"));
     render();
     renderDocumentTabs();
+  }
+}
+
+const PDF_SPREAD_KEY = "minsepubviewer.pdf-spread";
+const PDF_LOADING_ID = "pdf-loading";
+const PDF_FIND_NOT_FOUND = 1;
+const PDF_FIND_PENDING = 3;
+let pdfLocationSaveTimer = null;
+
+function flushPdfLocation() {
+  if (!pdfLocationSaveTimer) return;
+  clearTimeout(pdfLocationSaveTimer);
+  pdfLocationSaveTimer = null;
+  if (state.pdf && state.book.bookId !== PDF_LOADING_ID) persistBook();
+}
+
+function getPdfAnnotations() {
+  return [
+    ...state.book.highlights,
+    ...state.book.notes.map((note) => ({ ...note, color: "note" }))
+  ];
+}
+
+function clearPdfSelection() {
+  state.pdfSelection = null;
+  if (state.mode === "pdf") {
+    state.selectedRange = "";
+    state.selectedQuote = "";
+  }
+  hideSelectionToolbar();
+  renderAnnotations();
+}
+
+function finishPdfAnnotation() {
+  state.pdf?.refreshHighlights();
+  state.pdf?.clearSelection();
+  clearPdfSelection();
+}
+
+// A collapsed selection is ignored so the selection survives typing a note in the side panel.
+function handlePdfSelection(selection) {
+  if (!selection || state.mode !== "pdf") return;
+  state.pdfSelection = selection;
+  state.selectedRange = selection.range;
+  state.selectedQuote = selection.quote;
+  const rowRect = elements.contentRow.getBoundingClientRect();
+  const rect = selection.clientRect;
+  elements.selectionToolbar.style.left = `${Math.max(48, rect.left - rowRect.left + rect.width / 2)}px`;
+  elements.selectionToolbar.style.top = `${Math.max(48, rect.top - rowRect.top - 10)}px`;
+  elements.selectionToolbar.hidden = false;
+  renderAnnotations();
+}
+
+function handlePdfLocationChange(location) {
+  if (!state.pdf || state.book.bookId === PDF_LOADING_ID) return;
+  state.book = updateLastLocation(state.book, location);
+  state.progressLabel = t("pdf.progress", { page: state.pdf.pageNumber, total: state.pdf.pageCount });
+  clearTimeout(pdfLocationSaveTimer);
+  pdfLocationSaveTimer = setTimeout(persistBook, 400);
+  elements.locationLabel.textContent = state.progressLabel;
+  renderPageNavigation();
+  renderPdfControls();
+  const bookmarked = hasBookmarkAtCurrentLocation();
+  elements.bookmarkButton.classList.toggle("is-active", bookmarked);
+  elements.bookmarkButton.setAttribute("aria-pressed", String(bookmarked));
+  scheduleMobileSessionSave();
+}
+
+function handlePdfFindUpdate({ state: findState, current, total, pages }) {
+  state.searching = findState === PDF_FIND_PENDING;
+  state.searchResults = pages.map((page, index) => ({
+    index,
+    pdfPage: page.pageNumber,
+    excerpt: t("pdf.searchPage", { page: page.pageNumber, count: page.count }),
+    label: ""
+  }));
+  const selectedPage = state.pdf?.selectedMatchPage;
+  state.activeSearchResultIndex = state.searchResults.findIndex((result) => result.pdfPage === selectedPage);
+  if (total) state.searchStatus = t("pdf.searchStatus", { current, total });
+  else if (findState === PDF_FIND_NOT_FOUND) state.searchStatus = t("search.noResults");
+  renderSearch();
+  elements.prevSearchResultButton.disabled = !total;
+  elements.nextSearchResultButton.disabled = !total;
+}
+
+function renderPdfControls() {
+  if (!state.pdf?.viewer) return;
+  const zoom = String(state.pdf.zoomValue);
+  const preset = ["auto", "page-width", "page-fit", "page-actual"].includes(zoom);
+  const custom = elements.pdfZoomSelect.querySelector("option[value=\"custom\"]");
+  const percent = Math.round(state.pdf.scale * 100);
+  custom.hidden = preset;
+  custom.textContent = t("pdf.zoomCustom", { percent });
+  elements.pdfZoomSelect.value = preset ? zoom : "custom";
+  elements.pdfSpreadButton.classList.toggle("is-active", state.pdf.spread);
+  elements.pdfSpreadButton.setAttribute("aria-pressed", String(state.pdf.spread));
+  elements.zoomLabel.textContent = `${percent}%`;
+}
+
+function describePdfError(error, reader) {
+  if (reader?.passwordCancelled) return t("pdf.passwordCancelled");
+  if (error?.name === "InvalidPDFException") return t("pdf.invalid");
+  if (error?.name === "PasswordException") return t("pdf.passwordRetry");
+  if (/dynamically imported module|Failed to fetch/i.test(error?.message || "")) return t("pdf.loadLibraryFailed");
+  return error?.message ? errorText(error) : t("pdf.openFailed");
+}
+
+async function destroyPdf() {
+  clearTimeout(pdfLocationSaveTimer);
+  const reader = state.pdf;
+  if (!reader) return;
+  state.pdf = null;
+  state.pdfSelection = null;
+  if (state.book.bookId.startsWith("pdf-") && state.book.bookId !== PDF_LOADING_ID) persistBook();
+  hideSelectionToolbar();
+  state.toc = [];
+  state.searchResults = [];
+  state.activeSearchResultIndex = -1;
+  state.searchStatus = "";
+  state.searching = false;
+  state.progressLabel = "";
+  state.selectedRange = "";
+  state.selectedQuote = "";
+  await reader.destroy();
+}
+
+async function openPdfFile(fileLike) {
+  const name = fileLike?.name || "document.pdf";
+  const filePath = fileLike?.path || name;
+  logClient("pdf.file.selected", { name, size: fileLike?.size, source: fileLike?.path ? platform.kind : "browser" });
+  state.mode = "pdf";
+  state.pdfMeta = null;
+  state.book = createBookRecord({ bookId: PDF_LOADING_ID, title: name.replace(/\.pdf$/i, ""), filePath, settings: state.book.settings });
+  state.toc = [];
+  state.progressLabel = "";
+  state.bookMeta = t("pdf.opening");
+  render();
+
+  const reader = new PdfReader({
+    container: elements.pdfContainer,
+    viewer: elements.pdfViewer,
+    isMobile: platform.isMobile,
+    requestPassword: (retry) => window.prompt(t(retry ? "pdf.passwordRetry" : "pdf.passwordPrompt")),
+    onLocationChange: handlePdfLocationChange,
+    onPageChange: () => renderPageNavigation(),
+    onSelectionChange: handlePdfSelection,
+    onFindUpdate: handlePdfFindUpdate,
+    getHighlights: getPdfAnnotations
+  });
+  state.pdf = reader;
+
+  try {
+    // PDF.js takes ownership of the bytes it is given; the tab keeps its own copy.
+    const source = fileLike.pdfUrl
+      ? { url: fileLike.pdfUrl }
+      : { data: new Uint8Array((await readFileArrayBuffer(fileLike)).slice(0)) };
+    const settings = mergeReadingSettings(state.book.settings, {});
+    const info = await reader.open({
+      ...source,
+      theme: settings.theme,
+      viewMode: settings.viewMode,
+      spread: storage.getItem(PDF_SPREAD_KEY) === "true",
+      resolveLocation: (documentId) => {
+        const saved = getBookRecord(state.library, documentId);
+        state.book = saved
+          ? { ...saved, filePath, title: state.book.title }
+          : createBookRecord({ bookId: documentId, title: state.book.title, filePath, settings });
+        return state.book.lastLocation;
+      }
+    });
+    if (state.pdf !== reader) return;
+    state.toc = info.outline;
+    state.pdfMeta = { name, size: ((fileLike.size || 0) / 1024 / 1024).toFixed(2), pages: info.pageCount };
+    state.progressLabel = t("pdf.progress", { page: reader.pageNumber, total: reader.pageCount });
+    persistBook();
+    render();
+    reader.refreshHighlights();
+    logClient("pdf.file.opened", { pages: info.pageCount, restored: Boolean(state.book.lastLocation) });
+  } catch (error) {
+    const message = describePdfError(error, reader);
+    logClient("pdf.file.rejected", { name, error: formatError(error) });
+    if (state.pdf === reader) {
+      state.pdf = null;
+      await reader.destroy();
+      const paragraph = document.createElement("p");
+      paragraph.className = "pdf-message";
+      paragraph.textContent = message;
+      elements.pdfViewer.replaceChildren(paragraph);
+    }
+    state.bookMeta = `${name} - ${message}`;
+    render();
+  }
+}
+
+async function toggleDesktopFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch (error) {
+    logClient("fullscreen.failed", { error: formatError(error) });
   }
 }
 
@@ -2727,6 +3030,10 @@ function getOpenFileKind(name) {
 
   if (extension.endsWith(".epub")) {
     return "epub";
+  }
+
+  if (extension.endsWith(".pdf")) {
+    return "pdf";
   }
 
   if (extension.endsWith(".md") || extension.endsWith(".markdown")) {
@@ -2752,19 +3059,19 @@ async function openDroppedFile(file) {
   const kind = getOpenFileKind(file?.name);
 
   if (!kind) {
-    window.alert("EPUB 또는 Markdown 파일(.epub, .md, .markdown)만 열 수 있습니다.");
+    window.alert(t("error.unsupportedFile"));
     return;
   }
 
   try {
     const filePath = getDroppedFilePath(file);
 
-    if (kind === "epub") {
-      await addDocumentTab({ kind: "epub", file: {
+    if (kind === "epub" || kind === "pdf") {
+      await addDocumentTab({ kind, file: {
         name: file.name,
         path: filePath,
         size: file.size,
-        type: file.type || "application/epub+zip",
+        type: file.type || (kind === "pdf" ? "application/pdf" : "application/epub+zip"),
         arrayBuffer: () => file.arrayBuffer()
       }});
       return;
@@ -2777,7 +3084,7 @@ async function openDroppedFile(file) {
     }});
   } catch (error) {
     logClient("file.drop.failed", { error: formatError(error) });
-    window.alert(`${file.name} 파일을 열지 못했습니다.\n${error.message || error}`);
+    window.alert(t("error.openNamed", { name: file.name, detail: errorText(error) }));
   }
 }
 
@@ -2834,7 +3141,7 @@ function installFileDropHandlers(target) {
     if (supported.length) {
       void (async () => { for (const file of supported) await openDroppedFile(file); })();
     } else {
-      window.alert("EPUB 또는 Markdown 파일(.epub, .md, .markdown)만 열 수 있습니다.");
+      window.alert(t("error.unsupportedFile"));
     }
   }, true);
 }
@@ -2930,7 +3237,7 @@ async function saveMarkdown(saveAs = false) {
     return true;
   } catch (error) {
     logClient("markdown.save.failed", { error: formatError(error) });
-    window.alert(`Markdown 저장에 실패했습니다.\n${error.message || error}`);
+    window.alert(t("error.saveMarkdown", { detail: errorText(error) }));
     return false;
   } finally {
     state.markdown.saving = false;
@@ -3113,15 +3420,15 @@ function renderAnnotations() {
 
   elements.selectionStatus.className = state.selectedRange ? "selection-status" : "empty";
   elements.selectionStatus.textContent = state.selectedRange
-    ? `Selected: ${state.selectedQuote.slice(0, 80)}`
-    : "Select text in the book.";
+    ? t("annotations.selected", { quote: state.selectedQuote.slice(0, 80) })
+    : t("annotations.selectText");
   elements.highlightButton.disabled = !state.selectedRange || !state.selectedQuote;
   elements.noteButton.disabled = !state.selectedRange || !state.selectedQuote || !elements.noteBody.value.trim();
   elements.exportAnnotationsButton.disabled = annotations.length === 0;
 
   if (!annotations.length) {
     elements.annotationList.className = "annotation-list empty";
-    elements.annotationList.textContent = "No annotations yet.";
+    elements.annotationList.textContent = t("annotations.empty");
     return;
   }
 
@@ -3142,7 +3449,7 @@ function renderAnnotations() {
       const meta = document.createElement("small");
       meta.textContent = annotation.type === "note"
         ? annotation.body
-        : `Highlight - ${annotation.color}`;
+        : t("annotations.highlightMeta", { color: tOptional(`color.${annotation.color}`, annotation.color) });
 
       if (annotation.type === "note" && state.editingNoteId === annotation.id) {
         const textarea = document.createElement("textarea");
@@ -3156,7 +3463,7 @@ function renderAnnotations() {
         const save = document.createElement("button");
         save.className = "annotation-remove";
         save.type = "button";
-        save.textContent = "Save";
+        save.textContent = t("common.save");
         save.addEventListener("click", () => {
           saveEditedNote(annotation, textarea);
         });
@@ -3164,7 +3471,7 @@ function renderAnnotations() {
         const cancel = document.createElement("button");
         cancel.className = "annotation-remove";
         cancel.type = "button";
-        cancel.textContent = "Cancel";
+        cancel.textContent = t("common.cancel");
         cancel.addEventListener("click", () => {
           cancelEditingNote();
         });
@@ -3181,7 +3488,7 @@ function renderAnnotations() {
         const edit = document.createElement("button");
         edit.className = "annotation-remove";
         edit.type = "button";
-        edit.textContent = "Edit";
+        edit.textContent = t("common.edit");
         edit.addEventListener("click", () => {
           startEditingNote(annotation);
         });
@@ -3191,7 +3498,7 @@ function renderAnnotations() {
       const remove = document.createElement("button");
       remove.className = "annotation-remove";
       remove.type = "button";
-      remove.textContent = "Remove";
+      remove.textContent = t("common.remove");
       remove.addEventListener("click", () => {
         removeAnnotation(annotation);
       });
@@ -3205,10 +3512,10 @@ function renderAnnotations() {
 
 function renderSearch() {
   elements.searchInput.value = state.searchQuery;
-  elements.searchButton.disabled = state.searching || !state.rendition;
+  elements.searchButton.disabled = state.searching || !(state.rendition || state.pdf);
   elements.searchStatus.className = state.searchResults.length ? "empty search-summary" : "empty";
   elements.searchStatus.textContent = state.searchStatus || (
-    state.rendition ? "Enter a search term." : "Open an EPUB to search."
+    state.rendition || state.pdf ? t("search.enterTerm") : t("search.openFirst")
   );
 
   if (!state.searchResults.length) {
@@ -3283,9 +3590,9 @@ function renderToc() {
 
   if (!items.length) {
     elements.tocList.className = "empty";
-    elements.tocList.textContent = state.rendition
-      ? "This EPUB has no table of contents."
-      : "Open an EPUB to load its contents.";
+    elements.tocList.textContent = state.rendition || state.pdf
+      ? t("toc.none")
+      : t("toc.empty");
     return;
   }
 
@@ -3294,7 +3601,7 @@ function renderToc() {
     ...items.map(({ item, depth }) => {
       const button = document.createElement("button");
       const href = item.href || "";
-      const label = item.label || href || "Untitled";
+      const label = item.label || href || t("toc.untitled");
       button.className = href && state.currentHref && state.currentHref.includes(href.split("#")[0])
         ? "list-item active"
         : "list-item";
@@ -3314,17 +3621,20 @@ function renderToc() {
 function render() {
   const settings = mergeReadingSettings(state.book.settings, {});
 
-  elements.bookTitle.textContent = state.book.title;
+  elements.bookTitle.textContent = state.book.bookId === "sample-book" ? t("book.placeholderTitle") : state.book.title;
   if (state.markdownExporting) {
-    elements.bookMeta.textContent = "Converting EPUB to Markdown...";
+    elements.bookMeta.textContent = t("epub.converting");
   } else if (state.contentWarning) {
     elements.bookMeta.textContent = state.contentWarning;
   } else {
-    elements.bookMeta.textContent = state.bookMeta;
+    elements.bookMeta.textContent = state.mode === "pdf" && state.pdf && state.pdfMeta
+      ? t("pdf.meta", state.pdfMeta)
+      : state.bookMeta || t("book.placeholderMeta");
   }
   renderPageNavigation();
-  elements.locationLabel.textContent = state.rendition
-    ? state.progressLabel || "Saved"
+  if (state.pdf) state.progressLabel = t("pdf.progress", { page: state.pdf.pageNumber, total: state.pdf.pageCount });
+  elements.locationLabel.textContent = state.rendition || state.pdf
+    ? state.progressLabel || t("settings.locationSaved")
     : state.book.lastLocation || "page-1";
   elements.zoomLabel.textContent = `${Math.round(settings.zoom * 100)}%`;
 
@@ -3333,6 +3643,7 @@ function render() {
   elements.lineHeight.value = String(settings.lineHeight);
   elements.margin.value = String(settings.margin);
   elements.theme.value = settings.theme;
+  elements.languageSelect.value = getLanguagePreference();
   elements.textOnly.checked = settings.textOnly;
   const fontStatus = getFontStatus(settings);
   elements.fontStatus.textContent = fontStatus.message;
@@ -3351,7 +3662,7 @@ function render() {
   elements.prevSearchResultButton.disabled = !state.searchResults.length || state.searching;
   elements.nextSearchResultButton.disabled = !state.searchResults.length || state.searching;
   elements.exportMarkdownButton.disabled = !state.epubBook || state.markdownExporting;
-  elements.exportMarkdownButton.textContent = state.markdownExporting ? "변환 중..." : "md 파일 변환";
+  elements.exportMarkdownButton.textContent = state.markdownExporting ? t("toolbar.exporting") : t("toolbar.exportMarkdown");
   elements.paginatedModeButton.classList.toggle("is-active", settings.viewMode === "paginated");
   elements.continuousModeButton.classList.toggle("is-active", settings.viewMode === "continuous");
   elements.textOnlyToolbarButton.classList.toggle("is-active", settings.textOnly);
@@ -3362,6 +3673,10 @@ function render() {
   document.body.classList.toggle("theme-dark", settings.theme === "dark");
   document.body.classList.toggle("theme-sepia", settings.theme === "sepia");
   document.body.classList.toggle("text-only", settings.textOnly);
+  document.body.classList.toggle("pdf-mode", state.mode === "pdf");
+  elements.pdfWorkspace.hidden = state.mode !== "pdf";
+  elements.pdfActions.hidden = state.mode !== "pdf";
+  renderPdfControls();
 
   renderMarkdownChrome();
 
@@ -3375,14 +3690,16 @@ function render() {
 
 function renderPageNavigation() {
   if (mobileNavigation) {
-    const active = state.mode === "epub" ? Boolean(state.rendition) : state.markdown.viewMode === "view";
+    const active = state.mode === "pdf"
+      ? Boolean(state.pdf)
+      : state.mode === "epub" ? Boolean(state.rendition) : state.markdown.viewMode === "view";
     mobileNavigation.bar.hidden = !active;
     const markdown = state.mode === "markdown";
     const pagination = markdown ? getViewportPageState(getMarkdownViewportMetrics()) : null;
     mobileNavigation.label.textContent = markdown ? `${pagination.page} / ${pagination.pageCount}` : state.progressLabel || "EPUB";
     mobileUI?.progress(mobileNavigation.label.textContent);
-    mobileNavigation.prev.disabled = !active || (markdown ? pagination.atStart : Boolean(getRenditionLocation()?.atStart));
-    mobileNavigation.next.disabled = !active || (markdown ? pagination.atEnd : Boolean(getRenditionLocation()?.atEnd));
+    mobileNavigation.prev.disabled = !active || (markdown ? pagination.atStart : Boolean(state.mode === "pdf" ? state.pdf?.atStart : getRenditionLocation()?.atStart));
+    mobileNavigation.next.disabled = !active || (markdown ? pagination.atEnd : Boolean(state.mode === "pdf" ? state.pdf?.atEnd : getRenditionLocation()?.atEnd));
     const bookmarked = hasBookmarkAtCurrentLocation();
     mobileNavigation.mark.classList.toggle("is-active", bookmarked);
     mobileNavigation.mark.setAttribute("aria-pressed", String(bookmarked));
@@ -3392,6 +3709,13 @@ function renderPageNavigation() {
     elements.pageLabel.textContent = `${pagination.page} / ${pagination.pageCount}`;
     elements.prevButton.disabled = state.markdown.viewMode !== "view" || pagination.atStart;
     elements.nextButton.disabled = state.markdown.viewMode !== "view" || pagination.atEnd;
+    return;
+  }
+
+  if (state.mode === "pdf") {
+    elements.pageLabel.textContent = state.pdf ? t("pdf.progress", { page: state.pdf.pageNumber, total: state.pdf.pageCount }) : "PDF";
+    elements.prevButton.disabled = !state.pdf || state.pdf.atStart;
+    elements.nextButton.disabled = !state.pdf || state.pdf.atEnd;
     return;
   }
 
@@ -3421,11 +3745,11 @@ function renderMarkdownChrome(statusMessage = "") {
   state.activeSidebarTab = "bookmarks";
 
   elements.bookTitle.textContent = `${state.markdown.name || "document.md"}${state.markdown.dirty ? " *" : ""}`;
-  const markdownLocation = state.markdown.path || "아직 저장되지 않은 Markdown 문서";
+  const markdownLocation = state.markdown.path || t("markdown.unsaved");
   elements.bookMeta.textContent = state.markdown.saving
-    ? "Markdown 저장 중..."
+    ? t("markdown.saving")
     : statusMessage || (state.markdown.largeDocument
-      ? `${markdownLocation} · ${state.markdown.largeEditMode === "wysiwyg" ? "대용량 WYSIWYG 모드" : "대용량 텍스트 모드"}`
+      ? `${markdownLocation} · ${state.markdown.largeEditMode === "wysiwyg" ? t("markdown.largeWysiwyg") : t("markdown.largeText")}`
       : markdownLocation);
   elements.markdownEditButton.classList.toggle("is-active", !viewing);
   elements.markdownViewButton.classList.toggle("is-active", viewing);
@@ -3441,7 +3765,7 @@ function renderMarkdownChrome(statusMessage = "") {
 elements.bookInput.addEventListener("change", async (event) => {
   const files = Array.from(event.target.files || []);
   elements.bookInput.value = "";
-  for (const file of files) await addDocumentTab({ kind: "epub", file });
+  for (const file of files) await addDocumentTab({ kind: getOpenFileKind(file.name) === "pdf" ? "pdf" : "epub", file });
 });
 
 elements.openBookButton.addEventListener("click", async (event) => {
@@ -3452,31 +3776,33 @@ elements.openBookButton.addEventListener("click", async (event) => {
   event.preventDefault();
   try {
     const file = await platform.openEpubFile();
-    if (file) await addDocumentTab({ kind: "epub", file });
+    if (file) await addDocumentTab({ kind: getOpenFileKind(file.name) === "pdf" ? "pdf" : "epub", file });
   } catch (error) {
-    window.alert(`EPUB 파일을 열지 못했습니다.\n${error.message || error}`);
+    window.alert(t("error.openBook", { detail: errorText(error) }));
   }
 });
 
-elements.openMarkdownButton.addEventListener("click", async (event) => {
-  if (!platform?.openMarkdownFile) {
+// One open button for every supported format; the browser falls back to the file input.
+elements.openFileButton.addEventListener("click", async (event) => {
+  const open = platform?.openDocument || platform?.openFile;
+  if (!open) {
     return;
   }
 
   event.preventDefault();
   try {
-    const document = await platform.openMarkdownFile();
-    if (document) await addDocumentTab({ kind: "markdown", document });
+    const payload = await open();
+    if (payload) await addDocumentTab(payload);
   } catch (error) {
-    logClient("markdown.open.failed", { error: formatError(error) });
-    window.alert(`Markdown 파일을 열지 못했습니다.\n${error.message || error}`);
+    logClient("file.open.failed", { error: formatError(error) });
+    window.alert(t("error.openFile", { detail: errorText(error) }));
   }
 });
 
 elements.newMarkdownButton.addEventListener("click", async () => {
   await addDocumentTab({ kind: "markdown", document: {
     name: "untitled.md",
-    content: "# 새 Markdown 문서\n\n",
+    content: t("markdown.newContent"),
     viewMode: "edit"
   }});
   state.markdown.savedContent = "";
@@ -3485,10 +3811,14 @@ elements.newMarkdownButton.addEventListener("click", async () => {
   render();
 });
 
-elements.markdownInput.addEventListener("change", async (event) => {
+elements.fileInput.addEventListener("change", async (event) => {
   const files = Array.from(event.target.files || []);
-  elements.markdownInput.value = "";
-  for (const file of files) await addDocumentTab({ kind: "markdown", document: { name: file.name, content: await file.text() } });
+  elements.fileInput.value = "";
+  for (const file of files) {
+    const kind = getOpenFileKind(file.name) || "markdown";
+    if (kind === "markdown") await addDocumentTab({ kind, document: { name: file.name, content: await file.text() } });
+    else await addDocumentTab({ kind, file });
+  }
 });
 
 function closeRecentFilesMenu() {
@@ -3533,7 +3863,7 @@ async function toggleRecentFilesMenu() {
     const empty = document.createElement("span");
     empty.className = "recent-file-item";
     empty.setAttribute("role", "status");
-    empty.textContent = "최근에 연 파일이 없습니다.";
+    empty.textContent = t("recent.empty");
     elements.recentFilesMenu.replaceChildren(empty);
     positionRecentFilesMenu();
     return;
@@ -3554,7 +3884,7 @@ async function toggleRecentFilesMenu() {
         const payload = await platform.openRecentFile(entry.path);
         if (payload) await addDocumentTab(payload);
       } catch (error) {
-        window.alert(`최근 파일을 열지 못했습니다.\n${error.message || error}`);
+        window.alert(t("error.openRecent", { detail: errorText(error) }));
       }
     });
     return button;
@@ -3657,12 +3987,16 @@ elements.bookmarkButton.addEventListener("click", () => {
     return;
   }
   const location = getCurrentBookmarkLocation();
-  const exists = state.book.bookmarks.some((bookmark) => bookmark.location === location);
+  // PDF bookmarks mark a page; the stored offset and zoom do not need to match.
+  const sameLocation = (bookmark) => state.mode === "pdf"
+    ? parsePdfLocation(bookmark.location)?.pageNumber === state.pdf?.pageNumber
+    : bookmark.location === location;
+  const exists = state.book.bookmarks.some(sameLocation);
 
   if (exists) {
     state.book = {
       ...state.book,
-      bookmarks: state.book.bookmarks.filter((bookmark) => bookmark.location !== location)
+      bookmarks: state.book.bookmarks.filter((bookmark) => !sameLocation(bookmark))
     };
   } else {
     state.book = {
@@ -3672,9 +4006,11 @@ elements.bookmarkButton.addEventListener("click", () => {
         createBookmark({
           bookId: state.book.bookId,
           location,
-          label: state.rendition
-            ? `${state.progressLabel || "EPUB"} location`
-            : `${state.page} page`
+          label: state.mode === "pdf"
+            ? t("bookmarks.pageLabel", { page: state.pdf?.pageNumber || 1 })
+            : state.rendition
+              ? t("bookmarks.epubLabel", { progress: state.progressLabel || "EPUB" })
+              : t("bookmarks.pageLabel", { page: state.page })
         })
       ]
     };
@@ -3731,11 +4067,50 @@ elements.noteButton.addEventListener("click", () => {
   addCurrentNote();
 });
 elements.exportAnnotationsButton.addEventListener("click", () => {
-  void exportAnnotations().catch((error) => window.alert(`내보내기에 실패했습니다.\n${error.message || error}`));
+  void exportAnnotations().catch((error) => window.alert(t("error.export", { detail: errorText(error) })));
 });
 elements.noteBody.addEventListener("input", () => {
   renderAnnotations();
 });
+elements.pdfZoomOutButton.addEventListener("click", () => state.pdf?.zoomOut());
+elements.pdfZoomInButton.addEventListener("click", () => state.pdf?.zoomIn());
+elements.pdfZoomSelect.addEventListener("change", () => {
+  if (elements.pdfZoomSelect.value !== "custom") state.pdf?.setZoom(elements.pdfZoomSelect.value);
+});
+elements.pdfRotateButton.addEventListener("click", () => state.pdf?.rotate());
+elements.pdfSpreadButton.addEventListener("click", () => {
+  if (!state.pdf) return;
+  state.pdf.setSpread(!state.pdf.spread);
+  storage.setItem(PDF_SPREAD_KEY, String(state.pdf.spread));
+  renderPdfControls();
+});
+elements.pdfContainer.addEventListener("wheel", (event) => {
+  if (!state.pdf || !(event.ctrlKey || event.metaKey)) return;
+  event.preventDefault();
+  if (event.deltaY < 0) state.pdf.zoomIn();
+  else state.pdf.zoomOut();
+}, { passive: false });
+// A new press on the page starts a new selection; presses in the side panel keep it for notes.
+elements.pdfContainer.addEventListener("pointerdown", () => {
+  if (state.pdfSelection) clearPdfSelection();
+});
+elements.selectionToolbar.addEventListener("mousedown", (event) => event.preventDefault());
+elements.fullscreenButton.addEventListener("click", () => void toggleDesktopFullscreen());
+document.addEventListener("fullscreenchange", () => {
+  const active = Boolean(document.fullscreenElement);
+  document.body.classList.toggle("desktop-fullscreen", active);
+  elements.fullscreenButton.classList.toggle("is-active", active);
+  elements.fullscreenButton.setAttribute("aria-pressed", String(active));
+  refreshRenditionLayoutSoon();
+});
+elements.languageSelect.addEventListener("change", () => {
+  setLanguagePreference(elements.languageSelect.value);
+});
+onLanguageChange((locale) => {
+  platform?.setLocale?.(locale);
+  render();
+});
+platform?.setLocale?.(getLocale());
 elements.fontFamily.addEventListener("change", () => {
   updateSettings({ fontFamily: elements.fontFamily.value });
 });
@@ -3756,6 +4131,12 @@ elements.textOnly.addEventListener("change", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "F11" && !platform.isMobile) {
+    event.preventDefault();
+    void toggleDesktopFullscreen();
+    return;
+  }
+
   if (event.key === "Escape" && !elements.recentFilesMenu.hidden) {
     closeRecentFilesMenu();
     elements.recentFilesButton.focus();
@@ -3799,7 +4180,7 @@ platform?.onWindowCloseRequested?.(() => {
   void (async () => {
     snapshotActiveTab();
     const activeTab = getActiveTab();
-    if (activeTab?.kind === "epub" && !await resolveUnsavedEpubTab(activeTab)) {
+    if ((activeTab?.kind === "epub" || activeTab?.kind === "pdf") && !await resolveUnsavedEpubTab(activeTab)) {
       windowCloseInProgress = false;
       platform.completeWindowClose(false);
       return;
@@ -3827,6 +4208,7 @@ platform?.onWindowCloseRequested?.(() => {
 });
 
 window.addEventListener("beforeunload", (event) => {
+  flushPdfLocation();
   if (platform.isMobile) { saveMobileSession(); return; }
   if (windowCloseApproved) return;
   snapshotActiveTab();
@@ -3841,7 +4223,10 @@ platform?.onOpenFile?.((payload) => {
   void openFilePayload(payload);
 });
 platform?.onOpenFileError?.((payload) => {
-  window.alert(`${payload?.name || "파일"}을 열지 못했습니다.\n${payload?.message || "알 수 없는 오류"}`);
+  window.alert(t("error.openNamed", {
+    name: payload?.name || t("common.file"),
+    detail: payload?.message ? errorText({ message: payload.message }) : t("common.unknownError")
+  }));
 });
 platform?.readyForOpenFiles?.();
 
@@ -3854,6 +4239,17 @@ if (platform.isMobile) {
     bookmark: () => elements.bookmarkButton.click() });
   installMobileTouch(elements.reader);
   installMobileTouch(elements.markdownWorkspace);
+  // PDF.js handles pinch zoom itself; taps and swipes turn pages only while the page fits on screen.
+  installReaderTouch(elements.pdfContainer, {
+    viewport: elements.pdfContainer,
+    enabled: () => state.mode === "pdf" && Boolean(state.pdf),
+    paginated: () => state.book.settings.viewMode !== "continuous" &&
+      elements.pdfContainer.scrollHeight <= elements.pdfContainer.clientHeight + 2 &&
+      elements.pdfContainer.scrollWidth <= elements.pdfContainer.clientWidth + 2,
+    navigate: turnMobilePage,
+    center: () => mobileUI?.center(),
+    onError: (error) => window.alert(t("error.pageTurn", { detail: errorText(error) }))
+  });
   let resizeTimer;
   new ResizeObserver(() => {
     clearTimeout(resizeTimer);
@@ -3890,7 +4286,7 @@ if (platform.isMobile) {
       await platform.exit();
     } finally { handlingBack = false; }
   });
-  void restoreMobileSession().catch((error) => window.alert(`문서 복원에 실패했습니다.\n${error.message || error}`))
+  void restoreMobileSession().catch((error) => window.alert(t("error.restoreSession", { detail: errorText(error) })))
     .then(() => platform.onExternalDocument?.(async payload => {
       await addDocumentTab(payload);
       saveMobileSession();

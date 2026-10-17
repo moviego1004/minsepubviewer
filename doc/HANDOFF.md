@@ -1,6 +1,6 @@
 # 다른 PC에서 이어서 작업하기
 
-최종 갱신: 2026-09-28 (한국 시간)
+최종 갱신: 2026-10-17 (한국 시간)
 
 ## 먼저 읽을 문서
 
@@ -15,8 +15,13 @@
 
 - 저장소: https://github.com/moviego1004/minsepubviewer.git
 - 이번 인수인계 대상 브랜치: `master`. 정확한 커밋은 `git log -5 --oneline`으로 확인한다.
+- 앱 이름은 **Mins Reader**(이전 Mins EPUB Viewer). `appId` `com.mins.epubviewer`와 PC 기존 사용자 데이터 폴더는 유지한다.
+- EPUB, Markdown에 더해 **PDF**(PDF.js 6.3.289)를 읽는다. 툴바의 **파일 열기** 하나로 세 형식을 연다. 메뉴·알림은 **한국어/영어** 지원(보기 설정 → 언어).
 - Electron Windows 앱과 Capacitor Android 앱이 `web/`, `src/core/`를 공유한다. 실제 UI는 순수 JavaScript 기반이며 초기 계획의 React는 현재 구현이 아니다.
 - EPUB/Markdown 열기, 읽기 설정, 위치 복원, 책갈피/주석, Markdown 편집 및 내보내기 코드가 있다.
+- PDF: `web/pdf-reader.js`(PDF.js 뷰어 래퍼), `src/core/pdfLocation.js`(위치·형광펜 좌표 문자열). 이어보기(쪽·배율·위치), 목차, 검색, 책갈피, 형광펜/메모(앱 내부 저장, 원본 미수정), 테마, 두 쪽 보기, 회전, PC 전체 화면(F11).
+- 다국어: `src/locales/ko.js`, `en.js`(키 일치 테스트), `web/i18n.js`(`data-i18n` 적용). Electron 대화상자와 Android Java 오류(`native.*` 키)도 같은 사전을 쓴다.
+- iOS는 Mac/Xcode가 없어 보류. HWP/DOC 지원은 검토만 했다(NEXT_TASKS 참고).
 - Android에는 네이티브 문서 가져오기/저장, 다른 앱의 열기/공유 수신, 앱 내부 사본과 상태 저장, 모바일 메뉴/전체 화면/터치 조작이 구현되어 있다.
 - Android `versionName=0.1.3`, `versionCode=4`. 데스크톱 `package.json` 버전은 `0.1.0`으로 서로 다르다. `scripts/bump-version.cjs`는 Android 버전을 변경하지 않는다.
 - 화면 영역에 맞춘 반응형 배치와 ResizeObserver 기반 EPUB 재배치가 있다. Android 최소 API 24(7.0), target/compile API 36이다.
@@ -58,7 +63,16 @@ npm.cmd run android:install
 - 앱 내부 책/주석/읽기 기록과 Codex 채팅은 이 저장소 문서 동기화와 별개다. 앱 데이터의 PC 간 자동 동기화는 구현되지 않았다.
 - 테스트 화면 캡처는 과거 UI 참고 자료이며 현재 버전의 실기기 검증 증거로 간주하지 않는다.
 
-## 이번 검증
+## 이번 검증 (2026-10-17)
+
+- 시작 시 `git fetch` 후 로컬 `master`와 `origin/master`가 `39cef44`로 일치했다.
+- `npm.cmd test`: 119개 통과.
+- `npm.cmd run test:reader`: 통과(모의 Android 연결부, PDF URL 열기·탭 이동·재실행 복원, 한/영 전환 포함). 2026-09-28의 `bounds` 오류는 5회 실행에서 재현되지 않았다.
+- `npm.cmd run test:pdf`(신규): 통과(열기, 목차, 쪽 이동, 책갈피, 형광펜, 검색, 다크 테마, 배율, 재시작 복원, 언어 전환).
+- `npm.cmd run android:sync`: 통과. 실제 `npx electron .`에 PDF 경로를 넘겨 열리는 것을 로그로 확인했다.
+- **미검증**: 이 PC에는 JDK/Android SDK가 없어 `android:apk`(변경된 Java 컴파일)를 실행하지 못했다. 실기기, 패키지된 설치본(NSIS 업그레이드, 프로필 폴더 유지), Electron 파일 대화상자 문구는 확인하지 않았다.
+
+## 이전 검증 (2026-09-28)
 
 - `npm.cmd test`: 107개 통과.
 - `node --check web/app.js`: 통과.

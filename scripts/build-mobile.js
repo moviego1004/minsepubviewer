@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { mkdir, copyFile, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, copyFile, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const output = resolve("dist/mobile");
@@ -13,6 +13,22 @@ for (const name of ["toastui-editor-bundle.js", "toastui-editor-bundle.css", "to
 }
 await copyFile("node_modules/jszip/dist/jszip.min.js", resolve(output, "vendor/jszip.min.js"));
 await copyFile("node_modules/epubjs/dist/epub.min.js", resolve(output, "vendor/epub.min.js"));
+// PDF.js legacy build: it carries the polyfills older Android WebViews need.
+const pdfjs = resolve(output, "vendor/pdfjs");
+await rm(pdfjs, { recursive: true, force: true });
+await mkdir(resolve(pdfjs, "build"), { recursive: true });
+await mkdir(resolve(pdfjs, "web"), { recursive: true });
+for (const name of ["pdf.mjs", "pdf.worker.mjs"]) {
+  await copyFile(`node_modules/pdfjs-dist/legacy/build/${name}`, resolve(pdfjs, "build", name));
+}
+for (const name of ["pdf_viewer.mjs", "pdf_viewer.css"]) {
+  await copyFile(`node_modules/pdfjs-dist/legacy/web/${name}`, resolve(pdfjs, "web", name));
+}
+await cp("node_modules/pdfjs-dist/legacy/web/images", resolve(pdfjs, "web/images"), { recursive: true });
+for (const name of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
+  await cp(`node_modules/pdfjs-dist/${name}`, resolve(pdfjs, name), { recursive: true });
+}
+await copyFile("node_modules/pdfjs-dist/LICENSE", resolve(pdfjs, "LICENSE"));
 const html = (await readFile("web/index.html", "utf8"))
   .replace('src="/node_modules/jszip/dist/jszip.min.js"', 'src="/vendor/jszip.min.js"')
   .replace('src="/node_modules/epubjs/dist/epub.min.js"', 'src="/vendor/epub.min.js"')
