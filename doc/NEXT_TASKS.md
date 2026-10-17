@@ -2,7 +2,7 @@
 
 최종 갱신: 2026-10-17
 
-## 현재 요청 — PDF 지원 범용 뷰어 "Mins Reader" (구현 완료, 커밋 전)
+## 현재 요청 — PDF 지원 범용 뷰어 "Mins Reader" (구현 완료, `fff1c45` 커밋·푸시)
 
 사용자 요청(2026-10-17): EPUB/MD에 더해 PDF도 보는 범용 뷰어로 확장. PC(Windows)와 Android 먼저, iOS는 Mac이 없어 보류. 시작 시 `origin/master`와 로컬이 `39cef44`로 일치함을 확인했다.
 

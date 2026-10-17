@@ -29,3 +29,4 @@
 - 검증 결과: `npm.cmd test` 119 통과, `test:reader` 통과, `test:pdf` 통과, `android:sync` 통과, `npx electron . <pdf>`로 PDF 열림 로그 확인. `test:reader`의 이전 `bounds` 오류는 5회 미재현.
 - 미검증: 이 PC에 JDK/SDK가 없어 `android:apk`(Java 컴파일)·실기기 미실행. 패키지 설치본 업그레이드·프로필 유지, Electron 대화상자 문구, 실제 한글/스캔/대용량 PDF 미확인.
 - HWP/DOC 검토: DOCX는 mammoth 1.13.0(BSD-2) 읽기 전용 변환 가능, HWP는 @ohah/hwpjs 0.1.0-rc.10(MIT, 2026-03) 또는 hwp.js 0.0.3(2022 이후 정체) — 표·이미지 품질 확인 필요, 구형 DOC는 비권장. 구현은 사용자 결정 대기.
+- 커밋/푸시: 사용자 요청으로 `fff1c45`를 `origin/master`에 푸시했다(`39cef44..fff1c45`). 푸시 후 `git status -sb`에서 로컬과 원격 일치 확인.
