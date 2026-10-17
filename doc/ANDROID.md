@@ -42,10 +42,12 @@ SDK 라이선스를 직접 확인하며 설치하려면 `-AcceptSdkLicenses`를 
 ./scripts/setup-android.ps1 -AcceptSdkLicenses
 ```
 
-공식 배포 파일의 SHA-256을 검사하고 현재 사용자 계정에 설치합니다.
+공식 배포 파일의 SHA-256을 검사하고 현재 사용자 계정에 설치합니다. 이 저장소 전용이 아니라 같은 Windows 사용자의
+모든 프로젝트(Android Studio, 다른 Gradle 프로젝트 포함)가 함께 쓰는 위치입니다. 관리자 권한은 필요 없습니다.
 
-- JDK 21: `%LOCALAPPDATA%/MinsAndroid/jdk-21`
-- Android SDK: `%LOCALAPPDATA%/Android/Sdk`
+- JDK 21: `%LOCALAPPDATA%/Programs/Eclipse Adoptium/jdk-21` (`-JdkRoot`로 변경 가능, 2026-10-17 이전에는 `%LOCALAPPDATA%/MinsAndroid/jdk-21`)
+- Android SDK: `%LOCALAPPDATA%/Android/Sdk` (Android Studio 기본 위치, `-SdkRoot`로 변경 가능)
+- 내려받은 설치 파일과 로그: `%LOCALAPPDATA%/Android/setup-downloads`
 - Command-line Tools 22.0, Platform 36, Build Tools 35.0.0/36.0.0, Platform Tools(ADB)
 - 사용자 환경 변수 `JAVA_HOME`, `ANDROID_HOME`과 기존 값을 보존한 `Path` 설정
 
@@ -71,7 +73,7 @@ npm.cmd run android:apk
 
 결과: `android/app/build/outputs/apk/debug/app-debug.apk`
 
-빌드 스크립트는 기본 설치 경로의 Android Studio JDK를 찾습니다. 다른 경로에 설치했다면
+빌드 스크립트는 `JAVA_HOME`이 없으면 Android Studio JDK와 위 기본 JDK 경로를 찾습니다. 다른 경로에 설치했다면
 `JAVA_HOME`에 JDK 디렉터리, `ANDROID_HOME`에 Android SDK 디렉터리를 지정하거나,
 Android Studio에서 프로젝트를 열어 `android/local.properties`를 생성합니다.
 첫 Gradle 빌드는 의존성 다운로드를 위한 인터넷 연결이 필요합니다.
@@ -193,7 +195,12 @@ npm.cmd run android:sync
 **Java/Gradle 컴파일 및 디버그 APK 생성을 완료**했습니다(과거 기록). 실기기 동작 검증은 휴대폰 연결 후 진행합니다.
 
 2026-10-17 PDF·다국어 변경은 `android:sync`와 모의 연결부 `test:reader`(PDF URL 열기·탭 이동·재실행 복원 포함)까지만 확인했습니다.
-이 작업 PC에는 JDK/SDK가 없어 **변경된 Java 플러그인의 컴파일과 APK 생성은 아직 검증하지 않았습니다.**
+2026-10-17 같은 날 이 PC에 `setup-android.ps1`로 JDK 21(Temurin 21.0.12)과 SDK를 설치한 뒤 `npm.cmd run android:apk`로
+**디버그 APK 생성(8.0MB, PDF.js 자산 포함)과 `gradlew testDebugUnitTest`(Java 5개) 통과를 확인**했습니다. 실기기 동작은 아직 확인하지 않았습니다.
+
+설치 스크립트 참고: Windows PowerShell 5.1은 sdkmanager의 stderr 경고를 오류로 처리하고, 파이프로 넘긴 `y` 응답을 `.bat`에 전달하지 못합니다.
+스크립트는 이를 피하려고 응답 파일을 `cmd.exe` 입력으로 넘기고, 선택한 패키지(`--install`)의 라이선스만 동의합니다.
+빌드 스크립트는 `NoDefaultCurrentDirectoryInExePath` 환경에서도 동작하도록 `.gradlew.bat`를 명시합니다.
 
 ## 실기기에서 이어서 확인할 항목
 

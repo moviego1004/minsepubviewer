@@ -70,7 +70,8 @@ npm.cmd run android:install
 - `npm.cmd run test:reader`: 통과(모의 Android 연결부, PDF URL 열기·탭 이동·재실행 복원, 한/영 전환 포함). 2026-09-28의 `bounds` 오류는 5회 실행에서 재현되지 않았다.
 - `npm.cmd run test:pdf`(신규): 통과(열기, 목차, 쪽 이동, 책갈피, 형광펜, 검색, 다크 테마, 배율, 재시작 복원, 언어 전환).
 - `npm.cmd run android:sync`: 통과. 실제 `npx electron .`에 PDF 경로를 넘겨 열리는 것을 로그로 확인했다.
-- **미검증**: 이 PC에는 JDK/Android SDK가 없어 `android:apk`(변경된 Java 컴파일)를 실행하지 못했다. 실기기, 패키지된 설치본(NSIS 업그레이드, 프로필 폴더 유지), Electron 파일 대화상자 문구는 확인하지 않았다.
+- 이후 같은 날 JDK 21과 Android SDK를 이 PC 사용자 공용 위치(`%LOCALAPPDATA%ProgramsEclipse Adoptiumjdk-21`, `%LOCALAPPDATA%AndroidSdk`)에 설치했다. `npm.cmd run android:apk` 성공(8.0MB), `gradlew testDebugUnitTest` 5개 통과. 다른 프로젝트(YTHelper 등)도 같은 `JAVA_HOME`/`ANDROID_HOME`을 쓴다.
+- **미검증**: 처음에는 JDK/SDK가 없어 `android:apk`를 실행하지 못했으나 위와 같이 해결했다. 실기기, 패키지된 설치본(NSIS 업그레이드, 프로필 폴더 유지), Electron 파일 대화상자 문구는 확인하지 않았다.
 
 ## 이전 검증 (2026-09-28)
 

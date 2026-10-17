@@ -29,7 +29,7 @@ public class ReaderFilesTest {
     @Test public void recentPathsCannotEscapeTheLibrary() throws Exception {
         File library = temp.newFolder("library");
         try { DocumentPaths.resolve(library, new File(library, "../private.json").getPath()); fail("Must reject external paths"); }
-        catch (IOException expected) { assertTrue(expected.getMessage().contains("보관함")); }
+        catch (IOException expected) { assertEquals("native.outsideLibrary", expected.getMessage()); }
     }
 
     private void entry(ZipOutputStream zip, String name, String text) throws IOException {
@@ -68,7 +68,7 @@ public class ReaderFilesTest {
         }
         File cache = temp.newFolder("cache");
         try { EpubArchive.prepare(book, cache); fail("Must reject traversal"); }
-        catch (IOException expected) { assertTrue(expected.getMessage().contains("경로")); }
+        catch (IOException expected) { assertEquals("native.invalidEntryPath", expected.getMessage()); }
         assertFalse(new File(cache, "escaped.txt").exists());
         assertFalse(new File(cache, "invalid.epub.unpacked/.reader-complete").exists());
     }

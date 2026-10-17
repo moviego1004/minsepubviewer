@@ -30,3 +30,15 @@
 - 미검증: 이 PC에 JDK/SDK가 없어 `android:apk`(Java 컴파일)·실기기 미실행. 패키지 설치본 업그레이드·프로필 유지, Electron 대화상자 문구, 실제 한글/스캔/대용량 PDF 미확인.
 - HWP/DOC 검토: DOCX는 mammoth 1.13.0(BSD-2) 읽기 전용 변환 가능, HWP는 @ohah/hwpjs 0.1.0-rc.10(MIT, 2026-03) 또는 hwp.js 0.0.3(2022 이후 정체) — 표·이미지 품질 확인 필요, 구형 DOC는 비권장. 구현은 사용자 결정 대기.
 - 커밋/푸시: 사용자 요청으로 `fff1c45`를 `origin/master`에 푸시했다(`39cef44..fff1c45`). 푸시 후 `git status -sb`에서 로컬과 원격 일치 확인.
+
+## 2026-10-17 (계속) — Android 빌드 환경 설치, APK 빌드, HWP 평가
+
+- 사용자 요청: 이 PC에서 Android 빌드(YTHelper 참고), JDK/SDK는 이 프로젝트 전용이 아니라 PC 전체에서 범용으로 쓰도록 설치. 라이선스 동의 승인. PC 설치본은 사용자가 직접 테스트. HWP·HWPX·DOCX 지원 의견 요청, 샘플은 `test/sample`.
+- 확인: YTHelper `local.properties`와 사용자 환경 변수는 `%LOCALAPPDATA%AndroidSdk`, `%LOCALAPPDATA%MinsAndroidjdk-21`을 가리켰지만 두 폴더 모두 없었다. javac/adb/Android Studio도 없음.
+- `scripts/setup-android.ps1`: JDK 기본 위치를 `%LOCALAPPDATA%ProgramsEclipse Adoptiumjdk-21`로 변경(`-JdkRoot`/`-SdkRoot` 지원), 내려받기·로그는 `%LOCALAPPDATA%Androidsetup-downloads`, 남은 빈 임시 폴더 정리, 없는 예전 JDK PATH 항목 제거. PowerShell 5.1에서 sdkmanager stderr 경고로 중단되던 문제와 파이프 응답이 전달되지 않던 문제를 수정(응답 파일 → cmd.exe 입력, `--install` 대상 라이선스만 동의).
+- 설치 중 한 번 `--licenses`로 직접 시험했다가 모든 SDK 라이선스가 기록되어, 필요한 `android-sdk-license` 외 기록 파일은 삭제했다.
+- 설치 결과: Temurin JDK 21.0.12, cmdline-tools 22.0, platform-tools(adb 37.0.1), Platform 36, Build Tools 35.0.0/36.0.0. 사용자 환경 변수 JAVA_HOME/ANDROID_HOME/Path 설정(관리자 권한 없음, 이 Windows 사용자 전체에 적용).
+- `scripts/build-android.js`: 이 환경의 `NoDefaultCurrentDirectoryInExePath=1` 때문에 `gradlew.bat`를 못 찾아 `.gradlew.bat`로 명시. 기본 JDK 탐색 경로도 새 위치로.
+- Java 테스트 `ReaderFilesTest` 2건이 예전 한국어 문구(보관함/경로)를 확인하고 있어 `native.outsideLibrary`/`native.invalidEntryPath` 키 비교로 수정.
+- 검증: `npm.cmd run android:apk` → BUILD SUCCESSFUL, `app-debug.apk` 8.0MB(PDF.js 자산 포함 확인). `gradlew testDebugUnitTest` 5/5 통과. `npm.cmd test` 119 통과. 실기기 미확인.
+- HWP 평가: NEXT_TASKS 참고. `test/sample/`은 `.gitignore`에 추가.

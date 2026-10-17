@@ -1,12 +1,22 @@
-param([switch]$AcceptSdkLicenses)
+# Installs a JDK 21 and Android SDK for the current Windows user, shared by every project:
+# JAVA_HOME, ANDROID_HOME and PATH are set as user environment variables (no administrator rights).
+param(
+    [switch]$AcceptSdkLicenses,
+    [string]$JdkRoot = (Join-Path $env:LOCALAPPDATA 'Programs/Eclipse Adoptium/jdk-21'),
+    # The Android Studio default location, also used by other projects' local.properties.
+    [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android/Sdk')
+)
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$toolsRoot = Join-Path $env:LOCALAPPDATA 'MinsAndroid'
-$sdkRoot = Join-Path $env:LOCALAPPDATA 'Android/Sdk'
-$jdkRoot = Join-Path $toolsRoot 'jdk-21'
-$downloads = Join-Path $toolsRoot 'downloads'
-New-Item -ItemType Directory -Force -Path $downloads, $sdkRoot | Out-Null
+$jdkRoot = [IO.Path]::GetFullPath($JdkRoot)
+$sdkRoot = [IO.Path]::GetFullPath($SdkRoot)
+$toolsRoot = Split-Path -Parent $jdkRoot
+$downloads = Join-Path (Split-Path -Parent $sdkRoot) 'setup-downloads'
+New-Item -ItemType Directory -Force -Path $toolsRoot, $downloads, $sdkRoot | Out-Null
+Get-ChildItem -LiteralPath $toolsRoot, $sdkRoot -Directory -Filter '*-stage-*' |
+    Where-Object { -not (Get-ChildItem -LiteralPath $_.FullName -Force) } |
+    Remove-Item
 
 function Assert-ChildPath([string]$Target, [string]$Root) {
     $resolved = [IO.Path]::GetFullPath($Target)
@@ -39,6 +49,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $jdkRoot 'bin/java.exe'))) {
     Assert-ChildPath $jdkRoot $toolsRoot
     if (Test-Path -LiteralPath $jdkRoot) { throw "Existing incomplete JDK installation: $jdkRoot" }
     Move-Item -LiteralPath $unpacked[0].FullName -Destination $jdkRoot
+    Remove-Item -LiteralPath $stage
     Write-Output "JDK installed: $jdkRoot"
 }
 
@@ -56,6 +67,7 @@ if (-not (Test-Path -LiteralPath $sdkManager)) {
     New-Item -ItemType Directory -Force -Path (Split-Path $cliRoot) | Out-Null
     if (Test-Path -LiteralPath $cliRoot) { throw "Existing incomplete SDK tools installation: $cliRoot" }
     Move-Item -LiteralPath $unpacked -Destination $cliRoot
+    Remove-Item -LiteralPath $stage
 }
 
 $env:JAVA_HOME = $jdkRoot
@@ -64,22 +76,33 @@ $env:Path = "$jdkRoot\bin;$sdkRoot\platform-tools;$env:Path"
 [Environment]::SetEnvironmentVariable('JAVA_HOME', $jdkRoot, 'User')
 [Environment]::SetEnvironmentVariable('ANDROID_HOME', $sdkRoot, 'User')
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-$entries = @($userPath -split ';' | Where-Object { $_ })
+# Drop the JDK entry of the earlier project-specific location once that folder is gone.
+$legacyJdkBin = Join-Path $env:LOCALAPPDATA "MinsAndroid\jdk-21\bin"
+$entries = @($userPath -split ';' | Where-Object { $_ -and -not ($_ -eq $legacyJdkBin -and -not (Test-Path -LiteralPath $_)) })
 foreach ($entry in @("$jdkRoot\bin", "$sdkRoot\platform-tools", "$cliRoot\bin")) {
     if ($entries -notcontains $entry) { $entries += $entry }
 }
 [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
 
 Write-Output 'Installing SDK Platform 36, Build Tools and ADB...'
-$installLog = Join-Path $toolsRoot 'sdk-install.log'
+$installLog = Join-Path $downloads 'sdk-install.log'
 $packages = @('platform-tools', 'platforms;android-36', 'build-tools;35.0.0', 'build-tools;36.0.0')
+# Windows PowerShell turns sdkmanager's stderr warnings into terminating errors; rely on the exit code.
+$ErrorActionPreference = 'Continue'
 if ($AcceptSdkLicenses) {
     # Only the licenses requested by these selected packages are accepted.
-    1..10 | ForEach-Object { 'y' } | & $sdkManager "--sdk_root=$sdkRoot" --install @packages *> $installLog
+    # Windows PowerShell does not feed piped strings to a .bat's stdin, so the answers come from a file.
+    # Answering --install (not --licenses) accepts only the licenses of the selected packages.
+    $answers = Join-Path $downloads 'license-answers.txt'
+    Set-Content -LiteralPath $answers -Value (@('y') * 20) -Encoding Ascii
+    $packageArgs = ($packages | ForEach-Object { '"' + $_ + '"' }) -join ' '
+    & cmd.exe /d /c "`"$sdkManager`" --sdk_root=`"$sdkRoot`" --install $packageArgs < `"$answers`"" *> $installLog
 } else {
     & $sdkManager "--sdk_root=$sdkRoot" --install @packages
 }
-if ($LASTEXITCODE -ne 0) {
+$sdkExitCode = $LASTEXITCODE
+$ErrorActionPreference = 'Stop'
+if ($sdkExitCode -ne 0) {
     if (Test-Path -LiteralPath $installLog) { Get-Content -LiteralPath $installLog -Tail 20 }
     throw 'Android SDK installation failed'
 }

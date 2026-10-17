@@ -5,3 +5,6 @@ build/
 .build-sequence
 dist/
 .npm-cache/
+
+# Personal sample documents for local format checks; never commit.
+test/sample/

@@ -5,7 +5,7 @@ import { resolve, join } from "node:path";
 const env = { ...process.env };
 const studioJava = "C:/Program Files/Android/Android Studio/jbr";
 if (!env.JAVA_HOME && existsSync(join(studioJava, "bin/java.exe"))) env.JAVA_HOME = studioJava;
-const installedJava = env.LOCALAPPDATA && join(env.LOCALAPPDATA, "MinsAndroid/jdk-21");
+const installedJava = env.LOCALAPPDATA && join(env.LOCALAPPDATA, "Programs/Eclipse Adoptium/jdk-21");
 if (!env.JAVA_HOME && installedJava && existsSync(join(installedJava, "bin/java.exe"))) env.JAVA_HOME = installedJava;
 const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
 if (env.JAVA_HOME) env[pathKey] = `${join(env.JAVA_HOME, "bin")}${process.platform === "win32" ? ";" : ":"}${env[pathKey] || ""}`;
@@ -22,7 +22,7 @@ if (!existsSync("android/local.properties") && (!sdk || !existsSync(sdk))) {
 if (sdk && existsSync(sdk)) env.ANDROID_HOME = sdk;
 const windows = process.platform === "win32";
 const command = windows ? (env.ComSpec || join(env.SystemRoot || "C:/Windows", "System32/cmd.exe")) : "./gradlew";
-const result = spawnSync(command, windows ? ["/d", "/c", "gradlew.bat assembleDebug"] : ["assembleDebug"], {
+const result = spawnSync(command, windows ? ["/d", "/c", ".\\gradlew.bat assembleDebug"] : ["assembleDebug"], {
   cwd: resolve("android"), env, stdio: "inherit"
 });
 if (result.error) console.error(result.error.message);
