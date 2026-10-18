@@ -1,6 +1,6 @@
 # 다른 PC에서 이어서 작업하기
 
-최종 갱신: 2026-10-17 (한국 시간)
+최종 갱신: 2026-10-18 (한국 시간)
 
 ## 먼저 읽을 문서
 
@@ -21,11 +21,12 @@
 - EPUB/Markdown 열기, 읽기 설정, 위치 복원, 책갈피/주석, Markdown 편집 및 내보내기 코드가 있다.
 - PDF: `web/pdf-reader.js`(PDF.js 뷰어 래퍼), `src/core/pdfLocation.js`(위치·형광펜 좌표 문자열). 이어보기(쪽·배율·위치), 목차, 검색, 책갈피, 형광펜/메모(앱 내부 저장, 원본 미수정), 테마, 두 쪽 보기, 회전, PC 전체 화면(F11).
 - 다국어: `src/locales/ko.js`, `en.js`(키 일치 테스트), `web/i18n.js`(`data-i18n` 적용). Electron 대화상자와 Android Java 오류(`native.*` 키)도 같은 사전을 쓴다.
-- 변환 문서(읽기 전용): DOCX(mammoth 1.13.0), HWPX·XML HWP(자체 변환기 `src/core/hwpXml.js`, 텍스트·표), 바이너리 HWP 5.0(PC만, Electron 메인 프로세스의 `@ohah/hwpjs@0.1.0-rc.10` 네이티브 모듈, 쪽 배치 재현). 뷰어는 `web/document-reader.js`(스크립트 없는 iframe), 위치·형광펜은 `src/core/textAnchors.js`. Android에서 HWP 5.0은 PC 전용 안내 문구를 보인다.
+- 변환 문서(읽기 전용): DOCX(mammoth 1.13.0), HWPX·XML HWP(자체 변환기 `src/core/hwpXml.js`, 텍스트·표), 바이너리 HWP 5.0(PC는 Electron 메인 프로세스의 `@ohah/hwpjs@0.1.0-rc.10` 네이티브 모듈로 쪽 배치 재현, Android와 브라우저는 자체 모듈 `src/core/hwpBinary.js`로 본문·표·각주만). 뷰어는 `web/document-reader.js`(스크립트 없는 iframe), 위치·형광펜은 `src/core/textAnchors.js`.
 - 배포 축소: PC 패키지는 필요한 파일만 넣고(Electron 언어 ko·en만, PDF.js min, HWP는 Windows용 `.node`만), Toast UI는 devDependency로 옮겼다. 사용자 샘플 `test/sample/`은 Git 제외.
 - iOS는 Mac/Xcode가 없어 보류.
+- 휴대폰 두 손가락 확대: EPUB·MD·변환 문서는 움직이는 동안 화면을 바로 확대(transform)하고 손을 떼면 글자 크기/배율로 다시 배치, PDF는 `PdfReader.pinchZoom`(PDF.js `updateScale`)으로 실시간 확대. 공통 제스처는 `src/platform/touch-reader.js`의 `pinch: { begin, move, end }`.
 - Android에는 네이티브 문서 가져오기/저장, 다른 앱의 열기/공유 수신, 앱 내부 사본과 상태 저장, 모바일 메뉴/전체 화면/터치 조작이 구현되어 있다.
-- 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 명령: `npm.cmd run release`(둘 다), `release:pc`(=`makeSetup.bat`), `release:android`. 실패하면 버전을 되돌린다. 개발용 `npm.cmd run build`/`android:apk`는 버전을 올리지 않는다. 현재 0.1.4(versionCode 5).
+- 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 명령: `npm.cmd run release`(둘 다), `release:pc`(=`makeSetup.bat`), `release:android`. 실패하면 버전을 되돌린다. 개발용 `npm.cmd run build`/`android:apk`는 버전을 올리지 않는다. 현재 0.1.5(versionCode 6).
 - 화면 영역에 맞춘 반응형 배치와 ResizeObserver 기반 EPUB 재배치가 있다. Android 최소 API 24(7.0), target/compile API 36이다.
 - 기기 모델 자동 분류나 전자잉크 전용 갱신/잔상 제어는 없다. Android 버전만으로 호환성을 보장할 수 없으며 WebView와 실제 기기 검증이 필요하다.
 

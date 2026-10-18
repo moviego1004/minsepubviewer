@@ -1,6 +1,8 @@
 // Converts office and Hangul documents to HTML for DocumentReader.
 // DOCX: mammoth (loaded on first use). HWPX and XML HWP (HWPML): own converter.
-// Binary HWP 5.0: platform.convertHwp (the desktop app converts it in the main process).
+// Binary HWP 5.0: platform.convertHwp where available (the desktop app converts it with page layout
+// in the main process), otherwise the built-in text-and-table reader (the phone app).
+import { convertHwpBinary, isOleBytes } from "../src/core/hwpBinary.js";
 import {
   convertHwpmlDocument,
   convertOwpmlSection,
@@ -33,10 +35,10 @@ export function getDocumentFormat(name) {
   return null;
 }
 
-const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
-
-function isOleFile(bytes) {
-  return OLE_SIGNATURE.every((value, index) => bytes[index] === value);
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream !== "function") throw new Error("document.converterLoadFailed");
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 function parseXml(text, errorKey) {
@@ -73,10 +75,12 @@ async function convertHwp(bytes, fileLike, platform) {
   if (isXmlDocumentBytes(bytes)) {
     return { html: convertHwpmlDocument(parseXml(decodeXmlBytes(bytes), "document.invalidHwpml")), layout: false };
   }
-  if (!isOleFile(bytes)) throw new Error("document.invalidHwp");
-  if (!platform?.convertHwp) throw new Error("document.hwpDesktopOnly");
-  const html = await platform.convertHwp({ path: fileLike.path || "", bytes: fileLike.path ? null : bytes });
-  return { html, layout: true };
+  if (!isOleBytes(bytes)) throw new Error("document.invalidHwp");
+  if (platform?.convertHwp) {
+    const html = await platform.convertHwp({ path: fileLike.path || "", bytes: fileLike.path ? null : bytes });
+    return { html, layout: true };
+  }
+  return { html: await convertHwpBinary(bytes, inflateRaw), layout: false };
 }
 
 export async function convertDocument(fileLike, bytes, platform) {

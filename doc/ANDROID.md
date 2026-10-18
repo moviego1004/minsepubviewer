@@ -127,9 +127,11 @@ Windows 실행·빌드 명령은 기존 `npm.cmd run desktop`, `npm.cmd run buil
 - PDF.js 6.3.289(`pdfjs-dist`, Apache-2.0)의 **legacy 빌드**를 `scripts/build-mobile.js`가 `dist/mobile/vendor/pdfjs/`로 복사합니다(약 5.3MB, CMap·표준 글꼴·wasm 포함).
 - PDF 기능은 PDF.js가 제공하는 범위만 씁니다: 페이지/연속 보기, 확대·맞춤, 회전, 두 쪽 보기, 텍스트 선택, 검색, 목차, 링크, 테마 색상.
   형광펜·메모·책갈피는 앱 내부 기록(PDF 좌표)이며 원본 PDF를 수정하지 않습니다. 스캔 PDF 영역 형광펜, OCR, 양식 저장은 지원하지 않습니다.
-- PDF 확대·축소는 PDF.js 두 손가락 확대를 사용합니다. 쪽이 화면에 다 들어올 때만 상하단 탭/스와이프로 쪽을 넘기고, 확대해서 스크롤이 생기면 스크롤을 우선합니다.
+- PDF 확대·축소는 앱이 두 손가락 움직임을 PDF.js `updateScale`로 넘겨 바로 확대하고, 잠시 뒤 선명하게 다시 그립니다(2026-10-18, PDF.js 뷰어 라이브러리는 핀치를 직접 처리하지 않음). 쪽이 화면에 다 들어올 때만 상하단 탭/스와이프로 쪽을 넘기고, 확대해서 스크롤이 생기면 스크롤을 우선합니다.
 - DOCX·HWPX·XML 형식 HWP(64MB 이하)는 앱 사본을 읽어 HTML로 바꿔 읽기 전용으로 보여 줍니다(mammoth는 `dist/mobile/vendor/mammoth/`).
-  바이너리 HWP 5.0은 휴대폰에서 아직 열 수 없으며 PC 버전 또는 HWPX/PDF 저장을 안내합니다.
+  바이너리 HWP 5.0은 자체 모듈(`src/core/hwpBinary.js`)로 본문·표·글상자·각주를 읽습니다(쪽 배치·그림·자동 번호 제외, 압축 해제는 WebView의 `DecompressionStream('deflate-raw')`, Chrome 103 이상).
+  암호·배포용 HWP는 안내 문구만 보입니다.
+- EPUB·MD·변환 문서의 두 손가락 확대는 움직이는 동안 화면을 바로 확대하고, 손을 떼면 새 글자 크기/배율로 다시 배치합니다.
 - 메뉴·알림 문구는 한국어/영어를 지원합니다(보기 설정 → 언어, 기본은 시스템 언어). Java 오류는 `native.*` 키로 전달해 화면 언어로 표시합니다.
 
 ### 다른 앱과 클라우드에서 열기 (0.1.3)

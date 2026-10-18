@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 
 const env = { ...process.env };
+// A shell started before the JDK moved can still carry a JAVA_HOME that no longer exists.
+if (env.JAVA_HOME && !existsSync(join(env.JAVA_HOME, "bin/java.exe")) && !existsSync(join(env.JAVA_HOME, "bin/java"))) delete env.JAVA_HOME;
 const studioJava = "C:/Program Files/Android/Android Studio/jbr";
 if (!env.JAVA_HOME && existsSync(join(studioJava, "bin/java.exe"))) env.JAVA_HOME = studioJava;
 const installedJava = env.LOCALAPPDATA && join(env.LOCALAPPDATA, "Programs/Eclipse Adoptium/jdk-21");

@@ -28,6 +28,10 @@ body.is-flow td, body.is-flow th { border: 1px solid color-mix(in srgb, currentC
 body.is-flow td p { margin: 0.2em 0; }
 body.is-flow img { max-width: 100%; height: auto; }
 body.is-flow a { color: inherit; }
+body.is-flow .hwp-box { margin: 0.8em 0; padding: 0.4em 0.8em; border: 1px dashed color-mix(in srgb, currentColor 35%, transparent); }
+body.is-flow .hwp-note-ref { font-size: 0.7em; }
+body.is-flow .hwp-notes { margin-top: 2em; padding-top: 0.6em; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.85em; }
+body.is-flow .hwp-notes p { margin: 0.2em 0; }
 /* HWP pages (.hpa) paint their white sheet with a negative z-index, so the body stays transparent. */
 body.is-layout { padding: 12px 0 48px; background: transparent; }
 body.is-layout .hpa { margin: 0 auto 6mm !important; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25) !important; }

@@ -11,7 +11,7 @@ const deadlineTimer = setTimeout(() => { console.error("Reader smoke test timed 
 const root = path.resolve(__dirname, "..");
 const { createSamplePdf } = require("./sample-pdf.cjs");
 const samplePdf = createSamplePdf();
-const { createSampleDocx } = require("./sample-documents.cjs");
+const { createSampleDocx, createSampleHwp, createSampleHwpx } = require("./sample-documents.cjs");
 let server;
 let temp;
 app.whenReady().then(async () => {
@@ -24,6 +24,8 @@ app.whenReady().then(async () => {
   zip.file("one.xhtml", '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>첫 장</title></head><body><h1>EPUB 읽기 검사</h1>' + '<p>안드로이드에서도 책을 읽고 위치를 복원합니다.</p>'.repeat(100) + '</body></html>');
   const epub = await zip.generateAsync({ type: "base64" });
   const docx = (await createSampleDocx()).toString("base64");
+  const hwp = createSampleHwp().toString("base64");
+  const hwpx = (await createSampleHwpx()).toString("base64");
   const { computeBookId } = await import("../src/core/books.js");
   const bookId = computeBookId(Buffer.from(epub, "base64"));
   await fs.writeFile(path.join(temp, "preload.cjs"), `
@@ -38,8 +40,9 @@ app.whenReady().then(async () => {
     window.MINS_PDFJS_BASE = '/dist/mobile/vendor/pdfjs/';
     window.MINS_MAMMOTH_URL = '/dist/mobile/vendor/mammoth/mammoth.browser.min.js';
     const docxBytes = Uint8Array.from(atob('${docx}'), value => value.charCodeAt(0)).buffer;
-    // A binary HWP 5.0 header: the phone build shows the PC-only notice for it.
-    const oleBytes = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0, 0, 0]).buffer;
+    // Binary HWP 5.0 is read by the built-in text-and-table reader on the phone.
+    const hwpBytes = Uint8Array.from(atob('${hwp}'), value => value.charCodeAt(0)).buffer;
+    const hwpxBytes = Uint8Array.from(atob('${hwpx}'), value => value.charCodeAt(0)).buffer;
     const pdfFile = { path: '/app/documents/sample.pdf', name: 'sample.pdf', size: ${samplePdf.length}, pdfUrl: window.location.origin + '/_pdf/sample.pdf', type: 'application/pdf' };
     window.minsePlatform = {
       kind: 'android', isMobile: true, storage: window.localStorage,
@@ -53,7 +56,8 @@ app.whenReady().then(async () => {
         if (kind === 'markdown') return { kind, document: { ...document } };
         if (kind === 'pdf') return { kind, file: { ...pdfFile } };
         if (kind === 'docx') return { kind: 'document', file: { path: '/app/documents/sample.docx', name: 'sample.docx', size: docxBytes.byteLength, bytes: docxBytes.slice(0) } };
-        if (kind === 'hwp') return { kind: 'document', file: { path: '/app/documents/old.hwp', name: 'old.hwp', size: oleBytes.byteLength, bytes: oleBytes.slice(0) } };
+        if (kind === 'hwp') return { kind: 'document', file: { path: '/app/documents/old.hwp', name: 'old.hwp', size: hwpBytes.byteLength, bytes: hwpBytes.slice(0) } };
+        if (kind === 'hwpx') return { kind: 'document', file: { path: '/app/documents/new.hwpx', name: 'new.hwpx', size: hwpxBytes.byteLength, bytes: hwpxBytes.slice(0) } };
         return { kind: 'epub', file: { ...epubFile } };
       },
       setFullscreen: async enabled => { window.__immersive = enabled; },
@@ -224,17 +228,20 @@ app.whenReady().then(async () => {
   const fullArea = await run("(()=>{const r=document.querySelector('#reader').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()");
   await touch(fullArea);
   await waitFor("!document.body.classList.contains('mobile-fullscreen')");
-  const pinch = async (start, end, selector = '#reader') => {
+  // during: checked while both fingers are still down, so zoom must follow the fingers live.
+  const pinch = async (start, end, selector = '#reader', during = null) => {
     const center = await run(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
     const send = (type, gap) => win.webContents.debugger.sendCommand('Input.dispatchTouchEvent', {type,touchPoints:gap ? [{x:center.x-gap/2,y:center.y,id:0},{x:center.x+gap/2,y:center.y,id:1}] : []});
     const pending = [send('touchStart',start)];
     for(let i=1;i<=5;i++) { await new Promise(r=>setTimeout(r,20)); pending.push(send('touchMove',start+(end-start)*i/5)); }
-    pending.push(send('touchEnd',0)); await Promise.all(pending);
+    await Promise.all(pending);
+    if (during) await waitFor(during);
+    await send('touchEnd',0);
   };
   const font = "JSON.parse(localStorage.getItem('minsepubviewer.library')).books.find(book => book.filePath === '/app/documents/test.epub').settings.fontSize";
   const beforeFont = await run(font);
-  await pinch(80,120);
-  await waitFor(`${font} > ${beforeFont}`);
+  await pinch(80,120,'#reader',"/scale\\(1\\.[1-9]/.test(document.querySelector('#reader').style.transform)");
+  await waitFor(`${font} > ${beforeFont} && !document.querySelector('#reader').style.transform`);
   const enlarged = await run(font);
   await run("document.querySelector('#mobileNextButton').click()");
   assert.equal(await run(font), enlarged, 'Font survives page turn');
@@ -285,6 +292,11 @@ app.whenReady().then(async () => {
   const pdfBox = await run("(() => { const r = document.querySelector('#pdfContainer').getBoundingClientRect(); return { x: r.left + r.width / 2, bottom: r.top + r.height * 0.85 }; })()");
   await touch({ x: pdfBox.x, y: pdfBox.bottom });
   await waitFor("document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
+  const pdfScale = "parseFloat(getComputedStyle(document.querySelector('#pdfViewer')).getPropertyValue('--scale-factor'))";
+  const beforePdfScale = await run(pdfScale);
+  await pinch(80,140,'#pdfContainer',`${pdfScale} > ${beforePdfScale} * 1.3`);
+  await pinch(140,80,'#pdfContainer');
+  await waitFor(`${pdfScale} < ${beforePdfScale} * 1.1`);
   await run("window.__background()");
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.body.classList.contains('pdf-mode') && document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
@@ -295,14 +307,20 @@ app.whenReady().then(async () => {
   const docBox = await run("(() => { const r = document.querySelector('#docFrame').getBoundingClientRect(); return { x: r.left + r.width / 2, bottom: r.top + r.height * 0.85 }; })()");
   await touch({ x: docBox.x, y: docBox.bottom });
   await waitFor("/^2 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
+  const docZoom = "Number(document.querySelector('#docFrame').contentDocument.body.style.zoom || 1)";
+  const beforeDocZoom = await run(docZoom);
+  await pinch(80,120,'#docFrame',"/scale\\(1\\.[1-9]/.test(document.querySelector('#docFrame').style.transform)");
+  await waitFor(`${docZoom} > ${beforeDocZoom} && !document.querySelector('#docFrame').style.transform`);
   await run("window.__nextOpenKind = 'hwp'; document.querySelector('#mobileOpenFile').click()");
-  await waitFor("document.querySelector('#bookMeta').textContent.includes('PC 버전')");
+  await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('p')?.textContent === 'HWP 5.0 검사 문서' && document.querySelector('#docFrame').contentDocument.querySelector('td[colspan=\"2\"]')?.textContent === '병합된 머리 칸'");
+  await run("window.__nextOpenKind = 'hwpx'; document.querySelector('#mobileOpenFile').click()");
+  await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('p')?.textContent === 'HWPX 검사 문서' && document.querySelector('#docFrame').contentDocument.querySelector('td')?.textContent === 'HWPX 표'");
   await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#mobileOpenFile').textContent === 'Open file' && document.querySelector('#bookmarksTab').textContent === 'Bookmarks' && document.querySelector('#mobilePrevButton').textContent === 'Prev'");
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, pinch in/out, fullscreen and center tap, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 PC-only notice, and Korean/English UI switch (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen and center tap, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);

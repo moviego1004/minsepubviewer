@@ -1,6 +1,6 @@
 {
   "name": "MinsEPUBviewer",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Mins Reader: shared EPUB, PDF and Markdown reader for Windows and Android.",
   "author": "Mins",
   "private": true,
@@ -41,6 +41,7 @@
     "@capacitor/cli": "^8.5.2",
     "@toast-ui/editor": "^3.2.2",
     "@xmldom/xmldom": "0.9.8",
+    "cfb": "^1.2.2",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.25.12"

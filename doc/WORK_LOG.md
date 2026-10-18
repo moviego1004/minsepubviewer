@@ -64,3 +64,20 @@
 - `scripts/release.cjs` 추가(`npm.cmd run release`, `release:pc`, `release:android`): 버전을 올린 뒤 PC 패키지+NSIS 설치 파일(`build/MinsReader_ver<버전>.exe`)과 APK 복사본(`build/MinsReader_ver<버전>.apk`)을 만든다. 빌드 실패 시 버전 복원. `build/win-unpacked`만 지워 이전 배포 파일을 보존(이전 `makeSetup.bat`은 build 폴더 전체를 삭제했음).
 - `makeSetup.bat`은 `node scripts/release.cjs pc`를 호출하는 얇은 래퍼로 변경(날짜·일련번호 방식 제거).
 - 검증: `test/electron/releaseVersion.test.cjs` 3개 통과. `npm.cmd run release` 실행 → 0.1.4(versionCode 5), `build/MinsReader_ver0.1.4.exe` 94.1MB, `build/MinsReader_ver0.1.4.apk` 7.5MB 생성. 설치 파일 실행·업그레이드는 사용자 테스트 예정.
+
+## 2026-10-18 — 휴대폰 핀치 확대, PDF 확대, HWP·HWPX 열기
+
+- 사용자 요청(0.1.4 실기기 테스트): ① 핀치 확대·축소가 손을 뗄 때만 반영되고 비율 알림 상자만 보임 → 바로 반영 ② PDF 확대·축소 안 됨 ③ HWP, HWPX가 열리지 않음.
+- 시작 확인: 미커밋 변경 없음, `master` = `origin/master` = `a07e9d4`.
+- 원인: ① `touch-reader.js`가 핀치 중에는 글자 크기 알림만 보이고 `touchend`에서 `setFont` 호출 ② `supportsPinchToZoom`은 PDFViewer 옵션일 뿐 실제 핀치 처리(TouchManager)는 PDF.js 전체 앱 쪽 코드라 이 앱에는 없었음, WebView 기본 확대도 꺼져 있음 ③ HWP 5.0은 휴대폰에서 의도적으로 "PC 전용" 안내만 표시. HWPX는 코드 경로상 문제를 찾지 못함(실기기 오류 문구 미확보).
+- 변경:
+  - `src/platform/touch-reader.js`: `fontSize/previewFont/setFont` 대신 `pinch: { begin(center), move(ratio, center), end(ratio) }` 콜백. 손가락 사이 중심을 최상위 화면 좌표로 넘김.
+  - `web/app.js`: `createPinchPreview`(움직이는 동안 대상 요소에 `transform: scale`, 손가락 중심 기준, 부모는 잠시 overflow hidden, 손을 떼면 글자 크기/배율 저장 후 transform 해제. EPUB은 `relocated`까지 기다려 깜빡임 축소). EPUB은 `#reader`, MD는 `#markdownViewer`, 변환 문서는 `#docFrame`. PDF는 `state.pdf.pinchZoom(factor, center)`.
+  - `web/pdf-reader.js`: `pinchZoom` — `PDFViewer.updateScale({ drawingDelay: 400, scaleFactor, origin })`, 배율 0.25–5.
+  - `src/platform/mobile-ui.js`, `web/mobile.css`, 언어 사전: 글자 크기 알림(`mobile.fontSize`) 제거.
+  - `src/core/hwpBinary.js`(신규): OLE 복합 파일(FAT·DIFAT·미니 스트림), HWP 레코드(확장 크기 포함), 문단 텍스트 제어 문자, 표(셀 주소·병합), 글상자(gso), 각주·미주. 암호(`document.hwpEncrypted`)·배포용(`document.hwpDistribution`) 문구 추가, `document.hwpDesktopOnly` 삭제.
+  - `web/document-convert.js`: `platform.convertHwp`가 없으면(Android·브라우저) 자체 모듈 사용, 압축 해제는 `DecompressionStream('deflate-raw')`. `web/document-reader.js`에 글상자·각주 스타일.
+  - 테스트: `test/core/hwpBinary.test.js`(4개), `scripts/sample-documents.cjs`에 `createSampleHwp`(devDependency `cfb@1.2.2`로 복합 파일 생성), `test:reader`에 실시간 핀치(EPUB·MD·PDF·DOCX, 손가락을 뗀 상태가 아닌 움직이는 중 확대 확인)와 휴대폰 HWP 5.0·HWPX 열기 단계.
+- 실제 샘플 비교(개인 문서, 커밋 안 함): 자체 모듈 대 `@ohah/hwpjs` 글자 일치율 90%, 96.5%. 빠진 것은 쪽 번호, 자동 문단 번호, 일부 머리말. 변환 시간 3–25ms. 표 25·26개 표시.
+- 검증: `npm.cmd test` 136 통과, `test:reader` 통과, `test:pdf` 통과, `test:documents` 통과(첫 실행은 DOCX 위치 복원 대기 시간 초과 1회, 재실행 통과), `npm.cmd run release` → 0.1.5(versionCode 6) `build/MinsReader_ver0.1.5.exe` 94.1MB, `build/MinsReader_ver0.1.5.apk` 7.5MB 생성. 첫 실행은 셸에 남은 예전 JAVA_HOME(삭제된 MinsAndroid 경로) 때문에 Android 단계에서 실패하고 버전이 되돌려짐 → `scripts/build-android.js`가 존재하지 않는 JAVA_HOME을 무시하도록 수정 후 재실행 성공.
+- 미검증: 실기기 핀치 체감·성능(특히 큰 EPUB 재배치), 실제 HWPX 사용자 파일, 휴대폰에서 큰 HWP.

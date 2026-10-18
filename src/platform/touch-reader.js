@@ -1,7 +1,9 @@
 import { setAttributeText, setText } from "../../web/i18n.js";
 import { getTouchNavigation } from "../core/touchNavigation.js";
 
-export function installReaderTouch(target, { viewport, frame = null, enabled, paginated = () => true, navigate, center = () => {}, fontSize, previewFont = () => {}, setFont, onError = console.error }) {
+export function installReaderTouch(target, { viewport, frame = null, enabled, paginated = () => true, navigate, center = () => {}, pinch: zoom = null, onError = console.error }) {
+  // zoom: { begin(center), move(ratio, center), end(ratio) } receives the two-finger gesture as it happens;
+  // ratio is the finger distance relative to the start, center is in top-level client coordinates.
   if (!target || target.__minseTouchNavigation) return;
   target.__minseTouchNavigation = true;
   const owner = target.nodeType === 9 ? target : target.ownerDocument;
@@ -15,13 +17,23 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
   let gesture = null;
   let pinch = null;
   const distance = touches => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+  const midpoint = (touches) => {
+    const offset = frame?.getBoundingClientRect() || { left: 0, top: 0 };
+    return { x: (touches[0].clientX + touches[1].clientX) / 2 + offset.left, y: (touches[0].clientY + touches[1].clientY) / 2 + offset.top };
+  };
+  const finishPinch = () => {
+    const ratio = pinch.ratio;
+    pinch = null;
+    void Promise.resolve(zoom.end(ratio)).catch(onError);
+  };
   let ignoreClickUntil = 0;
   const go = (direction) => { if (direction) void Promise.resolve(navigate(direction)).catch(onError); };
   target.addEventListener("touchstart", (event) => {
-    if (enabled() && setFont && event.touches.length === 2) {
+    if (enabled() && zoom && event.touches.length === 2) {
       gesture = null;
-      const size = fontSize();
-      pinch = { distance: Math.max(1, distance(event.touches)), size, next: size };
+      if (pinch) finishPinch();
+      pinch = { distance: Math.max(1, distance(event.touches)), ratio: 1 };
+      zoom.begin(midpoint(event.touches));
       if (event.cancelable) event.preventDefault();
       return;
     }
@@ -33,8 +45,8 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
     if (pinch) {
       if (event.cancelable) event.preventDefault();
       if (event.touches.length === 2) {
-        pinch.next = Math.max(10, Math.min(42, Math.round(pinch.size * distance(event.touches) / pinch.distance)));
-        previewFont(pinch.next);
+        pinch.ratio = distance(event.touches) / pinch.distance;
+        zoom.move(pinch.ratio, midpoint(event.touches));
       }
       return;
     }
@@ -48,11 +60,7 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
     if (pinch) {
       if (event.cancelable) event.preventDefault();
       event.stopPropagation();
-      if (!event.touches.length) {
-        const size = pinch.next;
-        pinch = null;
-        void Promise.resolve(setFont(size)).catch(onError);
-      }
+      if (!event.touches.length) finishPinch();
       return;
     }
     const started = gesture;
@@ -63,7 +71,7 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
     if (direction) { if (event.cancelable) event.preventDefault(); event.stopPropagation(); go(direction); }
     else if (!selected() && !interactive(event.target) && performance.now() - started.time < 350 && Math.hypot(point(event.changedTouches[0]).x - started.start.x, point(event.changedTouches[0]).y - started.start.y) < 12) center();
   }, { passive: false, capture: true });
-  target.addEventListener("touchcancel", () => { gesture = null; pinch = null; ignoreClickUntil = performance.now() + 700; }, { passive: true });
+  target.addEventListener("touchcancel", () => { gesture = null; if (pinch) finishPinch(); ignoreClickUntil = performance.now() + 700; }, { passive: true });
   target.addEventListener("click", (event) => {
     if (performance.now() < ignoreClickUntil || !enabled() || event.defaultPrevented) return;
     const end = point(event);

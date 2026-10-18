@@ -303,6 +303,21 @@ export class PdfReader {
     if (this.viewer) this.viewer.currentScaleValue = String(normalizePdfZoom(value));
   }
 
+  // Two-finger zoom: scales the pages around the fingers right away and redraws them sharply
+  // once the fingers rest. center is in client coordinates.
+  pinchZoom(factor, center) {
+    if (!this.viewer?.pdfDocument || !(factor > 0)) return;
+    const next = this.viewer.currentScale * factor;
+    if ((next <= 0.25 && factor < 1) || (next >= 5 && factor > 1)) return;
+    const rect = this.container.getBoundingClientRect();
+    const [top, left] = this.viewer.containerTopLeft;
+    this.viewer.updateScale({
+      drawingDelay: 400,
+      scaleFactor: Math.min(5, Math.max(0.25, next)) / this.viewer.currentScale,
+      origin: [center.x - rect.left + left, center.y - rect.top + top]
+    });
+  }
+
   zoomIn() {
     this.viewer?.increaseScale();
   }

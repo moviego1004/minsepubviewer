@@ -96,17 +96,77 @@ async function turnMobilePage(direction) {
   finally { mobilePageTurning = false; }
 }
 
+// Pinch zoom for reflowing text: the view is scaled while the fingers move and the new size is laid out once
+// they lift, so the text follows the fingers without re-paginating on every move.
+function createPinchPreview({ element, value, min, max, round = (next) => next, commit }) {
+  let preview = null;
+  const clear = () => {
+    if (!preview) return;
+    preview.element.style.transform = "";
+    preview.element.style.transformOrigin = "";
+    preview.element.style.willChange = "";
+    if (preview.clip) preview.clip.style.overflow = preview.overflow;
+    preview = null;
+  };
+  return {
+    begin(center) {
+      clear();
+      const target = element();
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      const clip = target.parentElement;
+      preview = { element: target, clip, overflow: clip?.style.overflow || "", start: value(), next: value() };
+      target.style.transformOrigin = `${center.x - rect.left}px ${center.y - rect.top}px`;
+      target.style.willChange = "transform";
+      if (clip) clip.style.overflow = "hidden";
+    },
+    move(ratio) {
+      if (!preview) return;
+      preview.next = Math.min(max, Math.max(min, preview.start * ratio));
+      preview.element.style.transform = `scale(${preview.next / preview.start})`;
+    },
+    async end() {
+      if (!preview) return;
+      const { start } = preview;
+      const next = round(preview.next);
+      if (next === start) { clear(); return; }
+      try { await commit(next); }
+      finally { clear(); }
+    }
+  };
+}
+
+function waitForRelocation(timeout = 800) {
+  return new Promise((resolve) => {
+    const rendition = state.rendition;
+    if (!rendition) { resolve(); return; }
+    const done = () => { clearTimeout(timer); rendition.off?.("relocated", done); resolve(); };
+    const timer = setTimeout(done, timeout);
+    rendition.on("relocated", done);
+  });
+}
+
 function installMobileTouch(target, frame = null) {
   if (!platform.isMobile) return;
+  const markdown = target === elements.markdownWorkspace;
   installReaderTouch(target, {
-    viewport: target === elements.markdownWorkspace ? elements.markdownWorkspace : elements.reader, frame,
+    viewport: markdown ? elements.markdownWorkspace : elements.reader, frame,
     enabled: () => state.mode === "epub" ? Boolean(state.rendition) : state.markdown.viewMode === "view",
     paginated: () => state.mode === "epub" && state.book.settings.viewMode !== "continuous",
     navigate: turnMobilePage,
     center: () => mobileUI?.center(),
-    fontSize: () => mergeReadingSettings(state.book.settings, {}).fontSize,
-    previewFont: size => mobileUI?.previewFont(size),
-    setFont: size => updateSettings({ fontSize: size }),
+    pinch: createPinchPreview({
+      element: () => markdown ? document.querySelector("#markdownViewer") : elements.reader,
+      value: () => mergeReadingSettings(state.book.settings, {}).fontSize,
+      min: 10,
+      max: 42,
+      round: Math.round,
+      commit: async (size) => {
+        const relocated = markdown ? null : waitForRelocation();
+        await updateSettings({ fontSize: size });
+        await relocated;
+      }
+    }),
     onError: (error) => window.alert(t("error.pageTurn", { detail: errorText(error) }))
   });
 }
@@ -3188,8 +3248,14 @@ function installDocumentFrameHandlers(frameDocument) {
       paginated: () => state.book.settings.viewMode !== "continuous",
       navigate: turnMobilePage,
       center: () => mobileUI?.center(),
-      fontSize: () => Math.round(mergeReadingSettings(state.book.settings, {}).zoom * 18),
-      setFont: (size) => updateSettings({ zoom: Math.round((size / 18) * 100) / 100 }),
+      pinch: createPinchPreview({
+        element: () => elements.docFrame,
+        value: () => mergeReadingSettings(state.book.settings, {}).zoom,
+        min: 0.4,
+        max: 3,
+        round: (zoom) => Math.round(zoom * 100) / 100,
+        commit: (zoom) => updateSettings({ zoom })
+      }),
       onError: (error) => window.alert(t("error.pageTurn", { detail: errorText(error) }))
     });
   }
@@ -4508,8 +4574,20 @@ if (platform.isMobile) {
     bookmark: () => elements.bookmarkButton.click() });
   installMobileTouch(elements.reader);
   installMobileTouch(elements.markdownWorkspace);
-  // PDF.js handles pinch zoom itself; taps and swipes turn pages only while the page fits on screen.
+  // PDF pages are rescaled by PDF.js while the fingers move (sharp redraw shortly after);
+  // taps and swipes turn pages only while the page fits on screen.
+  let pdfPinchRatio = 1;
   installReaderTouch(elements.pdfContainer, {
+    pinch: {
+      begin: () => { pdfPinchRatio = 1; },
+      move: (ratio, center) => {
+        const factor = ratio / pdfPinchRatio;
+        if (Math.abs(factor - 1) < 0.02) return;
+        pdfPinchRatio = ratio;
+        state.pdf?.pinchZoom(factor, center);
+      },
+      end: () => renderPdfControls()
+    },
     viewport: elements.pdfContainer,
     enabled: () => state.mode === "pdf" && Boolean(state.pdf),
     paginated: () => state.book.settings.viewMode !== "continuous" &&

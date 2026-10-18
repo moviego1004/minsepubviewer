@@ -55,15 +55,10 @@ export function installMobileUI({ storage, platform, resize, openFile, tabs, act
   toolbar.append(controls);
   document.body.append(document.getElementById('recentFilesMenu'));
   setAttributeText(document.getElementById('mobileMenu'), 'aria-label', 'mobile.menu');
-  const toast = document.createElement('output');
-  toast.className = 'mobile-font-toast'; toast.hidden = true;
-  document.body.append(toast);
-  let timer;
   full(storage.getItem('minsepubviewer.fullscreen') === 'true');
   return {
     progress: text => { progress.textContent = text; },
     center: () => full(!document.body.classList.contains('mobile-fullscreen')),
-    previewFont(size) { toast.textContent = t('mobile.fontSize', { size }); toast.hidden = false; clearTimeout(timer); timer = setTimeout(() => { toast.hidden = true; }, 900); },
     back() { if (dialog.open) { dialog.close(); return true; } if (document.body.classList.contains('mobile-fullscreen')) { full(false); return true; } return false; }
   };
 }
