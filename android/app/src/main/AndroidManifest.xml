@@ -41,6 +41,11 @@
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/hwp" />
+                <data android:mimeType="application/x-hwpx" />
+                <data android:mimeType="application/vnd.hancom.hwpml" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-pdf" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -61,6 +66,11 @@
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/hwp" />
+                <data android:mimeType="application/x-hwpx" />
+                <data android:mimeType="application/vnd.hancom.hwpml" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-pdf" />
             </intent-filter>
 
         </activity>

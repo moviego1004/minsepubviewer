@@ -51,12 +51,19 @@ async function bootstrap() {
       }
     }
   });
+  const readDocument = async (path) => {
+    const { data } = await Documents.readDocument({ path });
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes.buffer;
+  };
   const hydrate = async (descriptor) => {
     if (descriptor?.kind === "epub" && !descriptor.cancelled) {
       const prepared = await Documents.prepareEpub({ path: descriptor.path });
       descriptor = { ...descriptor, ...prepared };
     }
-    return hydrateMobileFile(descriptor, Capacitor.convertFileSrc);
+    return hydrateMobileFile(descriptor, Capacitor.convertFileSrc, fetch, readDocument);
   };
   let picking = false;
   async function pick(kind) {

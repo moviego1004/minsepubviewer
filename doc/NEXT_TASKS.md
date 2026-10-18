@@ -2,6 +2,20 @@
 
 최종 갱신: 2026-10-18
 
+## 현재 요청 — 다른 앱에서 열기 시 "Failed to fetch" (수정·빌드 완료, 실기기 확인 대기, 2026-10-18)
+
+사용자 요청(0.1.7 실기기): "내 파일"에서 HWP를 열기 → 앱 목록에 Mins Reader가 보이는 것은 맞음(카톡·메일 첨부도 같아야 함). 그런데 열면 "Failed to fetch"만 뜸. 모든 형식 확인.
+
+결과:
+- 원인(코드 분석, 실기기 재현은 못 함): 앱 사본을 WebView가 `fetch(convertFileSrc(path))`로 읽는데, Capacitor 로컬 서버는 확장자로 콘텐츠 형식을 정하며 `.hwp`/`.hwpx`는 형식을 몰라 요청이 실패. 앱 안 "파일 열기"도 같은 경로라 함께 실패했을 것.
+- 수정: 변환 문서(DOCX·HWP·HWPX)와 Markdown/TXT 사본은 플러그인 `readDocument`로 직접 읽음(base64). PDF·EPUB은 형식이 알려진 URL 경로 유지.
+- 열기/공유 목록: MIME 추가(`application/hwp`, `application/x-hwpx`, `application/vnd.hancom.hwpml`, `application/x-zip-compressed`, `application/x-pdf`). 이미 `application/octet-stream`도 받으므로 형식을 모르는 메신저 첨부도 목록에 나타남(실제 파일 이름으로 형식 확인).
+
+형식별 다른 앱에서 열기 경로: EPUB(사본 압축 해제 후 URL), PDF(URL, application/pdf), DOCX·HWP·HWPX·MD·TXT(플러그인 직접 읽기).
+
+남은 일:
+- 사용자: `build/MinsReader_ver0.1.8.apk`로 "내 파일"·카톡·메일에서 HWP·HWPX·DOCX·PDF·EPUB·MD 열기 확인. 카톡·메일 목록에 Mins Reader가 안 보이는 형식이 있으면 앱과 파일 형식을 알려 주면 MIME 추가.
+
 ## 현재 요청 — 스크롤(밀기)로도 쪽 이동 (구현·검증 완료, 사용자 실기기 확인 대기, 2026-10-18)
 
 사용자 요청(0.1.6 실기기): 위·아래 탭뿐 아니라 스크롤로도 쪽이 넘어가야 함. PDF는 스크롤로 이동이 안 됨. 다른 형식도 확인해서 수정.

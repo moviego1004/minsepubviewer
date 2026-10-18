@@ -288,6 +288,28 @@ public class ReaderDocumentsPlugin extends Plugin {
         });
     }
 
+    // Converted documents (DOCX, HWP, HWPX) and Markdown copies are handed to the reader as base64. The WebView cannot fetch
+    // them from the app file URL: Capacitor's local server knows no content type for .hwp/.hwpx and the
+    // request fails with "Failed to fetch".
+    @PluginMethod
+    public void readDocument(PluginCall call) {
+        work(call, () -> {
+            File file = managedFile(call.getString("path"));
+            if (!file.isFile()) throw new IOException("native.libraryFileMissing");
+            if (file.length() > DOCUMENT_LIMIT) throw new IOException("native.documentTooLarge");
+            byte[] bytes = new byte[(int) file.length()];
+            try (InputStream input = new java.io.FileInputStream(file)) {
+                int offset = 0;
+                while (offset < bytes.length) {
+                    int count = input.read(bytes, offset, bytes.length - offset);
+                    if (count < 0) throw new IOException("native.readImportedFailed");
+                    offset += count;
+                }
+            }
+            call.resolve(new JSObject().put("data", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)));
+        });
+    }
+
     @PluginMethod
     public void prepareEpub(PluginCall call) {
         work(call, () -> {

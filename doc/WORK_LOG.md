@@ -108,3 +108,15 @@
   - 시험 환경 주의: 숨긴 Electron 창은 스크립트로 바꾼 스크롤의 scroll 이벤트를 다음 입력 프레임까지 미뤄서, 시험에서는 스크롤 설정 뒤 `requestAnimationFrame` 두 번을 기다린다.
 - 검증: `npm.cmd test` 140 통과, `test:reader`·`test:pdf`·`test:documents` 통과, `npm.cmd run build` → 0.1.7(versionCode 8), `build/MinsReader_ver0.1.7.exe` 94.1MB, `build/MinsReader_ver0.1.7.apk` 7.5MB.
 - 미검증: 실기기 체감(끝에서 한 번 더 미는 방식이 자연스러운지, 관성 스크롤 판정 150ms).
+
+## 2026-10-18 (계속) — 다른 앱에서 연 HWP의 "Failed to fetch"
+
+- 사용자 요청: "내 파일"에서 HWP를 Mins Reader로 열면 "Failed to fetch". 카톡·메일 첨부도 목록에 Mins Reader가 보여야 함. 모든 형식 확인.
+- 조사: 외부 열기와 앱 안 파일 열기 모두 `importDocument` → `hydrateMobileFile`이 `fetch(Capacitor.convertFileSrc(path))`로 앱 사본을 읽음. Capacitor `WebViewLocalServer.getMimeType`은 `URLConnection.guessContentTypeFromName`(확장자) → 실패 시 스트림 추측이라 `.hwp`/`.hwpx`는 형식이 비고 요청이 실패하는 것으로 판단(이 PC에 휴대폰·에뮬레이터가 없어 실기기 재현은 못 함). 모의 Android 스모크는 바이트를 직접 넘겨 이 경로를 거치지 않았음.
+- 변경:
+  - `ReaderDocumentsPlugin.readDocument`: 앱 관리 폴더 파일만, 64MB 이하, base64로 반환.
+  - `src/platform/mobile-files.js`: `readDocument` 인자, 변환 문서·Markdown은 이것으로 읽음(UTF-8 디코딩). `src/platform/android.js`가 플러그인 결과를 `atob`으로 바이트 변환.
+  - `AndroidManifest.xml`: VIEW·SEND 필터에 `application/hwp`, `application/x-hwpx`, `application/vnd.hancom.hwpml`, `application/x-zip-compressed`, `application/x-pdf` 추가.
+  - 테스트: mobile-files에 "변환 문서는 URL fetch 없이 읽음"(HWP·HWPX·DOCX·MD, 크기 초과).
+- 검증: `npm.cmd test` 141 통과, `test:reader` 통과, `npm.cmd run build` → 0.1.8(versionCode 9) `build/MinsReader_ver0.1.8.exe` 94.1MB·`build/MinsReader_ver0.1.8.apk` 7.5MB, `gradlew testDebugUnitTest` 통과, APK 매니페스트(aapt2)에서 MIME 20종 확인.
+- 미검증: 실기기에서 "내 파일"·카톡·메일로 열기(각 앱이 보내는 MIME에 따라 목록 표시 여부가 달라짐).

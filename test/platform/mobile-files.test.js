@@ -59,3 +59,22 @@ test("DOCX and HWP imports are read as bytes for conversion", async () => {
   assert.deepEqual(new Uint8Array(result.file.bytes), bytes);
   await assert.rejects(hydrateMobileFile({ kind: "document", path: "/a.hwp", size: 65 * 1024 * 1024 }, (path) => path), /native\.invalidDescriptor/);
 });
+
+test("HWP and other converted documents are read natively, never through the app file URL", async () => {
+  const noFetch = async () => { throw new TypeError("Failed to fetch"); };
+  for (const name of ["보고서.hwp", "보고서.hwpx", "report.docx"]) {
+    const result = await hydrateMobileFile({ kind: "document", path: `/files/reader-documents/a.${name.split(".").pop()}`, name, size: 3 },
+      (path) => `https://localhost/_capacitor_file_${path}`, noFetch, async (path) => {
+        assert.match(path, /^\/files\/reader-documents\/a\./);
+        return new Uint8Array([0xd0, 0xcf, 0x11]).buffer;
+      });
+    assert.equal(result.kind, "document");
+    assert.equal(result.file.name, name);
+    assert.deepEqual([...new Uint8Array(result.file.bytes)], [0xd0, 0xcf, 0x11]);
+  }
+  const markdown = await hydrateMobileFile({ kind: "markdown", path: "/files/a.md", name: "메모.md", size: 9 }, (path) => path, noFetch,
+    async () => new TextEncoder().encode("# 메모").buffer);
+  assert.equal(markdown.document.content, "# 메모");
+  await assert.rejects(hydrateMobileFile({ kind: "document", path: "/files/a.hwp", name: "a.hwp", size: 1 }, (path) => path, noFetch,
+    async () => new ArrayBuffer(64 * 1024 * 1024 + 1)), /native\.documentTooLarge/);
+});

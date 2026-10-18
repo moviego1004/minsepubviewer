@@ -5,7 +5,9 @@ export const MOBILE_DOCUMENT_MAX_BYTES = 64 * 1024 * 1024;
 
 // Errors carry message keys; the reader translates them.
 // Never send a whole EPUB or PDF as base64 through the native bridge; PDF.js reads the app copy by URL.
-export async function hydrateMobileFile(descriptor, convertFileSrc, fetchFile = fetch) {
+// readDocument(path) -> Promise<ArrayBuffer> reads converted documents (DOCX/HWP/HWPX) and Markdown
+// without the app file URL, which cannot serve file types the local server does not know (.hwp, .hwpx).
+export async function hydrateMobileFile(descriptor, convertFileSrc, fetchFile = fetch, readDocument = null) {
   if (!descriptor || descriptor.cancelled) return null;
   const kind = descriptor.kind;
   const limit = { epub: MOBILE_EPUB_MAX_BYTES, pdf: MOBILE_PDF_MAX_BYTES, document: MOBILE_DOCUMENT_MAX_BYTES, markdown: MOBILE_MARKDOWN_MAX_BYTES }[kind];
@@ -18,6 +20,12 @@ export async function hydrateMobileFile(descriptor, convertFileSrc, fetchFile = 
   }
   if (kind === "pdf") {
     return { kind, file: { ...descriptor, pdfUrl: convertFileSrc(descriptor.path), type: "application/pdf" } };
+  }
+  if (readDocument && (kind === "document" || kind === "markdown")) {
+    const bytes = await readDocument(descriptor.path);
+    if (bytes.byteLength > limit) throw new Error(`native.${kind}TooLarge`);
+    if (kind === "document") return { kind, file: { ...descriptor, size: bytes.byteLength, bytes, type: "application/octet-stream" } };
+    return { kind, document: { ...descriptor, content: new TextDecoder().decode(bytes), viewMode: "view" } };
   }
   const response = await fetchFile(convertFileSrc(descriptor.path));
   if (!response.ok) throw new Error("native.readImportedFailed");

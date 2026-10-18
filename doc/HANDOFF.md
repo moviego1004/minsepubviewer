@@ -26,8 +26,9 @@
 - iOS는 Mac/Xcode가 없어 보류.
 - 휴대폰 터치 구역(`src/core/touchNavigation.js`): 위·아래 1/3 탭은 쪽 이동(스크롤 화면은 한 화면씩), 가운데 한 번 탭은 선택·형광펜용으로 비워 두고 가운데 두 번 탭(`isCenterTap` + 350ms)이 전체 화면 전환. PDF 탭은 `PdfReader.step`(확대한 쪽 안에서 먼저 스크롤). PDF 쪽 보기에서 쪽이 화면보다 크면 쪽 끝에 닿은 채 계속 미는 동작이 쪽 이동(`getEdgeSwipe`, `touch-reader`의 `scrollElement`/`edgePaging`; 밀기 시작 150ms 안에 스크롤이 있었거나 밀기 중 스크롤되면 무시).
 - 휴대폰 두 손가락 확대: EPUB·MD·변환 문서는 움직이는 동안 화면을 바로 확대(transform)하고 손을 떼면 글자 크기/배율로 다시 배치, PDF는 `PdfReader.pinchZoom`(PDF.js `updateScale`)으로 실시간 확대. 공통 제스처는 `src/platform/touch-reader.js`의 `pinch: { begin, move, end }`.
+- Android 문서 읽기 경로: EPUB(압축 해제 폴더 URL)·PDF(앱 사본 URL)는 `convertFileSrc`, DOCX·HWP·HWPX·Markdown은 플러그인 `readDocument`(base64). Capacitor 로컬 서버가 `.hwp` 등 모르는 확장자를 제공하지 못해 "Failed to fetch"가 났기 때문(2026-10-18).
 - Android에는 네이티브 문서 가져오기/저장, 다른 앱의 열기/공유 수신, 앱 내부 사본과 상태 저장, 모바일 메뉴/전체 화면/터치 조작이 구현되어 있다.
-- 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 모든 빌드 명령이 `scripts/release.cjs`를 거친다: `build.bat`·`npm.cmd run build`·`release`(둘 다), `makeSetup.bat`·`release:pc`, `android:apk`·`release:android`. 다음 번호는 PC 버전·Android 버전·`build/`의 기존 `MinsReader_ver*` 파일 중 가장 높은 것 +1(기존 파일 덮어쓰기 방지). 실패하면 버전을 되돌린다. Electron 폴더 빌드만 필요하면 내부용 `build:pc-dir`. 현재 0.1.7(versionCode 8).
+- 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 모든 빌드 명령이 `scripts/release.cjs`를 거친다: `build.bat`·`npm.cmd run build`·`release`(둘 다), `makeSetup.bat`·`release:pc`, `android:apk`·`release:android`. 다음 번호는 PC 버전·Android 버전·`build/`의 기존 `MinsReader_ver*` 파일 중 가장 높은 것 +1(기존 파일 덮어쓰기 방지). 실패하면 버전을 되돌린다. Electron 폴더 빌드만 필요하면 내부용 `build:pc-dir`. 현재 0.1.8(versionCode 9).
 - 화면 영역에 맞춘 반응형 배치와 ResizeObserver 기반 EPUB 재배치가 있다. Android 최소 API 24(7.0), target/compile API 36이다.
 - 기기 모델 자동 분류나 전자잉크 전용 갱신/잔상 제어는 없다. Android 버전만으로 호환성을 보장할 수 없으며 WebView와 실제 기기 검증이 필요하다.
 
