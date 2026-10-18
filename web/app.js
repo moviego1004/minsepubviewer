@@ -4594,6 +4594,9 @@ if (platform.isMobile) {
       elements.pdfContainer.scrollHeight <= elements.pdfContainer.clientHeight + 2 &&
       elements.pdfContainer.scrollWidth <= elements.pdfContainer.clientWidth + 2,
     navigate: (direction) => { state.pdf?.step(direction); },
+    // Page mode shows one page; scrolling past its end moves to the next one.
+    scrollElement: elements.pdfContainer,
+    edgePaging: () => state.book.settings.viewMode !== "continuous",
     center: () => mobileUI?.center(),
     onError: (error) => window.alert(t("error.pageTurn", { detail: errorText(error) }))
   });

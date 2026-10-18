@@ -95,3 +95,16 @@
   - 테스트: touchNavigation 5개(연속 화면 탭·가운데 탭), releaseVersion에 배포 파일 목록·최고 버전 검사, `test:reader`에 가운데 한 번 탭은 전체 화면 유지·두 번 탭 해제, 확대한 PDF 아래 탭 스크롤→다음 쪽→위 탭 이전 쪽, 열린 문서 창 아이콘·현재 문서.
 - 검증: `npm.cmd test` 139 통과, `test:reader`·`test:pdf`·`test:documents` 통과. 열린 문서 창은 실제 CSS로 375px 화면 미리보기 확인(긴 이름 말줄임, ✕ 아이콘 표시). `npm.cmd run build`(새 경로) → 0.1.6(versionCode 7), `build/MinsReader_ver0.1.6.exe` 94.1MB, `build/MinsReader_ver0.1.6.apk` 7.5MB.
 - 미검증: 실기기 터치 체감(두 번 탭 간격 350ms가 적절한지), 실제 형광펜 흐름(길게 눌러 선택 → 도구 막대).
+
+## 2026-10-18 (계속) — 스크롤(밀기)로 쪽 이동
+
+- 사용자 요청: 위·아래 탭뿐 아니라 스크롤로도 쪽 이동. PDF는 스크롤로 이동이 안 됨. 다른 형식도 확인·수정.
+- 조사: 모의 Android에서 PDF 쪽이 화면에 맞을 때는 위로 밀기로 다음 쪽 이동 확인. 쪽이 화면보다 크면 `paginated()`가 거짓이 되어 밀기는 PDF.js 쪽 안 스크롤만 하고(쪽 보기는 한 쪽만 표시) 끝에서 다음 쪽으로 가지 않음 → 휴대폰에서 "스크롤로 이동 안 됨"의 원인. 다른 형식: EPUB·변환 문서 쪽 보기는 밀기로 쪽 이동, 연속 보기·MD는 일반 스크롤.
+- 변경:
+  - `src/core/touchNavigation.js`: `getScrollEdges`, `getEdgeSwipe`(48px 이상·800ms 이내, 세로는 끝/처음, 가로는 오른쪽/왼쪽 끝).
+  - `src/platform/touch-reader.js`: `scrollElement`, `edgePaging` 옵션. 밀기 시작 150ms 안에 스크롤이 있었거나(관성 스크롤 중) 밀기 동안 스크롤되면 쪽 이동 안 함 → 끝에 닿는 스크롤 자체는 쪽을 넘기지 않고, 끝에서 한 번 더 밀어야 넘어감.
+  - `web/app.js`: PDF는 쪽 보기에서만 `edgePaging`.
+  - 테스트: touchNavigation 6번째 시험(끝 밀기), `test:reader`에 확대한 PDF 쪽 가운데 밀기는 스크롤만·끝에서 밀기 다음 쪽·처음에서 내려 밀기 이전 쪽, PDF 연속 보기 스크롤로 3/3, EPUB 연속 보기 스크롤로 위치 변경, DOCX 쪽 보기 밀기로 쪽 이동.
+  - 시험 환경 주의: 숨긴 Electron 창은 스크립트로 바꾼 스크롤의 scroll 이벤트를 다음 입력 프레임까지 미뤄서, 시험에서는 스크롤 설정 뒤 `requestAnimationFrame` 두 번을 기다린다.
+- 검증: `npm.cmd test` 140 통과, `test:reader`·`test:pdf`·`test:documents` 통과, `npm.cmd run build` → 0.1.7(versionCode 8), `build/MinsReader_ver0.1.7.exe` 94.1MB, `build/MinsReader_ver0.1.7.apk` 7.5MB.
+- 미검증: 실기기 체감(끝에서 한 번 더 미는 방식이 자연스러운지, 관성 스크롤 판정 150ms).

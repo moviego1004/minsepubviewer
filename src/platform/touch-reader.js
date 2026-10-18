@@ -1,10 +1,19 @@
 import { setAttributeText, setText } from "../../web/i18n.js";
-import { getTouchNavigation, isCenterTap } from "../core/touchNavigation.js";
+import { getEdgeSwipe, getScrollEdges, getTouchNavigation, isCenterTap } from "../core/touchNavigation.js";
 
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_DISTANCE = 40;
 
-export function installReaderTouch(target, { viewport, frame = null, enabled, paginated = () => true, navigate, center = () => {}, pinch: zoom = null, onError = console.error }) {
+export function installReaderTouch(target, { viewport, frame = null, enabled, paginated = () => true, navigate, center = () => {}, pinch: zoom = null, scrollElement = null, edgePaging = () => false, onError = console.error }) {
+  // scrollElement: the element that scrolls a page larger than the screen (PDF). While edgePaging() is
+  // true, a swipe that pushes past its end turns the page; the content itself scrolls natively until then.
+  // The swipe counts only if the page was still and did not move during it, so a scroll that merely
+  // reaches the end never turns the page by itself.
+  let lastScrollAt = -Infinity;
+  scrollElement?.addEventListener("scroll", () => {
+    lastScrollAt = performance.now();
+    if (gesture) gesture.scrolled = true;
+  }, { passive: true });
   // zoom: { begin(center), move(ratio, center), end(ratio) } receives the two-finger gesture as it happens;
   // ratio is the finger distance relative to the start, center is in top-level client coordinates.
   if (!target || target.__minseTouchNavigation) return;
@@ -54,8 +63,10 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
       return;
     }
     if (pinch) return;
+    const now = performance.now();
+    const edgeReady = Boolean(scrollElement) && edgePaging() && now - lastScrollAt > 150;
     gesture = enabled() && event.touches.length === 1 && !selected() && !interactive(event.target)
-      ? { start: point(event.touches[0]), time: performance.now() } : null;
+      ? { start: point(event.touches[0]), time: now, edgeReady, scrolled: false } : null;
   }, { passive: false });
   target.addEventListener("touchmove", (event) => {
     if (pinch) {
@@ -84,7 +95,8 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
     if (!started || !enabled() || event.touches.length || !event.changedTouches.length) return;
     const tap = { ...started, end: point(event.changedTouches[0]), duration: performance.now() - started.time,
       height: viewport.clientHeight, continuous: !paginated(), selected: selected(), interactive: interactive(event.target) };
-    const direction = getTouchNavigation(tap);
+    const edges = started.edgeReady && !started.scrolled && !paginated() ? getScrollEdges(scrollElement) : null;
+    const direction = getTouchNavigation(tap) || getEdgeSwipe({ ...tap, edges });
     if (direction) { lastCenterTap = null; if (event.cancelable) event.preventDefault(); event.stopPropagation(); go(direction); }
     else if (isCenterTap(tap) && centerTap(tap.end) && event.cancelable) event.preventDefault();
   }, { passive: false, capture: true });

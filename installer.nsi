@@ -2,7 +2,7 @@
   !define APP_NAME      "Mins Reader"
 !endif
 !ifndef APP_VERSION
-  !define APP_VERSION   "0.1.6"
+  !define APP_VERSION   "0.1.7"
 !endif
 !ifndef APP_ID
   !define APP_ID        "com.mins.epubviewer"

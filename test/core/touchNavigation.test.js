@@ -35,3 +35,23 @@ test("only short, still taps in the middle third count as center taps", () => {
     assert.equal(isCenterTap(tap), false);
   }
 });
+
+test("swiping past the end of a page that scrolls turns the page", async () => {
+  const { getEdgeSwipe, getScrollEdges } = await import("../../src/core/touchNavigation.js");
+  const metrics = { scrollTop: 0, scrollLeft: 0, scrollHeight: 1200, scrollWidth: 400, clientHeight: 700, clientWidth: 400 };
+  assert.deepEqual(getScrollEdges(metrics), { top: true, bottom: false, left: true, right: true });
+  assert.deepEqual(getScrollEdges({ ...metrics, scrollTop: 500 }), { top: false, bottom: true, left: true, right: true });
+  const swipe = (dy, edges, extra = {}) => getEdgeSwipe({ start: { x: 200, y: 400 }, end: { x: 200, y: 400 + dy }, duration: 200, edges, ...extra });
+  const atBottom = getScrollEdges({ ...metrics, scrollTop: 500 });
+  const middle = getScrollEdges({ ...metrics, scrollTop: 250 });
+  assert.equal(swipe(-120, atBottom), "next");
+  assert.equal(swipe(120, getScrollEdges(metrics)), "previous");
+  assert.equal(swipe(-120, middle), null, "the page scrolls first");
+  assert.equal(swipe(120, atBottom), null);
+  assert.equal(swipe(-20, atBottom), null, "short drags are not swipes");
+  assert.equal(swipe(-120, atBottom, { selected: true }), null);
+  assert.equal(swipe(-120, atBottom, { duration: 1200 }), null);
+  const sideways = (dx, edges) => getEdgeSwipe({ start: { x: 200, y: 400 }, end: { x: 200 + dx, y: 400 }, duration: 200, edges });
+  assert.equal(sideways(-120, middle), "next", "a page that fits sideways turns with horizontal swipes");
+  assert.equal(sideways(-120, { ...middle, right: false }), null);
+});

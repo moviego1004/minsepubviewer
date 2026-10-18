@@ -233,6 +233,17 @@ app.whenReady().then(async () => {
   await waitFor("!!document.querySelector('#reader iframe')?.contentDocument?.querySelector('h1')");
   await waitFor(`document.querySelector('#mobilePageLabel').textContent === ${JSON.stringify(restoredPageLabel)} && !document.querySelector('#mobilePrevButton').disabled`);
   assert.equal(await run(epubLocation), restoredLocation, "Recent EPUB reopens at its last reading position");
+  // Continuous mode: plain scrolling moves the reading position.
+  await run("document.querySelector('#continuousModeButton').click()");
+  const epubScroller = "document.querySelector('#reader .epub-container')";
+  await waitFor(`(e => e && e.scrollHeight > e.clientHeight + 100)(${epubScroller})`);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const beforeScroll = await run(epubLocation);
+  await run(`(e => { e.scrollTop += e.clientHeight * 2; })(${epubScroller})`);
+  await waitFor(`${epubLocation} !== ${JSON.stringify(beforeScroll)}`);
+  await run("document.querySelector('#paginatedModeButton').click()");
+  await waitFor("!!document.querySelector('#reader iframe')?.contentDocument?.querySelector('h1') && !document.querySelector('#reader .epub-container')?.style.overflowY?.includes('scroll')");
+  await new Promise((resolve) => setTimeout(resolve, 500));
   assert.ok(await run("Math.abs(document.querySelector('#reader').getBoundingClientRect().bottom - document.querySelector('.mobile-reader-navigation').getBoundingClientRect().top) < 2"), 'Reader must fill the space down to navigation');
   await run("document.querySelector('#mobileFullscreen').click()");
   await waitFor("document.body.classList.contains('mobile-fullscreen') && window.__immersive");
@@ -323,11 +334,38 @@ app.whenReady().then(async () => {
   await waitFor("document.querySelector('#mobilePageLabel').textContent === '3 / 3'");
   await touch({ x: pdfBox.x, y: pdfBox.top });
   await waitFor("document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
+  // Scrolling: a swipe in the middle of a tall page only scrolls; pushing past its end turns the page.
+  const swipeUp = () => touch({ x: pdfBox.x, y: pdfBox.bottom }, { x: pdfBox.x, y: pdfBox.top });
+  const swipeDown = () => touch({ x: pdfBox.x, y: pdfBox.top }, { x: pdfBox.x, y: pdfBox.bottom });
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await run("(c => { c.scrollTop = (c.scrollHeight - c.clientHeight) / 2; })(document.querySelector('#pdfContainer'))");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await swipeUp();
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.equal(await run("document.querySelector('#mobilePageLabel').textContent"), "2 / 3", "A swipe inside a tall PDF page scrolls it");
+  await run("(c => { c.scrollTop = c.scrollHeight; })(document.querySelector('#pdfContainer'))");
+  // Deliver the scroll event of the scroll set above (hidden test windows hold it until the next frame).
+  await run("new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await swipeUp();
+  await waitFor("document.querySelector('#mobilePageLabel').textContent === '3 / 3'");
+  await run("document.querySelector('#pdfContainer').scrollTop = 0");
+  // Deliver the scroll event of the scroll set above (hidden test windows hold it until the next frame).
+  await run("new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await swipeDown();
+  await waitFor("document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
   await pinch(140,80,'#pdfContainer');
   await waitFor(`${pdfScale} < ${beforePdfScale} * 1.1`);
   await run("window.__background()");
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.body.classList.contains('pdf-mode') && document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
+  // Continuous mode: plain scrolling moves through the pages.
+  await run("document.querySelector('#continuousModeButton').click()");
+  await waitFor("document.querySelector('#pdfContainer').scrollHeight > document.querySelector('#pdfContainer').clientHeight + 300");
+  await run("(c => { c.scrollTop = c.scrollHeight; })(document.querySelector('#pdfContainer'))");
+  await waitFor("document.querySelector('#mobilePageLabel').textContent === '3 / 3'");
+  await run("document.querySelector('#paginatedModeButton').click()");
   await run("window.__nextOpenKind = 'docx'; document.querySelector('#mobileOpenFile').click()");
   await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('h1')?.textContent === 'DOCX 검사 문서' && /^1 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
   // Tap paging applies in page mode; earlier steps may have left continuous scrolling on.
@@ -335,6 +373,9 @@ app.whenReady().then(async () => {
   const docBox = await run("(() => { const r = document.querySelector('#docFrame').getBoundingClientRect(); return { x: r.left + r.width / 2, top: r.top + r.height * 0.15, bottom: r.top + r.height * 0.85 }; })()");
   await touch({ x: docBox.x, y: docBox.bottom });
   await waitFor("/^2 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
+  // Swiping (scrolling) also pages in a converted document.
+  await touch({ x: docBox.x, y: docBox.bottom }, { x: docBox.x, y: docBox.bottom - 300 });
+  await waitFor("/^3 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
   const docZoom = "Number(document.querySelector('#docFrame').contentDocument.body.style.zoom || 1)";
   const beforeDocZoom = await run(docZoom);
   await pinch(80,120,'#docFrame',"/scale\\(1\\.[1-9]/.test(document.querySelector('#docFrame').style.transform)");
@@ -348,7 +389,7 @@ app.whenReady().then(async () => {
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, scroll/swipe paging in EPUB (continuous), PDF (page and continuous) and DOCX, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);
