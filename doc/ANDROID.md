@@ -65,13 +65,13 @@ npm.cmd run android:open
 Android Studio에서 Gradle 동기화를 완료한 후 기기를 선택하고 Run을 실행합니다.
 웹 코드를 변경한 후에는 `android:sync`를 다시 실행해야 APK에 반영됩니다.
 
-디버그 APK를 명령줄에서 만들려면:
+디버그 APK를 명령줄에서 만들려면(빌드할 때마다 버전 +1):
 
 ```powershell
 npm.cmd run android:apk
 ```
 
-결과: `android/app/build/outputs/apk/debug/app-debug.apk`
+결과: `build/MinsReader_ver<버전>.apk`. `android:apk`는 `release:android`와 같다. Gradle 중간 산출물(`android/app/build/outputs/apk/debug/app-debug.apk`)은 배포 파일로 쓰지 않는다.
 
 빌드 스크립트는 `JAVA_HOME`이 없으면 Android Studio JDK와 위 기본 JDK 경로를 찾습니다. 다른 경로에 설치했다면
 `JAVA_HOME`에 JDK 디렉터리, `ANDROID_HOME`에 Android SDK 디렉터리를 지정하거나,
@@ -100,7 +100,7 @@ Android Studio에서 프로젝트를 열어 `android/local.properties`를 생성
 1. 휴대폰에서 개발자 옵션을 활성화하고 **USB 디버깅**을 켭니다.
 2. 데이터 전송이 가능한 USB 케이블로 PC와 연결합니다.
 3. 휴대폰에 나타나는 **USB 디버깅 허용** 창에서 이 PC의 연결을 허용합니다.
-4. 다음 명령으로 디버그 APK를 만들고 설치·실행합니다.
+4. 다음 명령으로 디버그 APK를 만들고 설치·실행합니다(`android:install`은 `build/`의 가장 높은 버전 `MinsReader_ver*.apk`를 설치).
 
 ```powershell
 npm.cmd run android:apk
@@ -115,7 +115,7 @@ Windows에서 USB 기기가 인식되지 않으면 해당 휴대폰 제조사의
 
 이 APK는 개인 기기 테스트용 디버그 서명을 사용합니다. Play 스토어 등록에는 별도 배포 서명이 필요합니다.
 
-Windows 실행·빌드 명령은 기존 `npm.cmd run desktop`, `npm.cmd run build`를 그대로 사용합니다.
+Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/release.cjs`를 거칩니다: `build.bat`·`npm.cmd run build`·`npm.cmd run release`(PC+APK), `makeSetup.bat`·`release:pc`(PC만), `android:apk`·`release:android`(APK만). 빌드마다 버전 +1, 결과는 `build/MinsReader_ver<버전>.exe/.apk`이며 `build/`에 있는 기존 배포 파일보다 항상 높은 번호를 씁니다.
 
 ## 파일과 저장 정책
 
@@ -131,6 +131,7 @@ Windows 실행·빌드 명령은 기존 `npm.cmd run desktop`, `npm.cmd run buil
 - DOCX·HWPX·XML 형식 HWP(64MB 이하)는 앱 사본을 읽어 HTML로 바꿔 읽기 전용으로 보여 줍니다(mammoth는 `dist/mobile/vendor/mammoth/`).
   바이너리 HWP 5.0은 자체 모듈(`src/core/hwpBinary.js`)로 본문·표·글상자·각주를 읽습니다(쪽 배치·그림·자동 번호 제외, 압축 해제는 WebView의 `DecompressionStream('deflate-raw')`, Chrome 103 이상).
   암호·배포용 HWP는 안내 문구만 보입니다.
+- 화면 터치(2026-10-18): 위쪽 1/3 탭은 이전, 아래쪽 1/3 탭은 다음(연속 스크롤·확대한 PDF에서는 한 화면씩 스크롤 후 쪽 이동). 가운데 한 번 탭은 아무 동작도 하지 않아 선택·형광펜에 쓰고, 가운데를 **두 번** 탭하면 전체 화면을 켜고 끕니다(처음 3번은 안내 문구). 밀기(스와이프) 쪽 넘김은 내용이 스스로 스크롤되지 않을 때만.
 - EPUB·MD·변환 문서의 두 손가락 확대는 움직이는 동안 화면을 바로 확대하고, 손을 떼면 새 글자 크기/배율로 다시 배치합니다.
 - 메뉴·알림 문구는 한국어/영어를 지원합니다(보기 설정 → 언어, 기본은 시스템 언어). Java 오류는 `native.*` 키로 전달해 화면 언어로 표시합니다.
 

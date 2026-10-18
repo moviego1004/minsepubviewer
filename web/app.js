@@ -4261,7 +4261,7 @@ elements.markdownViewer.addEventListener("mouseup", () => requestAnimationFrame(
 if (platform.isMobile) {
   mobileUI = installMobileUI({ storage, platform, resize: () => refreshRenditionLayout(state.book.lastLocation),
     openFile: async () => { const payload = await platform.openFile(); if (payload) await addDocumentTab(payload); },
-    tabs: () => state.tabs, activate: activateDocumentTab, closeTab: closeDocumentTab });
+    tabs: () => state.tabs, activeTab: () => state.activeTabId, activate: activateDocumentTab, closeTab: closeDocumentTab });
   document.addEventListener("selectionchange", () => {
     if (state.mode === "markdown" && state.markdown.viewMode === "view") requestAnimationFrame(captureMarkdownSelection);
   });
@@ -4574,8 +4574,8 @@ if (platform.isMobile) {
     bookmark: () => elements.bookmarkButton.click() });
   installMobileTouch(elements.reader);
   installMobileTouch(elements.markdownWorkspace);
-  // PDF pages are rescaled by PDF.js while the fingers move (sharp redraw shortly after);
-  // taps and swipes turn pages only while the page fits on screen.
+  // PDF pages are rescaled by PDF.js while the fingers move (sharp redraw shortly after).
+  // Top/bottom taps always page (scrolling a zoomed page first); swipes turn pages only while the page fits.
   let pdfPinchRatio = 1;
   installReaderTouch(elements.pdfContainer, {
     pinch: {
@@ -4593,7 +4593,7 @@ if (platform.isMobile) {
     paginated: () => state.book.settings.viewMode !== "continuous" &&
       elements.pdfContainer.scrollHeight <= elements.pdfContainer.clientHeight + 2 &&
       elements.pdfContainer.scrollWidth <= elements.pdfContainer.clientWidth + 2,
-    navigate: turnMobilePage,
+    navigate: (direction) => { state.pdf?.step(direction); },
     center: () => mobileUI?.center(),
     onError: (error) => window.alert(t("error.pageTurn", { detail: errorText(error) }))
   });

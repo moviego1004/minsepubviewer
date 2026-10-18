@@ -1,11 +1,13 @@
-// Release build: raises the app version by one and writes build/MinsReader_ver<version>.exe
-// (Windows installer) and/or build/MinsReader_ver<version>.apk.
+// The only way to make app builds (build.bat, makeSetup.bat, npm run build / release / android:apk).
+// Raises the app version by one and writes, directly in build/:
+//   build/MinsReader_ver<version>.exe  (Windows installer)
+//   build/MinsReader_ver<version>.apk  (Android)
 // Usage: node scripts/release.cjs [pc] [android]   (both when no target is given)
 // A failed build puts the previous version back, so version numbers are not skipped.
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const { bumpVersion, releaseFileName } = require("./bump-version.cjs");
+const { RELEASE_FILE, bumpVersion, releaseFileName } = require("./bump-version.cjs");
 
 const root = path.resolve(__dirname, "..");
 const buildDir = path.join(root, "build");
@@ -46,7 +48,7 @@ function buildPc(version) {
   if (!makensis) throw new Error("makensis.exe was not found. Install NSIS or add it to PATH.");
   // Only the unpacked app is rebuilt; earlier release files in build/ are kept.
   fs.rmSync(path.join(buildDir, "win-unpacked"), { recursive: true, force: true });
-  npm("build");
+  npm("build:pc-dir");
   if (!fs.existsSync(path.join(buildDir, "win-unpacked", "Mins Reader.exe"))) {
     throw new Error("Electron build output was not found: build/win-unpacked/Mins Reader.exe");
   }
@@ -72,6 +74,11 @@ try {
   const outputs = [];
   if (targets.includes("pc")) outputs.push(buildPc(bump.version));
   if (targets.includes("android")) outputs.push(buildAndroid(bump.version));
+  for (const file of outputs) {
+    if (path.dirname(file) !== buildDir || !RELEASE_FILE.test(path.basename(file)) || !fs.existsSync(file)) {
+      throw new Error(`Release file does not follow build/MinsReader_ver<version>: ${file}`);
+    }
+  }
   console.log("\nRelease files:");
   for (const file of outputs) console.log(`  ${path.relative(root, file)}  (${(fs.statSync(file).size / 1048576).toFixed(1)} MB)`);
 } catch (error) {

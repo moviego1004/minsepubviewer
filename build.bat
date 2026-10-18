@@ -19,5 +19,6 @@ call npm.cmd ci
 if errorlevel 1 exit /b 1
 
 :build_app
-call npm.cmd run build
+rem Raises the version by one and writes build\MinsReader_ver<version>.exe and .apk
+node scripts\release.cjs
 exit /b %errorlevel%

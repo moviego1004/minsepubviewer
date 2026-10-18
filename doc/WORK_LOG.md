@@ -81,3 +81,17 @@
 - 실제 샘플 비교(개인 문서, 커밋 안 함): 자체 모듈 대 `@ohah/hwpjs` 글자 일치율 90%, 96.5%. 빠진 것은 쪽 번호, 자동 문단 번호, 일부 머리말. 변환 시간 3–25ms. 표 25·26개 표시.
 - 검증: `npm.cmd test` 136 통과, `test:reader` 통과, `test:pdf` 통과, `test:documents` 통과(첫 실행은 DOCX 위치 복원 대기 시간 초과 1회, 재실행 통과), `npm.cmd run release` → 0.1.5(versionCode 6) `build/MinsReader_ver0.1.5.exe` 94.1MB, `build/MinsReader_ver0.1.5.apk` 7.5MB 생성. 첫 실행은 셸에 남은 예전 JAVA_HOME(삭제된 MinsAndroid 경로) 때문에 Android 단계에서 실패하고 버전이 되돌려짐 → `scripts/build-android.js`가 존재하지 않는 JAVA_HOME을 무시하도록 수정 후 재실행 성공.
 - 미검증: 실기기 핀치 체감·성능(특히 큰 EPUB 재배치), 실제 HWPX 사용자 파일, 휴대폰에서 큰 HWP.
+
+## 2026-10-18 (계속) — 터치 구역 분리, PDF 탭 넘김, 열린 문서 창, 빌드 규칙
+
+- 사용자 요청: 위 NEXT_TASKS 4건(쪽 넘김과 전체 화면 구분·형광펜용 가운데 탭, PDF 위·아래 탭, 열린 문서 창 아이콘, 빌드 경로·버전 규칙을 스크립트에 반영).
+- 원인: `getTouchNavigation`이 `continuous`이면 탭까지 모두 꺼서, EPUB 연속 스크롤·MD·변환 문서 연속 보기·쪽이 화면보다 큰 PDF(기본 쪽 너비 맞춤에서 흔함)에서는 위·아래 탭도 가운데 탭 처리 → `center()` 전체 화면 전환. 가운데 한 번 탭도 전체 화면 전환이라 형광펜 시작과 충돌.
+- 변경:
+  - `src/core/touchNavigation.js`: `continuous`는 밀기만 끄고 위·아래 탭은 유지. `isCenterTap` 추가(가운데 1/3, 350ms·12px 이내).
+  - `src/platform/touch-reader.js`: 가운데 두 번 탭(350ms, 40px 이내)에서만 `center()`. 쪽 이동 탭은 두 번 탭 대기를 초기화.
+  - `web/pdf-reader.js`: `step(direction)` — 현재 쪽의 화면상 위·아래 경계 기준으로 0.9화면씩 스크롤, 남은 부분이 화면 5% 미만이면 쪽 이동(PDF.js가 쪽 위에 남기는 몇 px 여백 때문). `web/app.js`의 PDF 탭은 `step` 사용(아래 이동 버튼은 기존대로 쪽 단위).
+  - `src/platform/mobile-ui.js`, `web/mobile.css`: 창 머리말(제목 + ✕ 아이콘), 열린 문서 목록(형식 배지·말줄임 이름·✕ 아이콘·현재 문서 강조), 전체 화면 안내 문구(처음 3번). 문구 `mobile.closePopup`, `mobile.closeDocument`, `mobile.fullscreenHint`(ko/en).
+  - 빌드: `scripts/bump-version.cjs`에 `listReleaseFiles`/`latestReleaseFile`/`maxVersion`, 다음 번호는 PC·Android·`build/` 기존 배포 파일 중 최고 +1. `scripts/release.cjs`가 결과 위치·이름 검사. `package.json`: `build` → release(둘 다), 기존 폴더 빌드는 `build:pc-dir`, `android:apk` → release android, electron-builder artifactName도 `MinsReader_ver${version}`. `build.bat` → release. `scripts/install-android.js`는 `build/`의 최고 버전 APK 설치.
+  - 테스트: touchNavigation 5개(연속 화면 탭·가운데 탭), releaseVersion에 배포 파일 목록·최고 버전 검사, `test:reader`에 가운데 한 번 탭은 전체 화면 유지·두 번 탭 해제, 확대한 PDF 아래 탭 스크롤→다음 쪽→위 탭 이전 쪽, 열린 문서 창 아이콘·현재 문서.
+- 검증: `npm.cmd test` 139 통과, `test:reader`·`test:pdf`·`test:documents` 통과. 열린 문서 창은 실제 CSS로 375px 화면 미리보기 확인(긴 이름 말줄임, ✕ 아이콘 표시). `npm.cmd run build`(새 경로) → 0.1.6(versionCode 7), `build/MinsReader_ver0.1.6.exe` 94.1MB, `build/MinsReader_ver0.1.6.apk` 7.5MB.
+- 미검증: 실기기 터치 체감(두 번 탭 간격 350ms가 적절한지), 실제 형광펜 흐름(길게 눌러 선택 → 도구 막대).

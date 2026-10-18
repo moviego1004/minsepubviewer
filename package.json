@@ -1,6 +1,6 @@
 {
   "name": "MinsEPUBviewer",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Mins Reader: shared EPUB, PDF and Markdown reader for Windows and Android.",
   "author": "Mins",
   "private": true,
@@ -8,7 +8,8 @@
   "main": "electron/main.cjs",
   "scripts": {
     "build:vendor": "esbuild src/vendor/toastui-entry.js --bundle --minify --legal-comments=external --format=iife --outfile=web/vendor/toastui-editor-bundle.js",
-    "build": "npm run build:vendor && electron-builder --win dir",
+    "build": "node scripts/release.cjs",
+    "build:pc-dir": "npm run build:vendor && electron-builder --win dir",
     "dev": "npm run build:vendor && node scripts/dev-server.js",
     "desktop": "npm run build:vendor && electron .",
     "test": "node --test",
@@ -17,7 +18,7 @@
     "android:sync": "npm run build:mobile && cap sync android",
     "android:open": "cap open android",
     "android:run": "npm run android:sync && cap run android",
-    "android:apk": "npm run android:sync && node scripts/build-android.js",
+    "android:apk": "node scripts/release.cjs android",
     "android:install": "node scripts/install-android.js",
     "test:pdf": "electron scripts/smoke-pdf.cjs",
     "test:documents": "electron scripts/smoke-documents.cjs",
@@ -108,7 +109,7 @@
         "dir",
         "nsis"
       ],
-      "artifactName": "MinsReader-${version}.${ext}"
+      "artifactName": "MinsReader_ver${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,

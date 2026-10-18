@@ -1,10 +1,14 @@
 // One app version for the PC and Android builds. Each release build raises the last number
-// by one (0.1.4 -> 0.1.5) and the Android versionCode by one.
+// by one (0.1.4 -> 0.1.5) and the Android versionCode by one. Release files are written to
+// build/ as MinsReader_ver<version>.exe / .apk; a new build is always numbered above every
+// release file already there, so a file is never overwritten.
 // Run directly to bump only: node scripts/bump-version.cjs
 const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
+const buildDir = path.join(root, "build");
+const RELEASE_FILE = /^MinsReader_ver(\d+\.\d+\.\d+)\.(exe|apk)$/;
 const files = {
   package: path.join(root, "package.json"),
   lock: path.join(root, "package-lock.json"),
@@ -48,14 +52,33 @@ function readVersions() {
   return { app: JSON.parse(fs.readFileSync(files.package, "utf8")).version, android: versionName, versionCode };
 }
 
+// Release files already in build/ (newest first).
+function listReleaseFiles(dir = buildDir) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  return names
+    .map((name) => ({ name, match: RELEASE_FILE.exec(name) }))
+    .filter(({ match }) => match)
+    .map(({ name, match }) => ({ name, version: match[1], extension: match[2], path: path.join(dir, name) }))
+    .sort((a, b) => compareVersions(b.version, a.version) || b.name.localeCompare(a.name));
+}
+
+function latestReleaseFile(extension, dir = buildDir) {
+  return listReleaseFiles(dir).find((file) => file.extension === extension) || null;
+}
+
+function maxVersion(versions) {
+  return versions.filter(Boolean).reduce((highest, version) => (compareVersions(version, highest) > 0 ? version : highest));
+}
+
 // Returns the new version and a restore() that puts every file back, for failed builds.
-function bumpVersion() {
+function bumpVersion({ releaseDir = buildDir } = {}) {
   const originals = Object.fromEntries(Object.entries(files)
     .filter(([, file]) => fs.existsSync(file))
     .map(([key, file]) => [key, fs.readFileSync(file, "utf8")]));
   const current = readVersions();
-  // The PC and Android versions were kept apart before; continue from the higher one.
-  const base = compareVersions(current.app, current.android) >= 0 ? current.app : current.android;
+  // Continue from the highest of the PC version, the Android version and the newest release file.
+  const base = maxVersion([current.app, current.android, listReleaseFiles(releaseDir)[0]?.version]);
   const version = nextPatch(base);
   const versionCode = current.versionCode + 1;
 
@@ -88,7 +111,7 @@ function releaseFileName(version, extension) {
   return `MinsReader_ver${version}.${extension}`;
 }
 
-module.exports = { bumpVersion, compareVersions, nextPatch, readVersions, releaseFileName };
+module.exports = { RELEASE_FILE, bumpVersion, compareVersions, latestReleaseFile, listReleaseFiles, maxVersion, nextPatch, readVersions, releaseFileName };
 
 if (require.main === module) {
   console.log(bumpVersion().version);

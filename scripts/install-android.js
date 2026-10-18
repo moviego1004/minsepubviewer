@@ -1,14 +1,19 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+
+const { latestReleaseFile } = createRequire(import.meta.url)("./bump-version.cjs");
 
 const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || (process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "Android/Sdk"));
 const adb = sdk ? join(sdk, "platform-tools", process.platform === "win32" ? "adb.exe" : "adb") : "adb";
-const apk = resolve("android/app/build/outputs/apk/debug/app-debug.apk");
-if (!existsSync(apk)) {
-  console.error("APK가 없습니다. npm run android:apk로 먼저 빌드해 주세요.");
+// Installs the newest release build: build/MinsReader_ver<version>.apk
+const release = latestReleaseFile("apk");
+if (!release) {
+  console.error("build 폴더에 MinsReader_ver<버전>.apk가 없습니다. npm.cmd run release:android로 먼저 빌드해 주세요.");
   process.exit(1);
 }
+const apk = release.path;
+console.log(`설치할 APK: build/${release.name}`);
 
 // -d selects a USB device, never an unrelated running emulator.
 const serial = process.argv[2];

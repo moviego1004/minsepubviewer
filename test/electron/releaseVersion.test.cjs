@@ -18,3 +18,23 @@ test("release files are named MinsReader_ver<version>", () => {
   assert.equal(releaseFileName("0.1.4", "exe"), "MinsReader_ver0.1.4.exe");
   assert.equal(releaseFileName("0.1.4", "apk"), "MinsReader_ver0.1.4.apk");
 });
+
+test("release files in build/ are found newest first and set the floor for the next version", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { latestReleaseFile, listReleaseFiles, maxVersion } = require("../../scripts/bump-version.cjs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mins-release-"));
+  try {
+    for (const name of ["MinsReader_ver0.1.9.exe", "MinsReader_ver0.1.10.apk", "MinsReader_ver0.1.9.apk", "MinsReader-0.2.0.exe", "app-debug.apk"]) {
+      fs.writeFileSync(path.join(dir, name), "");
+    }
+    assert.deepEqual(listReleaseFiles(dir).map((file) => file.name), ["MinsReader_ver0.1.10.apk", "MinsReader_ver0.1.9.exe", "MinsReader_ver0.1.9.apk"]);
+    assert.equal(latestReleaseFile("exe", dir).version, "0.1.9");
+    assert.equal(latestReleaseFile("apk", dir).version, "0.1.10");
+    assert.equal(maxVersion(["0.1.5", "0.1.4", listReleaseFiles(dir)[0].version]), "0.1.10");
+    assert.deepEqual(listReleaseFiles(path.join(dir, "missing")), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

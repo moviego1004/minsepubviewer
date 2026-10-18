@@ -17,8 +17,25 @@
 .mobile-menu { width: min(90vw, 420px); max-height: 80dvh; overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); }
 .mobile-menu > button { display: block; width: 100%; margin-bottom: 8px; }
 .mobile-menu button { padding: 12px; min-height: 44px; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
-.mobile-document-row { display: flex; gap: 8px; margin-top: 8px; }
-.mobile-document-row button:first-child { flex: 1; overflow-wrap: anywhere; }
+.mobile-menu-header { display: flex; align-items: center; gap: 8px; margin: -4px -4px 12px 0; }
+.mobile-menu-header h2 { flex: 1; margin: 0; font-size: 17px; font-weight: 600; }
+.mobile-menu .mobile-menu-close, .mobile-menu .mobile-document-close { display: grid; place-items: center; flex: none; width: 40px; height: 40px; min-height: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+.mobile-menu .mobile-menu-close:active, .mobile-menu .mobile-document-close:active { background: var(--accent-soft); color: var(--text); }
+.mobile-menu-close svg, .mobile-document-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.mobile-document-close svg { width: 16px; height: 16px; }
+.mobile-document-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.mobile-document-row { display: flex; align-items: center; gap: 4px; min-width: 0; padding-right: 4px; border: 1px solid var(--line); border-radius: 10px; }
+.mobile-document-row.is-active { border-color: var(--accent, #1c5d99); background: var(--accent-soft); }
+.mobile-menu .mobile-document-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; text-align: left; }
+.mobile-document-kind { flex: none; min-width: 38px; padding: 3px 0; border-radius: 6px; font-size: 11px; font-weight: 700; text-align: center; color: #fff; background: #6b7280; }
+.mobile-document-kind.kind-epub { background: #2f7d5b; }
+.mobile-document-kind.kind-pdf { background: #c0392b; }
+.mobile-document-kind.kind-markdown { background: #4b5563; }
+.mobile-document-kind.kind-document { background: #1c5d99; }
+.mobile-document-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-menu-empty { margin: 8px 0; color: var(--muted); }
+.mobile-hint { position: fixed; z-index: 1000; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: 86vw; box-sizing: border-box; padding: 10px 16px; border-radius: 20px; background: #222d; color: #fff; font-size: 13px; text-align: center; pointer-events: none; }
+.mobile-hint[hidden] { display: none; }
 .mobile-fullscreen-progress { display: none; }
 .mobile-fullscreen.show-reading-progress .mobile-fullscreen-progress { display: block; position: fixed; bottom: max(3px, env(safe-area-inset-bottom)); right: 8px; font-size: 10px; padding: 2px 6px; border-radius: 8px; background: var(--reader-bg); color: var(--muted); pointer-events: none; }
 .mobile-reader-navigation { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--line); background: var(--surface); }

@@ -262,6 +262,30 @@ export class PdfReader {
     return this.viewer?.nextPage() || false;
   }
 
+  // Tap paging on the phone: scroll one screen while the zoomed page (or the continuous view) has
+  // more to show in that direction, then move to the next or previous page.
+  step(direction) {
+    const container = this.container;
+    const amount = Math.round(container.clientHeight * 0.9);
+    // Bounds of the current page (PDF.js leaves margins around pages, so the container edges are not page edges).
+    const page = this.viewer?.getPageView?.(this.pageNumber - 1)?.div;
+    const box = page?.getBoundingClientRect();
+    const origin = container.getBoundingClientRect().top + container.clientTop - container.scrollTop;
+    const top = box ? box.top - origin : 0;
+    const bottom = box ? box.bottom - origin : container.scrollHeight;
+    // A few pixels left above or below are not worth a tap: treat them as the page edge.
+    const slack = Math.max(2, container.clientHeight * 0.05);
+    if (direction === "next" && container.scrollTop + container.clientHeight < bottom - slack) {
+      container.scrollTop = Math.min(bottom - container.clientHeight, container.scrollTop + amount);
+      return true;
+    }
+    if (direction === "previous" && container.scrollTop > top + slack) {
+      container.scrollTop = Math.max(top, container.scrollTop - amount);
+      return true;
+    }
+    return direction === "next" ? this.next() : this.previous({ toBottom: true });
+  }
+
   previous({ toBottom = false } = {}) {
     const moved = this.viewer?.previousPage() || false;
     if (moved && toBottom) requestAnimationFrame(() => { this.container.scrollTop = this.container.scrollHeight; });

@@ -1,5 +1,8 @@
 import { setAttributeText, setText } from "../../web/i18n.js";
-import { getTouchNavigation } from "../core/touchNavigation.js";
+import { getTouchNavigation, isCenterTap } from "../core/touchNavigation.js";
+
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_DISTANCE = 40;
 
 export function installReaderTouch(target, { viewport, frame = null, enabled, paginated = () => true, navigate, center = () => {}, pinch: zoom = null, onError = console.error }) {
   // zoom: { begin(center), move(ratio, center), end(ratio) } receives the two-finger gesture as it happens;
@@ -27,6 +30,19 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
     void Promise.resolve(zoom.end(ratio)).catch(onError);
   };
   let ignoreClickUntil = 0;
+  // Full screen is toggled by a double tap in the middle, so a single tap there (for example to
+  // start a highlight) does nothing.
+  let lastCenterTap = null;
+  const centerTap = (at) => {
+    const now = performance.now();
+    if (lastCenterTap && now - lastCenterTap.time < DOUBLE_TAP_MS && Math.hypot(at.x - lastCenterTap.x, at.y - lastCenterTap.y) < DOUBLE_TAP_DISTANCE) {
+      lastCenterTap = null;
+      center();
+      return true;
+    }
+    lastCenterTap = { ...at, time: now };
+    return false;
+  };
   const go = (direction) => { if (direction) void Promise.resolve(navigate(direction)).catch(onError); };
   target.addEventListener("touchstart", (event) => {
     if (enabled() && zoom && event.touches.length === 2) {
@@ -66,10 +82,11 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
     const started = gesture;
     gesture = null;
     if (!started || !enabled() || event.touches.length || !event.changedTouches.length) return;
-    const direction = getTouchNavigation({ ...started, end: point(event.changedTouches[0]), duration: performance.now() - started.time,
-      height: viewport.clientHeight, continuous: !paginated(), selected: selected(), interactive: interactive(event.target) });
-    if (direction) { if (event.cancelable) event.preventDefault(); event.stopPropagation(); go(direction); }
-    else if (!selected() && !interactive(event.target) && performance.now() - started.time < 350 && Math.hypot(point(event.changedTouches[0]).x - started.start.x, point(event.changedTouches[0]).y - started.start.y) < 12) center();
+    const tap = { ...started, end: point(event.changedTouches[0]), duration: performance.now() - started.time,
+      height: viewport.clientHeight, continuous: !paginated(), selected: selected(), interactive: interactive(event.target) };
+    const direction = getTouchNavigation(tap);
+    if (direction) { lastCenterTap = null; if (event.cancelable) event.preventDefault(); event.stopPropagation(); go(direction); }
+    else if (isCenterTap(tap) && centerTap(tap.end) && event.cancelable) event.preventDefault();
   }, { passive: false, capture: true });
   target.addEventListener("touchcancel", () => { gesture = null; if (pinch) finishPinch(); ignoreClickUntil = performance.now() + 700; }, { passive: true });
   target.addEventListener("click", (event) => {
@@ -77,8 +94,8 @@ export function installReaderTouch(target, { viewport, frame = null, enabled, pa
     const end = point(event);
     const direction = getTouchNavigation({ start: end, end, duration: 0, height: viewport.clientHeight, continuous: !paginated(),
       selected: selected(), interactive: interactive(event.target) });
-    if (direction) { event.preventDefault(); event.stopPropagation(); go(direction); }
-    else if (!selected() && !interactive(event.target)) center();
+    if (direction) { lastCenterTap = null; event.preventDefault(); event.stopPropagation(); go(direction); }
+    else if (isCenterTap({ start: end, end, duration: 0, height: viewport.clientHeight, selected: selected(), interactive: interactive(event.target) })) centerTap(end);
   }, true);
 }
 

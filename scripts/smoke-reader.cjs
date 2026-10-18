@@ -126,6 +126,18 @@ app.whenReady().then(async () => {
     pending.push(send("touchEnd"));
     await Promise.all(pending);
   };
+  // Both taps are queued before waiting for acknowledgements so they arrive within the double-tap window.
+  const doubleTap = async (point) => {
+    const send = (type) => win.webContents.debugger.sendCommand("Input.dispatchTouchEvent", {
+      type, touchPoints: type === "touchEnd" ? [] : [{ x: point.x, y: point.y, id: 0, radiusX: 2, radiusY: 2, force: 1 }]
+    });
+    const pending = [];
+    for (const type of ["touchStart", "touchEnd", "touchStart", "touchEnd"]) {
+      pending.push(send(type));
+      await new Promise(resolve => setTimeout(resolve, 40));
+    }
+    await Promise.all(pending);
+  };
   const waitFor = async (expression) => {
     const deadline = Date.now() + 10000;
     while (!await run(expression)) {
@@ -226,7 +238,11 @@ app.whenReady().then(async () => {
   await waitFor("document.body.classList.contains('mobile-fullscreen') && window.__immersive");
   await waitFor("document.querySelector('#reader').clientHeight >= innerHeight - 2");
   const fullArea = await run("(()=>{const r=document.querySelector('#reader').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()");
+  // A single tap in the middle is left for selection and highlights; a double tap leaves full screen.
   await touch(fullArea);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.ok(await run("document.body.classList.contains('mobile-fullscreen')"), "A single middle tap keeps full screen");
+  await doubleTap(fullArea);
   await waitFor("!document.body.classList.contains('mobile-fullscreen')");
   // during: checked while both fingers are still down, so zoom must follow the fingers live.
   const pinch = async (start, end, selector = '#reader', during = null) => {
@@ -273,6 +289,7 @@ app.whenReady().then(async () => {
   await waitFor("document.querySelector('#mobilePageLabel')?.textContent.includes('장')");
   await run("document.querySelector('#mobileDocuments').click()");
   await waitFor("document.querySelectorAll('.mobile-document-row').length === 2");
+  assert.ok(await run("!!document.querySelector('.mobile-menu-header .mobile-menu-close svg') && document.querySelectorAll('.mobile-document-close[aria-label=\"이 문서 닫기\"]').length === 2 && document.querySelectorAll('.mobile-document-row.is-active').length === 1"), "Open documents popup shows icon buttons and the active document");
   await run("document.querySelector('.mobile-menu').close()");
   await run("document.querySelector('#mobileRecent').click()");
   await waitFor("document.querySelectorAll('.recent-file-item').length === 2 && document.querySelector('#recentFilesMenu').getBoundingClientRect().height > 0");
@@ -289,12 +306,23 @@ app.whenReady().then(async () => {
   assert.ok(await run("document.querySelector('.document-tab.is-active').textContent.includes('shared.md')"), 'Incoming document takes priority after session restoration');
   await run("window.__nextOpenKind = 'pdf'; document.querySelector('#mobileOpenFile').click()");
   await waitFor("document.body.classList.contains('pdf-mode') && document.querySelector('#mobilePageLabel').textContent === '1 / 3' && document.querySelector('#pdfViewer .page canvas')");
-  const pdfBox = await run("(() => { const r = document.querySelector('#pdfContainer').getBoundingClientRect(); return { x: r.left + r.width / 2, bottom: r.top + r.height * 0.85 }; })()");
+  const pdfBox = await run("(() => { const r = document.querySelector('#pdfContainer').getBoundingClientRect(); return { x: r.left + r.width / 2, top: r.top + r.height * 0.15, bottom: r.top + r.height * 0.85 }; })()");
   await touch({ x: pdfBox.x, y: pdfBox.bottom });
   await waitFor("document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
   const pdfScale = "parseFloat(getComputedStyle(document.querySelector('#pdfViewer')).getPropertyValue('--scale-factor'))";
   const beforePdfScale = await run(pdfScale);
   await pinch(80,140,'#pdfContainer',`${pdfScale} > ${beforePdfScale} * 1.3`);
+  // A zoomed page is taller than the screen: a bottom tap scrolls one screen instead of toggling full screen.
+  await waitFor("document.querySelector('#pdfContainer').scrollHeight > document.querySelector('#pdfContainer').clientHeight + 50");
+  await run("document.querySelector('#pdfContainer').scrollTop = 0");
+  await touch({ x: pdfBox.x, y: pdfBox.bottom });
+  await waitFor("document.querySelector('#pdfContainer').scrollTop > 30");
+  assert.ok(await run("!document.body.classList.contains('mobile-fullscreen') && document.querySelector('#mobilePageLabel').textContent === '2 / 3'"), "Bottom tap on a zoomed PDF page scrolls within the page");
+  // At the end of the page the next bottom tap turns the page; a top tap goes back to the end of page 2.
+  await touch({ x: pdfBox.x, y: pdfBox.bottom });
+  await waitFor("document.querySelector('#mobilePageLabel').textContent === '3 / 3'");
+  await touch({ x: pdfBox.x, y: pdfBox.top });
+  await waitFor("document.querySelector('#mobilePageLabel').textContent === '2 / 3'");
   await pinch(140,80,'#pdfContainer');
   await waitFor(`${pdfScale} < ${beforePdfScale} * 1.1`);
   await run("window.__background()");
@@ -304,7 +332,7 @@ app.whenReady().then(async () => {
   await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('h1')?.textContent === 'DOCX 검사 문서' && /^1 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
   // Tap paging applies in page mode; earlier steps may have left continuous scrolling on.
   await run("document.querySelector('#paginatedModeButton').click()");
-  const docBox = await run("(() => { const r = document.querySelector('#docFrame').getBoundingClientRect(); return { x: r.left + r.width / 2, bottom: r.top + r.height * 0.85 }; })()");
+  const docBox = await run("(() => { const r = document.querySelector('#docFrame').getBoundingClientRect(); return { x: r.left + r.width / 2, top: r.top + r.height * 0.15, bottom: r.top + r.height * 0.85 }; })()");
   await touch({ x: docBox.x, y: docBox.bottom });
   await waitFor("/^2 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
   const docZoom = "Number(document.querySelector('#docFrame').contentDocument.body.style.zoom || 1)";
@@ -320,7 +348,7 @@ app.whenReady().then(async () => {
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen and center tap, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);
