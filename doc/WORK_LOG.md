@@ -129,3 +129,9 @@
 - 변경: `web/document-convert.js` 압축 해제를 pako `inflateRaw`로(지연 로드, `MINS_PAKO_URL`), `package.json` 직접 의존성 `pako@1.0.11`과 PC 패키지 파일 목록, `scripts/build-mobile.js`가 `vendor/pako/` 복사, `src/platform/android.js` 경로 설정, `scripts/sample-documents.cjs` 생성 HWP에 CRC·크기 꼬리, 단위 시험 1개 추가, `.gitignore`에 `test/*.hwp` 등(사용자가 test 바로 아래 둔 개인 문서).
 - 검증: pako 결과가 zlib과 4개 구역 모두 바이트 단위로 같음. Electron Chromium에서 실제 HWP 3개 변환 성공(Node와 같은 길이). `npm.cmd test` 142 통과, `test:reader`(꼬리 있는 HWP를 Chromium에서 변환)·`test:documents` 통과, `npm.cmd run build` → 0.1.9(versionCode 10) exe 94.1MB·apk 7.5MB, APK에 `assets/public/vendor/pako/`, PC app.asar에 pako 포함 확인.
 - 미검증: 실기기.
+
+## 2026-10-18 (계속) — 개발 계획 문서 정리
+
+- 사용자 요청: doc 폴더에 개발 계획(기능 요구사항, 개발 방안, 완료된 것, 앞으로 할 것)을 정리. 기존 문서가 있으면 갱신.
+- 변경: `doc/DEVELOPMENT_PLAN.md`를 전면 개편(초기 영문 EPUB 계획 → 현재 제품 기준 한국어 로드맵). 지원 형식·공통 기능·휴대폰 조작·배포 요구사항 표와 상태, 구조와 형식별 방법, 시험·빌드 방법, 버전별 완료 내역, 우선순위별 할 일, 결정 기록. 초기 계획은 부록 요약(원문은 Git 기록). `HANDOFF.md` 문서 안내, `NEXT_TASKS.md`에 로드맵 참조와 HWP 표시 품질 제안(사용자 결정 대기) 추가.
+- 검증: 문서만 변경. 버전·명령·경로·시험 개수(142)를 현재 코드와 대조.

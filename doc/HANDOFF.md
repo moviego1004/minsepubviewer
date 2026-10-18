@@ -9,7 +9,7 @@
 3. [NEXT_TASKS.md](NEXT_TASKS.md): 다음 작업과 미검증 항목.
 4. [WORK_LOG.md](WORK_LOG.md): 실제 작업과 검증 이력.
 5. [ANDROID.md](ANDROID.md): Android 구조, 빌드, 설치, 데이터 정책.
-6. [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md): 초기 계획 및 이후 방향.
+6. [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md): 기능 요구사항, 개발 방안, 완료 내역, 앞으로 할 일(전체 로드맵). 2026-10-18 전면 개편.
 
 ## 현재 상태
 

@@ -1,233 +1,225 @@
-# Minse EPUB Viewer Development Plan
+# Mins Reader 개발 계획
 
-> 2026-09-28: 아래 내용은 초기 계획과 당시 진행 이력이다. 현재는 Android 포트도 구현되었고 UI는 순수 JavaScript 기반이다. 최신 현황은 [HANDOFF.md](HANDOFF.md), 후속 계획은 [NEXT_TASKS.md](NEXT_TASKS.md), 실제 검증 결과는 [WORK_LOG.md](WORK_LOG.md)를 기준으로 한다. React/iOS/클라우드 동기화 등 초기 제안은 구현 완료를 뜻하지 않는다.
+최종 갱신: 2026-10-18 · 기준 버전 0.1.9 (versionCode 10)
 
-## Goal
+이 문서는 제품이 갖춰야 할 기능(요구사항), 그 기능을 만드는 방법(개발 방안), 지금까지 완료된 것, 앞으로 할 일을 한곳에 정리한다.
+매 작업의 상세 기록과 검증 결과는 [WORK_LOG.md](WORK_LOG.md), 진행 중인 요청은 [NEXT_TASKS.md](NEXT_TASKS.md), 환경과 재개 절차는 [HANDOFF.md](HANDOFF.md), Android 세부는 [ANDROID.md](ANDROID.md)를 따른다.
 
-Build a polished PC EPUB viewer first. Keep the architecture friendly to future Android and iOS work, but do not expand the initial scope into a full cross-platform product unless the PC version is stable.
+표기: ✅ 완료(자동 검증 통과) · 📱 실기기 확인 완료 · ⏳ 진행/확인 대기 · ⬜ 계획 · ⛔ 하지 않기로 함
 
-## Product Scope
+---
 
-### MVP
+## 1. 제품 개요
 
-- Open local EPUB files.
-- Render EPUB content with table of contents navigation.
-- Save and restore the last reading location per book.
-- Turn pages with mouse wheel and keyboard.
-- Zoom with `Ctrl + Wheel`.
-- Change font family, font size, line height, margin, and theme.
-- Add, remove, and navigate bookmarks.
-- Highlight selected text with color choices.
-- Add text notes to selected text.
-- Enable text-only mode that hides images and decorative media.
+- **이름**: Mins Reader (이전 이름 Mins EPUB Viewer). 내부 식별자 `com.mins.epubviewer`와 기존 사용자 데이터 경로는 유지한다.
+- **목표**: EPUB·PDF·Markdown·오피스/한글 문서를 한 앱에서 읽고, 이어 읽기·형광펜·메모·책갈피를 형식과 상관없이 같은 방식으로 쓰는 개인용 범용 뷰어.
+- **대상 플랫폼**: Windows PC(Electron), Android(Capacitor). iOS는 Mac·Apple 개발자 계정이 없어 보류.
+- **원칙**
+  - 원본 파일은 수정하지 않는다. 형광펜·메모·위치는 앱 안에 저장한다.
+  - PC와 Android가 같은 화면 코드(`web/`)와 핵심 로직(`src/core/`)을 공유한다.
+  - 외부 라이브러리는 그 라이브러리가 제공하는 기능 범위까지만 쓴다(예: PDF는 PDF.js 기능까지).
+  - 모든 메뉴·알림은 한국어/영어를 지원한다.
 
-### Post-MVP
+## 2. 기능 요구사항
 
-- Free-position text box annotations.
-- Annotation export.
-- Full text search.
-- Reading statistics.
-- Optional cloud sync.
-- Android and iOS ports after the PC model is stable.
+### 2.1 지원 형식
 
-## PC App Direction
+| 형식 | 요구 수준 | PC | Android |
+|---|---|---|---|
+| EPUB | 원본 그대로 읽기, 글꼴·여백 조절, 쪽/연속 보기 | ✅ | ✅ 📱 |
+| PDF | PDF.js 기능 범위(쪽/연속, 확대·맞춤, 회전, 두 쪽, 검색, 목차, 링크, 텍스트 선택) | ✅ | ✅ 📱 |
+| Markdown·TXT | 읽기·편집·새 문서·내보내기 | ✅ | ✅ 📱 |
+| DOCX | 읽기 전용(텍스트·표·제목) | ✅ | ✅ |
+| HWPX, XML 형식 HWP(HWPML) | 읽기 전용(텍스트·표) | ✅ | ✅ |
+| HWP 5.0(바이너리) | 읽기 전용 | ✅ 쪽 모양 재현 | ✅ 📱 텍스트·표·각주(쪽 모양 아님) |
+| 구형 DOC, 스캔 PDF OCR, PDF 양식 저장·편집 | — | ⛔ | ⛔ |
 
-Recommended stack:
+### 2.2 공통 읽기 기능
 
-- Electron for the desktop shell.
-- React for UI.
-- A reusable JavaScript core package for book metadata, settings, annotations, and text-only rendering rules.
-- EPUB rendering through a proven library such as `epubjs` when dependencies are added.
-- Local persistence through JSON files or SQLite. Start with JSON for speed, then migrate only if data grows complex.
+| 요구사항 | 상태 |
+|---|---|
+| 파일 열기 하나로 모든 형식 열기(형식은 파일 이름으로 판단) | ✅ |
+| 최근 파일, 여러 문서 탭(휴대폰은 "열린 문서" 창) | ✅ |
+| 이어 읽기: 문서별 마지막 위치·배율 저장과 복원 | ✅ 📱 |
+| 목차(EPUB·PDF), 본문 검색과 결과 이동 | ✅ |
+| 책갈피, 형광펜(여러 색·밑줄), 메모, 주석 내보내기 | ✅ (PDF·변환 문서 포함) |
+| 테마(밝게·세피아·어둡게), 글꼴·크기·줄 간격·여백(EPUB·MD) | ✅ |
+| 확대·축소: PC는 Ctrl+휠, 휴대폰은 두 손가락(움직이는 동안 바로 반영) | ✅ 📱 |
+| 전체 화면: PC는 F11, 휴대폰은 화면 가운데 두 번 탭 | ✅ |
+| 텍스트 전용 보기(EPUB 그림 숨김) | ✅ |
+| 한국어/영어 화면(보기 설정 → 언어) | ✅ |
 
-## Core Features
+### 2.3 휴대폰 조작
 
-### Reading
+| 요구사항 | 상태 |
+|---|---|
+| 화면 위 1/3 탭 = 이전, 아래 1/3 탭 = 다음(연속 보기·확대한 PDF는 한 화면씩) | ✅ |
+| 가운데 한 번 탭은 아무 동작 없음(글자 선택·형광펜용), 가운데 두 번 탭 = 전체 화면 전환 | ✅ |
+| 밀기(스크롤)로 쪽 이동. 쪽이 화면보다 큰 PDF는 쪽 끝에서 한 번 더 밀면 다음 쪽 | ✅ |
+| 하단 이전·책갈피·다음 버튼, 뒤로 가기로 창·전체 화면 닫기 | ✅ 📱 |
+| 다른 앱("내 파일", 카카오톡, 메일, 클라우드)에서 "열기"·"공유"로 받기 | ✅ 📱(내 파일) ⏳(카톡·메일) |
+| 앱 종료·백그라운드 후 열린 문서와 위치 복원 | ✅ |
 
-- File open dialog.
-- Recent books.
-- Table of contents sidebar.
-- Current location and progress display.
-- Last location restore.
-- Page navigation through mouse wheel, arrow keys, and clickable controls.
+### 2.4 배포·운영
 
-### Viewing
+| 요구사항 | 상태 |
+|---|---|
+| PC 설치 파일과 Android APK를 한 버전 번호로 관리 | ✅ |
+| 빌드할 때마다 버전 +1, 결과는 `build/MinsReader_ver<버전>.exe` / `.apk` | ✅ |
+| 이전 이름 설치본 위에 설치해도 읽기 기록 유지 | ⏳ 사용자 확인 |
+| 배포 파일 크기 최소화 | ✅ 1차(PC 94MB, APK 7.5MB) / ⬜ 2차 |
 
-- `Ctrl + Wheel` zoom in/out.
-- Font family selection.
-- Font size controls.
-- Line height controls.
-- Margin controls.
-- Theme selection: light, dark, sepia.
-- Text-only mode:
-  - Hide `img`, `svg`, `picture`, `video`, `audio`, `canvas`, `figure`, and background images.
-  - Keep normal text layout as much as possible.
-  - Warn when a book appears to be image-only or has too little text.
+## 3. 개발 방안
 
-### Bookmarks
+### 3.1 구조
 
-- Add bookmark at current EPUB CFI or location.
-- Remove bookmark.
-- Show bookmark list.
-- Jump to bookmark.
-
-### Highlights
-
-- Capture selected text range.
-- Save range by EPUB CFI when available.
-- Store selected quote for fallback display.
-- Support multiple colors.
-- Delete highlight.
-
-### Text Notes
-
-- Attach a note to a selected text range.
-- Show notes in a sidebar.
-- Jump from note to source location.
-- Edit and delete notes.
-
-### Text Box Notes
-
-This is intentionally post-MVP because EPUB content is reflowable.
-
-Suggested storage:
-
-- Chapter identifier.
-- Nearby anchor CFI.
-- Relative x/y position within the viewport or paragraph region.
-- Box size and style.
-- Text content.
-
-## Local Data Model
-
-```json
-{
-  "bookId": "sha256-of-file-or-stable-epub-identity",
-  "title": "Book title",
-  "lastLocation": "epub-cfi-or-location",
-  "settings": {
-    "fontFamily": "system",
-    "fontSize": 18,
-    "lineHeight": 1.6,
-    "margin": 24,
-    "theme": "light",
-    "zoom": 1,
-    "textOnly": false
-  },
-  "bookmarks": [],
-  "highlights": [],
-  "notes": [],
-  "textBoxes": []
-}
+```
+web/            공통 화면(순수 JavaScript, index.html·app.js·각 형식 뷰어)
+src/core/       형식과 무관한 핵심 로직(위치·범위 문자열, 설정, 다국어, HWP 해석 등) — 단위 시험 대상
+src/locales/    ko.js, en.js(키 일치 시험)
+src/platform/   Android 연결부(파일 불러오기, 터치, 모바일 메뉴)
+electron/       PC 앱 껍데기(창, 파일 대화상자, 파일 연결, HWP 5.0 변환)
+android/        Capacitor Android 프로젝트(ReaderDocumentsPlugin: 파일 가져오기·저장·상태)
+scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 ```
 
-## Development Strategy
+- 화면은 React 없이 순수 JavaScript로 만든다(초기 계획의 React는 채택하지 않음).
+- 모바일은 esbuild로 `dist/mobile`에 번들을 만들고 Capacitor가 APK에 넣는다.
 
-Use test-driven development for the reusable core:
+### 3.2 형식별 방법
 
-1. Write tests for settings validation and merging.
-2. Write tests for text-only CSS generation.
-3. Write tests for bookmark and annotation models.
-4. Implement core modules until tests pass.
-5. Add Electron UI and connect it to the tested core.
-6. Add integration tests around user flows.
+| 형식 | 방법 | 위치·형광펜 기록 |
+|---|---|---|
+| EPUB | epub.js. Android는 앱 사본을 압축 해제한 폴더를 URL로 읽음(큰 책도 메모리 절약) | EPUB CFI |
+| PDF | PDF.js 6.3.289(PDFViewer·검색·링크). Android는 legacy 빌드, 앱 사본을 URL로 읽음 | `pdf:page=..&zoom=..`, 형광펜은 PDF 좌표 사각형 |
+| Markdown | Toast UI Editor(보기·편집) | 스크롤 비율 |
+| DOCX | mammoth 1.13.0 → HTML | 문서 스크롤 비율, 형광펜은 텍스트 문자 위치 |
+| HWPX·HWPML | 자체 XML 변환기 `src/core/hwpXml.js` | 위와 같음 |
+| HWP 5.0 (PC) | `@ohah/hwpjs` 네이티브 모듈을 Electron 메인 프로세스에서 실행 → 쪽 배치 HTML | 위와 같음 |
+| HWP 5.0 (Android) | 자체 해석기 `src/core/hwpBinary.js`(OLE 복합 파일 → 레코드 → 본문·표·글상자·각주), 압축 해제는 pako | 위와 같음 |
 
-## Milestones
+- 변환 문서는 스크립트를 제거한 HTML을 격리된 iframe에 보여 준다.
+- Android에서 변환 문서와 Markdown 사본은 플러그인 `readDocument`로 읽는다. 앱 파일 URL은 `.hwp` 같은 확장자를 서버가 몰라 실패하기 때문이다.
+- HWP 압축 해제는 브라우저 기본 기능(`DecompressionStream`)을 쓰지 않는다. 한글이 압축 데이터 뒤에 붙이는 검사값 때문에 실패한다.
 
-## Current Progress
+### 3.3 공통 기반
 
-- Milestone 1 core foundation is in place with passing unit tests.
-- Added a reusable library state module for book records, active book tracking, and safe JSON persistence.
-- Wired the web prototype to persist last location, settings, zoom, and bookmarks through localStorage.
-- Added `epubjs` to render real EPUB files in the web prototype.
-- Added table of contents navigation from EPUB navigation data.
-- Added highlight and text note capture from selected EPUB text.
-- Added annotation export as a JSON file.
-- Added text note editing.
-- Added Electron desktop shell with a native EPUB file-open dialog.
-- Added reader margin controls across the web prototype and EPUB renderer.
-- Hardened annotation deletion, empty note edits, and Korean-safe annotation export filenames.
-- Milestone 1, Milestone 2, Milestone 3, and Milestone 4 are complete at prototype level.
-- Milestone 5 stabilization has started with file validation, EPUB open failure classification, content diagnostics, and reading mode fixes.
-- Milestone 6 search has started with sidebar EPUB search and CFI result navigation.
-- Next recommended task: refine search result highlighting and run larger/multilingual EPUB stabilization checks.
+- **다국어**: `src/core/i18n.js` + `web/i18n.js`. 화면 요소는 `data-i18n*` 속성으로 번역하고, Java·Electron 오류는 메시지 키(`native.*`, `document.*`)로 넘겨 화면에서 번역한다.
+- **저장**
+  - PC는 브라우저 저장소(사용자 프로필 폴더)를 쓴다.
+  - Android는 플러그인이 앱 내부 파일에 원자적으로 저장한다.
+  - 문서 식별자: EPUB은 파일 해시, PDF는 fingerprint, 변환 문서는 내용 해시.
+- **터치**
+  - `src/core/touchNavigation.js`: 탭 구역, 밀기, 가운데 탭, 쪽 끝 밀기 판정
+  - `src/platform/touch-reader.js`: 제스처 처리, 두 손가락 확대
 
-### Milestone 1: Core Foundation
+### 3.4 품질 관리
 
-- Project skeleton.
-- Test runner.
-- Core settings model.
-- Text-only mode rules.
-- Bookmark/highlight/note model helpers.
+| 명령 | 내용 |
+|---|---|
+| `npm.cmd test` | 단위 시험 142개(핵심 로직, 다국어 키, 위치 문자열, HWP 해석, 빌드 번호 규칙) |
+| `npm.cmd run test:reader` | 모의 Android 스모크(Electron에 휴대폰 화면·터치 흉내): 형식별 열기, 탭·밀기·확대, 복원, 전체 화면 |
+| `npm.cmd run test:pdf` | PC PDF 스모크 |
+| `npm.cmd run test:documents` | PC 변환 문서 스모크 |
+| `cd android && gradlew testDebugUnitTest` | Android Java 시험 |
 
-### Milestone 2: Desktop Shell
+- 실제 문서(`test/sample/`, `test/*.hwp`)는 개인 문서라 Git에 넣지 않는다. 대신 같은 구조의 시험 파일을 `scripts/sample-documents.cjs`가 생성한다.
+- 실기기 확인은 사용자가 한다. 확인 전에는 문서에 성공으로 적지 않는다.
 
-- Electron window.
-- File open flow.
-- EPUB render placeholder.
-- App layout with toolbar and sidebars.
+### 3.5 빌드·배포
 
-### Milestone 3: Reading UX
+- 모든 빌드 명령(`build.bat`, `makeSetup.bat`, `npm.cmd run build`/`release`/`android:apk`)은 `scripts/release.cjs`를 거친다.
+- 다음 번호는 PC 버전, Android 버전, `build/`의 기존 배포 파일 중 가장 높은 것에 1을 더한다. 빌드가 실패하면 버전을 되돌린다.
+- 이 PC의 Android 도구
+  - JDK 21: `%LOCALAPPDATA%\Programs\Eclipse Adoptium\jdk-21`
+  - SDK: `%LOCALAPPDATA%\Android\Sdk`
+  - 설치 스크립트: `scripts/setup-android.ps1`
 
-- EPUB rendering.
-- Wheel page turning.
-- `Ctrl + Wheel` zoom.
-- Font, line height, margin, and theme controls.
-- Last location save/restore.
+## 4. 지금까지 완료된 것
 
-### Milestone 4: Personal Data
+| 시기 | 버전 | 내용 |
+|---|---|---|
+| 2026-08~09 | ~0.1.3 | PC EPUB 뷰어(목차, 위치 복원, 설정, 책갈피·형광펜·메모·내보내기, 검색, 텍스트 전용), Markdown 보기·편집, Android 포트(파일 가져오기, 외부 열기·공유, 모바일 메뉴·터치, 상태 복원) |
+| 2026-10-17 | PC 0.1.0 / Android 0.1.3 | PDF 지원, 한국어/영어 화면, 이름 변경(Mins Reader), "파일 열기" 통합 |
+| 2026-10-17 | PC 0.1.0 / Android 0.1.3 | DOCX·HWPX·HWPML 읽기, PC HWP 5.0(쪽 모양 재현), 배포 크기 축소(PC 앱 묶음 app.asar 19.4→7.5MB, 언어 파일 55→2개), 이 PC에 Android 빌드 환경 구성 |
+| 2026-10-17 | 0.1.4 | 배포 파일 이름·버전 규칙(`MinsReader_ver<버전>`, 빌드마다 +1) |
+| 2026-10-18 | 0.1.5 | 두 손가락 확대를 실시간으로, PDF 두 손가락 확대, 휴대폰 HWP 5.0 자체 해석기 |
+| 2026-10-18 | 0.1.6 | 쪽 넘김 탭과 전체 화면 분리(가운데 두 번 탭), PDF 탭 넘김, 열린 문서 창 아이콘, 모든 빌드 명령에 버전 규칙 적용 |
+| 2026-10-18 | 0.1.7 | 확대한 PDF를 밀어서 쪽 이동, 형식별 스크롤 이동 시험 |
+| 2026-10-18 | 0.1.8 | 변환 문서·Markdown을 플러그인으로 읽기, 열기/공유 형식 추가 |
+| 2026-10-18 | 0.1.9 | HWP 압축 해제를 pako로 교체 → 휴대폰에서 실제 HWP 5.0 열림(📱 사용자 확인) |
 
-- Bookmarks.
-- Highlights.
-- Text notes.
-- Local persistence.
+## 5. 앞으로 할 일
 
-### Milestone 5: Stabilization
+### 5.1 우선순위 높음
 
-- Large EPUB testing.
-- Korean, English, Japanese EPUB testing.
-- Image-heavy EPUB testing.
-- Error handling.
-- Backup and recovery for local reading data.
+1. **휴대폰 HWP 표시 품질 개선** ⬜ (사용자 의견 반영, 2026-10-18 제안)
+   - 현재는 PC(쪽 모양 재현)와 휴대폰(텍스트·표만)의 모습 차이가 크다.
+   - **1단계 — 자체 해석기 보강(추천)**
+     - 화면 폭에 맞춘 재배치는 유지하면서 원본 느낌에 가깝게 만든다.
+     - 체감이 큰 순서: 글자 모양(굵게·크기·색) → 문단 정렬·들여쓰기 → 표 칸 너비·테두리 → 그림(BinData) → 자동 번호(가., 1)) → 머리말·꼬리말.
+     - DocInfo(글자·문단 모양 표)를 읽어 적용한다.
+   - **2단계 — 원본 모양 보기(선택)**
+     - `@ohah/hwpjs`(Rust, MIT)를 공유 메모리 없이 동작하는 WASM으로 직접 빌드해 휴대폰에서도 PC와 같은 쪽 배치를 보여 준다.
+     - 보기 메뉴에 "원본 모양 / 읽기 편한 모양" 전환을 둔다.
+     - 필요한 것: Rust 도구 설치, 1~2일 가능성 시험. 라이브러리가 정식 출시 전이라 갱신될 때마다 다시 빌드해야 한다.
+   - 대안: 공개 웹용 WASM을 그대로 쓰는 방법은 메모리 256MB와 공유 메모리가 필요해 불확실하다(시험판 APK로 확인해야 함).
+2. **실기기 확인 대기 항목** ⏳
+   - 카카오톡·메일 첨부 열기 목록에 Mins Reader가 나오는지(앱별 MIME). 안 나오면 앱 이름과 형식을 받아 추가한다.
+   - 실제 HWPX 사용자 파일
+   - 휴대폰 터치(두 번 탭 간격 350ms, 쪽 끝 밀기)의 체감
+   - PDF·DOCX 형광펜 흐름(길게 눌러 선택 → 도구 막대)
+   - PC 설치본 업그레이드 시 읽기 기록 유지
 
-### Milestone 6: Search
+### 5.2 중간
 
-- Sidebar search input.
-- Search across EPUB spine sections.
-- Show result excerpts with chapter labels.
-- Jump to result CFI.
-- Add result highlighting and previous/next navigation.
+3. **의존성 보안 경고 정리** ⬜
+   - epub.js 내장 `@xmldom/xmldom`(<=0.8.14), Toast UI의 `dompurify`(<=3.4.15)
+   - 판 올림 또는 대체를 검토한다.
+4. **실제 문서 안정화** ⬜
+   - 대형·다국어 EPUB, 스캔·대용량 PDF, 큰 HWP(수십 MB)의 성능과 메모리를 확인한다.
+5. **PC 화면 정리** ⬜
+   - 좁은 창에서 툴바가 가로로 스크롤되는 문제
+   - 검색 입력 지연 처리, 이전·다음 결과 단축키
+6. **Markdown** ⬜
+   - 상대 경로 이미지 표시, 보관함 관리
 
-## Test Case Plan
+### 5.3 장기·검토
 
-### Unit Tests
+7. **배포 크기 2차** ⬜
+   - PC 설치 파일의 대부분(약 265MB 풀린 크기)은 Electron 런타임이다.
+   - 시스템 WebView2를 쓰는 셸(Tauri 등)로 옮기면 크게 줄일 수 있지만, HWP 네이티브 모듈과 파일 연결을 다시 만들어야 한다.
+8. **전자잉크 기기 대응** ⬜
+   - 화면 갱신·잔상 제어, 기기 감지. 실제 기기 문제가 확인되면 범위를 정한다.
+9. **기기 간 데이터 이동·동기화** ⬜
+   - PC와 휴대폰 사이 읽기 위치·형광펜 옮기기
+10. **iOS** ⛔(보류)
+    - Mac과 Xcode(또는 클라우드 macOS 빌드), Apple 개발자 계정이 생기면 Capacitor iOS로 진행한다.
+11. **Play 스토어 배포** ⬜
+    - 배포 서명키(Git 밖 보관), 개인정보 처리 안내, 앱 아이콘·스크린샷 정리
 
-- Default reading settings are valid.
-- Partial settings merge without losing defaults.
-- Invalid settings are clamped or rejected.
-- Text-only mode CSS hides image/media elements.
-- Text-only mode can preserve captions when requested.
-- Bookmark creation requires a location.
-- Highlight creation requires a range and selected text.
-- Text note creation requires a range and note body.
-- Annotation IDs are stable strings.
+## 6. 위험과 결정 기록
 
-### Integration Tests
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| PDF 기능 범위 | PDF.js 제공 기능까지 | 유지 보수 부담. 스캔 PDF 형광펜·OCR·편집 제외 |
+| PDF 형광펜 | 앱 내부 저장(방식 B) | 원본 PDF 미수정 |
+| HWP 5.0 PC | `@ohah/hwpjs` 네이티브 | 쪽 모양 재현 품질. 정식 출시 전이라 판 고정(0.1.0-rc.10) |
+| HWP 5.0 Android | 자체 해석기 | 공개 WASM은 공유 메모리·256MB가 필요해 WebView에서 곤란 |
+| HWP 압축 해제 | pako | 브라우저 `DecompressionStream`은 한글의 CRC·크기 꼬리를 거부 |
+| 실행 중 라이브러리 내려받기 | 하지 않음 | 오프라인 사용, 판 불일치, 보안 |
+| 앱 식별자 | `com.mins.epubviewer` 유지 | 기존 설치본 업데이트와 데이터 보존 |
+| 화면 기술 | 순수 JavaScript(React 미채택) | PC·Android 공유가 단순하고 번들이 작음 |
 
-- Opening a book creates a book record.
-- Moving pages updates last location.
-- Changing font persists per book.
-- Enabling text-only mode persists per book.
-- Adding a bookmark appears in the sidebar.
-- Clicking a bookmark restores the location.
-- Adding a highlight survives reload.
-- Adding a note survives reload.
+## 부록: 초기 계획(2026-08)
 
-### UI Tests
+초기에는 "PC EPUB 뷰어를 먼저 완성하고 이후 모바일로 확장"하는 계획이었다. 초기 계획의 단계는 다음과 같았다.
 
-- Main toolbar renders.
-- Settings panel opens and changes reading options.
-- Wheel without Ctrl navigates pages.
-- Wheel with Ctrl changes zoom.
-- Text-only toggle hides images.
-- Annotation sidebar lists highlights and notes.
+1. 핵심 모델과 시험
+2. Electron 껍데기
+3. 읽기 경험(휠·Ctrl+휠·글꼴·테마·위치 복원)
+4. 개인 데이터(책갈피·형광펜·메모)
+5. 안정화
+6. 검색
+
+모두 시제품 수준으로 완료됐고, 이후 Android 포트와 형식 확장으로 이어졌다. 초기 제안 중 React UI, SQLite, 자유 위치 글상자 메모, 클라우드 동기화는 채택하지 않았거나 아직 하지 않았다. 원문은 Git 기록(`doc/DEVELOPMENT_PLAN.md`의 2026-10-18 이전 판)에서 볼 수 있다.
