@@ -39,6 +39,7 @@ app.whenReady().then(async () => {
     // PDF.js comes from the mobile build output, as on Android (run npm run build:mobile first).
     window.MINS_PDFJS_BASE = '/dist/mobile/vendor/pdfjs/';
     window.MINS_MAMMOTH_URL = '/dist/mobile/vendor/mammoth/mammoth.browser.min.js';
+    window.MINS_PAKO_URL = '/dist/mobile/vendor/pako/pako_inflate.min.js';
     const docxBytes = Uint8Array.from(atob('${docx}'), value => value.charCodeAt(0)).buffer;
     // Binary HWP 5.0 is read by the built-in text-and-table reader on the phone.
     const hwpBytes = Uint8Array.from(atob('${hwp}'), value => value.charCodeAt(0)).buffer;

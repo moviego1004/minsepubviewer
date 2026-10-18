@@ -8,3 +8,8 @@ dist/
 
 # Personal sample documents for local format checks; never commit.
 test/sample/
+# Personal documents dropped directly into test/ for format checks; never commit.
+test/*.hwp
+test/*.hwpx
+test/*.docx
+test/*.pdf

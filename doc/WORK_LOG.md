@@ -120,3 +120,12 @@
   - 테스트: mobile-files에 "변환 문서는 URL fetch 없이 읽음"(HWP·HWPX·DOCX·MD, 크기 초과).
 - 검증: `npm.cmd test` 141 통과, `test:reader` 통과, `npm.cmd run build` → 0.1.8(versionCode 9) `build/MinsReader_ver0.1.8.exe` 94.1MB·`build/MinsReader_ver0.1.8.apk` 7.5MB, `gradlew testDebugUnitTest` 통과, APK 매니페스트(aapt2)에서 MIME 20종 확인.
 - 미검증: 실기기에서 "내 파일"·카톡·메일로 열기(각 앱이 보내는 MIME에 따라 목록 표시 여부가 달라짐).
+
+## 2026-10-18 (계속) — 일부 HWP의 "Failed to fetch" 원인 재현과 수정
+
+- 사용자 요청: 0.1.8에서도 일부 HWP가 "Failed to fetch"(외부 열기·앱 안 열기 모두). 안 열리는 샘플을 `test/`에 둠.
+- 재현: Node에서는 변환 성공. Electron(Chromium, Android WebView와 같은 엔진)에서 `DecompressionStream('deflate-raw')`로 바꾸면 실제 HWP 5.0 3개 모두 `TypeError: Failed to fetch`. 각 구역 압축 데이터 뒤 8바이트 = CRC-32 + 원래 크기(예: 마지막 4바이트 0x6d7b = 28027 = 해제 크기). 부분 출력만 쓰는 우회는 한 파일에서 끝부분이 빠짐(21432 대 24127자) → 기각.
+- 0.1.8의 `readDocument` 수정은 그대로 유효(파일 읽기 경로)하나, 실제 실패는 그 다음 단계인 압축 해제였음. 앞 판단에서 시험 파일이 실제 파일과 달라 놓친 것.
+- 변경: `web/document-convert.js` 압축 해제를 pako `inflateRaw`로(지연 로드, `MINS_PAKO_URL`), `package.json` 직접 의존성 `pako@1.0.11`과 PC 패키지 파일 목록, `scripts/build-mobile.js`가 `vendor/pako/` 복사, `src/platform/android.js` 경로 설정, `scripts/sample-documents.cjs` 생성 HWP에 CRC·크기 꼬리, 단위 시험 1개 추가, `.gitignore`에 `test/*.hwp` 등(사용자가 test 바로 아래 둔 개인 문서).
+- 검증: pako 결과가 zlib과 4개 구역 모두 바이트 단위로 같음. Electron Chromium에서 실제 HWP 3개 변환 성공(Node와 같은 길이). `npm.cmd test` 142 통과, `test:reader`(꼬리 있는 HWP를 Chromium에서 변환)·`test:documents` 통과, `npm.cmd run build` → 0.1.9(versionCode 10) exe 94.1MB·apk 7.5MB, APK에 `assets/public/vendor/pako/`, PC app.asar에 pako 포함 확인.
+- 미검증: 실기기.

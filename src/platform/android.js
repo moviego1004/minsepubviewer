@@ -8,6 +8,7 @@ const Documents = registerPlugin("ReaderDocuments");
 // PDF.js legacy build copied by scripts/build-mobile.js, for older Android WebViews.
 globalThis.MINS_PDFJS_BASE = "/vendor/pdfjs/";
 globalThis.MINS_MAMMOTH_URL = "/vendor/mammoth/mammoth.browser.min.js";
+globalThis.MINS_PAKO_URL = "/vendor/pako/pako_inflate.min.js";
 let preview = null;
 
 function closeImagePreview() {

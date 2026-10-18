@@ -54,3 +54,14 @@ test("encrypted, distribution and non-HWP files are refused with message keys", 
   CFB.utils.cfb_add(other, "WordDocument", Buffer.alloc(16));
   await assert.rejects(convertHwpBinary(new Uint8Array(CFB.write(other, { type: "buffer", fileType: "cfb" })), inflateRaw), /document\.invalidHwp/);
 });
+
+test("sections ending with Hangul's CRC and size trailer are inflated by pako", async () => {
+  const pako = require("pako/dist/pako_inflate.min.js");
+  const bytes = new Uint8Array(createSampleHwp({ paragraphCount: 3 }));
+  const section = readCompoundFile(bytes).read("BodyText/Section0");
+  const records = pako.inflateRaw(section);
+  const trailer = Buffer.from(section.subarray(section.length - 8));
+  assert.equal(trailer.readUInt32LE(4), records.length, "the trailer carries the uncompressed size");
+  const html = await convertHwpBinary(bytes, async (raw) => pako.inflateRaw(raw));
+  assert.ok(html.includes("HWP 문단 3 — "));
+});

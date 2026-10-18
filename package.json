@@ -1,6 +1,6 @@
 {
   "name": "MinsEPUBviewer",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Mins Reader: shared EPUB, PDF and Markdown reader for Windows and Android.",
   "author": "Mins",
   "private": true,
@@ -36,6 +36,7 @@
     "@ohah/hwpjs": "0.1.0-rc.10",
     "epubjs": "^0.3.93",
     "mammoth": "1.13.0",
+    "pako": "1.0.11",
     "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
@@ -78,6 +79,8 @@
       "node_modules/pdfjs-dist/iccs/**/*",
       "node_modules/mammoth/mammoth.browser.min.js",
       "node_modules/mammoth/LICENSE",
+      "node_modules/pako/dist/pako_inflate.min.js",
+      "node_modules/pako/LICENSE",
       "node_modules/@ohah/hwpjs/package.json",
       "node_modules/@ohah/hwpjs/LICENSE",
       "node_modules/@ohah/hwpjs/dist/index.js",

@@ -131,7 +131,7 @@ Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/rele
 - DOCX·HWPX·XML 형식 HWP(64MB 이하)는 앱 사본을 읽어 HTML로 바꿔 읽기 전용으로 보여 줍니다(mammoth는 `dist/mobile/vendor/mammoth/`).
   변환 문서와 Markdown 사본은 플러그인 `readDocument`로 읽습니다. 앱 파일 URL(`convertFileSrc`)은 Capacitor 로컬 서버가 확장자로 형식을 정하는데 `.hwp`/`.hwpx`를 몰라 "Failed to fetch"가 났습니다(0.1.8에서 수정).
 - 다른 앱으로 열기/공유 MIME: EPUB, PDF(`application/pdf`, `application/x-pdf`), DOCX, HWP(`application/x-hwp`, `application/hwp`, `application/haansofthwp`, `application/vnd.hancom.hwp`, `application/vnd.hancom.hwpml`), HWPX(`application/hwp+zip`, `application/x-hwpx`, `application/vnd.hancom.hwpx`, `application/haansofthwpx`), Markdown·TXT, 그리고 메신저가 쓰는 `application/octet-stream`·ZIP(파일 이름으로 형식 확인).
-  바이너리 HWP 5.0은 자체 모듈(`src/core/hwpBinary.js`)로 본문·표·글상자·각주를 읽습니다(쪽 배치·그림·자동 번호 제외, 압축 해제는 WebView의 `DecompressionStream('deflate-raw')`, Chrome 103 이상).
+  바이너리 HWP 5.0은 자체 모듈(`src/core/hwpBinary.js`)로 본문·표·글상자·각주를 읽습니다(쪽 배치·그림·자동 번호 제외, 압축 해제는 pako `inflateRaw`(`dist/mobile/vendor/pako/`). WebView의 `DecompressionStream`은 한글이 압축 본문 뒤에 붙이는 CRC·크기 8바이트 때문에 "Failed to fetch"로 실패해 0.1.9에서 교체).
   암호·배포용 HWP는 안내 문구만 보입니다.
 - 화면 터치(2026-10-18): 위쪽 1/3 탭은 이전, 아래쪽 1/3 탭은 다음(연속 스크롤·확대한 PDF에서는 한 화면씩 스크롤 후 쪽 이동). 가운데 한 번 탭은 아무 동작도 하지 않아 선택·형광펜에 쓰고, 가운데를 **두 번** 탭하면 전체 화면을 켜고 끕니다(처음 3번은 안내 문구). 밀기(스와이프) 쪽 넘김은 내용이 스스로 스크롤되지 않을 때. PDF 쪽 보기에서 쪽이 화면보다 크면 쪽 안을 스크롤하고, 쪽 끝(처음)에 닿은 뒤 한 번 더 밀면 다음(이전) 쪽으로 넘어갑니다(2026-10-18). 연속 보기는 스크롤로 문서 전체를 이동합니다.
 - EPUB·MD·변환 문서의 두 손가락 확대는 움직이는 동안 화면을 바로 확대하고, 손을 떼면 새 글자 크기/배율로 다시 배치합니다.

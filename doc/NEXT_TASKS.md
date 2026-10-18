@@ -2,6 +2,18 @@
 
 최종 갱신: 2026-10-18
 
+## 현재 요청 — 일부 HWP만 "Failed to fetch" (원인 재현·수정 완료, 실기기 확인 대기, 2026-10-18)
+
+사용자 요청(0.1.8 실기기): "내 파일"에서 열거나 앱 안에서 열어도 일부 HWP는 "Failed to fetch". 샘플 `test/202604_트러스트기획_분양트러스트 서비스 기획안_v0.5.hwp`(개인 문서, `.gitignore`로 제외).
+
+결과:
+- 원인(Electron Chromium에서 재현): 한글이 저장한 HWP 5.0은 압축된 본문 뒤에 CRC-32와 원래 크기(8바이트)를 붙인다. 브라우저 `DecompressionStream('deflate-raw')`은 이것을 압축 뒤 쓰레기 데이터로 보고 오류를 내며, Chrome은 이를 "Failed to fetch"로 표시. 실제 바이너리 HWP 5.0 샘플 3개 모두 실패했으므로 휴대폰에서 열린 "HWP"는 HWPX나 XML 형식이었을 것. Node의 zlib은 관대하고, 생성 시험 파일에는 이 꼬리가 없어 시험이 놓침.
+- 수정: 압축 해제를 pako 1.0.11(MIT·Zlib, jszip이 이미 쓰는 판)의 `inflateRaw`로 교체. 필요할 때만 불러옴(PC는 `node_modules/pako/dist/pako_inflate.min.js`, Android는 `vendor/pako/`).
+- 시험 보강: 생성 HWP에 한글과 같은 꼬리 추가(→ 모의 Android 스모크가 Chromium에서 실제와 같은 조건으로 검사).
+
+남은 일:
+- 사용자: `build/MinsReader_ver0.1.9.apk`로 같은 HWP 파일 열기 확인.
+
 ## 현재 요청 — 다른 앱에서 열기 시 "Failed to fetch" (수정·빌드 완료, 실기기 확인 대기, 2026-10-18)
 
 사용자 요청(0.1.7 실기기): "내 파일"에서 HWP를 열기 → 앱 목록에 Mins Reader가 보이는 것은 맞음(카톡·메일 첨부도 같아야 함). 그런데 열면 "Failed to fetch"만 뜸. 모든 형식 확인.

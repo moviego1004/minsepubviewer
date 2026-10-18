@@ -33,6 +33,10 @@ await copyFile("node_modules/pdfjs-dist/LICENSE", resolve(pdfjs, "LICENSE"));
 await mkdir(resolve(output, "vendor/mammoth"), { recursive: true });
 await copyFile("node_modules/mammoth/mammoth.browser.min.js", resolve(output, "vendor/mammoth/mammoth.browser.min.js"));
 await copyFile("node_modules/mammoth/LICENSE", resolve(output, "vendor/mammoth/LICENSE"));
+// HWP 5.0 section decompression (see web/document-convert.js).
+await mkdir(resolve(output, "vendor/pako"), { recursive: true });
+await copyFile("node_modules/pako/dist/pako_inflate.min.js", resolve(output, "vendor/pako/pako_inflate.min.js"));
+await copyFile("node_modules/pako/LICENSE", resolve(output, "vendor/pako/LICENSE"));
 const html = (await readFile("web/index.html", "utf8"))
   .replace('src="/node_modules/jszip/dist/jszip.min.js"', 'src="/vendor/jszip.min.js"')
   .replace('src="/node_modules/epubjs/dist/epub.min.js"', 'src="/vendor/epub.min.js"')

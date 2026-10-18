@@ -12,7 +12,9 @@ import {
 } from "../src/core/hwpXml.js";
 
 const DEFAULT_MAMMOTH_URL = "/node_modules/mammoth/mammoth.browser.min.js";
+const DEFAULT_PAKO_URL = "/node_modules/pako/dist/pako_inflate.min.js";
 let mammothPromise = null;
+let pakoPromise = null;
 
 function loadMammoth() {
   if (globalThis.mammoth) return Promise.resolve(globalThis.mammoth);
@@ -27,6 +29,21 @@ function loadMammoth() {
   return mammothPromise;
 }
 
+// pako's inflate (loaded on first use). HWP sections end with a CRC and the original size after the
+// compressed data; the browser's DecompressionStream rejects that as junk ("Failed to fetch").
+function loadPako() {
+  if (globalThis.pako?.inflateRaw) return Promise.resolve(globalThis.pako);
+  pakoPromise ||= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = globalThis.MINS_PAKO_URL || DEFAULT_PAKO_URL;
+    script.onload = () => (globalThis.pako?.inflateRaw ? resolve(globalThis.pako) : reject(new Error("document.converterLoadFailed")));
+    script.onerror = () => reject(new Error("document.converterLoadFailed"));
+    document.head.append(script);
+  });
+  pakoPromise.catch(() => { pakoPromise = null; });
+  return pakoPromise;
+}
+
 export function getDocumentFormat(name) {
   const lower = String(name || "").toLowerCase();
   if (lower.endsWith(".docx")) return "docx";
@@ -36,9 +53,12 @@ export function getDocumentFormat(name) {
 }
 
 async function inflateRaw(bytes) {
-  if (typeof DecompressionStream !== "function") throw new Error("document.converterLoadFailed");
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const pako = await loadPako();
+  try {
+    return pako.inflateRaw(bytes);
+  } catch {
+    throw new Error("document.invalidHwp");
+  }
 }
 
 function parseXml(text, errorKey) {

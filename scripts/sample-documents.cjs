@@ -62,6 +62,14 @@ function hwpCell(level, col, row, text, colSpan = 1) {
   return [hwpRecord(72, level, list), ...hwpParagraph(level, text)];
 }
 
+// Like Hangul, compressed sections end with the CRC-32 and the size of the uncompressed records.
+function hwpCompress(records) {
+  const trailer = Buffer.alloc(8);
+  trailer.writeUInt32LE(zlib.crc32(records) >>> 0, 0);
+  trailer.writeUInt32LE(records.length, 4);
+  return Buffer.concat([zlib.deflateRawSync(records), trailer]);
+}
+
 function createSampleHwp({ paragraphCount = 40, compressed = true } = {}) {
   const records = [...hwpParagraph(0, "HWP 5.0 검사 문서")];
   for (const text of paragraphs(paragraphCount, "HWP")) records.push(...hwpParagraph(0, text));
@@ -81,7 +89,7 @@ function createSampleHwp({ paragraphCount = 40, compressed = true } = {}) {
   header.writeUInt32LE(compressed ? 1 : 0, 36);
   const file = CFB.utils.cfb_new();
   CFB.utils.cfb_add(file, "FileHeader", header);
-  CFB.utils.cfb_add(file, "BodyText/Section0", compressed ? zlib.deflateRawSync(Buffer.concat(records)) : Buffer.concat(records));
+  CFB.utils.cfb_add(file, "BodyText/Section0", compressed ? hwpCompress(Buffer.concat(records)) : Buffer.concat(records));
   return Buffer.from(CFB.write(file, { type: "buffer", fileType: "cfb" }));
 }
 
