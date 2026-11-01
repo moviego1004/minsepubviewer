@@ -1,6 +1,6 @@
 # 다른 PC에서 이어서 작업하기
 
-최종 갱신: 2026-10-18 (한국 시간)
+최종 갱신: 2026-11-01 (한국 시간)
 
 ## 먼저 읽을 문서
 
@@ -110,3 +110,4 @@ npm.cmd run android:install
 - 확인한 형식 사실(실제 샘플과 PC hwpjs 출력 대조): 글자 크기·칸 크기는 1/100pt, 문단 여백·들여쓰기는 2배 값(/200pt), 자간은 값/200em, 음영 0xFFFFFFFF는 없음, 테두리선 종류 0은 없음, 칸 안쪽 여백 0xFFFF는 표 기본값(TABLE 레코드 10~17바이트) 사용, 테두리/배경 ID는 1부터.
 - 2026-11-01 `npm.cmd run android:apk` 성공: `build/MinsReader_ver0.1.10.apk`(7.5MB, versionCode 11). 실기기 설치·표시 확인은 사용자 몫(미검증).
 - PC는 바뀌지 않음(계속 hwpjs 쪽 배치). 서식은 바이너리 HWP 5.0에만 적용되고 HWPX·XML HWP는 아직 텍스트·표만.
+- 다음 작업(사용자 결정 대기): HWP 원본 모양 재현. 글꼴 동봉(A) → hwpjs WASM 직접 빌드(C-1) → 자체 쪽 배치(C-2) 순서 제안. 상세는 DEVELOPMENT_PLAN.md 5.1 "원본 모양 재현 로드맵", NEXT_TASKS.md 첫 항목.

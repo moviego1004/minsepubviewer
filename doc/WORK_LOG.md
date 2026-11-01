@@ -165,3 +165,10 @@
 - 이어서 사용자 요청으로 `npm.cmd run android:apk` 실행: 성공, 버전 0.1.9 → 0.1.10(versionCode 11), `build/MinsReader_ver0.1.10.apk` 7.5MB. 변경 파일 추가: `package.json`, `package-lock.json`, `android/app/build.gradle`, `installer.nsi`(release 스크립트의 버전 올림).
 - 미검증: Android 실기기 설치와 표시. 기기에 없는 한글 글꼴(휴먼명조, HY헤드라인M 등)은 명조/고딕 대체 글꼴로 보임. 그림·자동 번호·머리말/꼬리말·장평은 아직 미지원.
 - 재현: `node --input-type=module -e "..."`로 `convertHwpBinary(bytes, zlib inflateRaw)` 결과를 HTML로 저장하고 `web/document-reader.js`의 BASE_CSS와 함께 375px 폭에서 열기. 참조값은 `require('@ohah/hwpjs/dist/index.js').toHtml(buffer)`.
+
+## HWP 원본 모양 재현 방안 정리 (2026-11-01)
+
+- 사용자 요청: 글꼴 한계, 폴라리스 오피스 방식, 자체 엔진(C)이 왜 어려운지 논의한 내용을 다른 PC에서 이어갈 수 있게 개발 계획 문서에 정리.
+- 변경 파일: `doc/DEVELOPMENT_PLAN.md`(5.1 "원본 모양 재현 로드맵": 원인, 상용 뷰어 방식, 병목, A → C-1 → C-2 진행 순서), `doc/NEXT_TASKS.md`(다음에 이어서 할 일, 재개 방법), `doc/HANDOFF.md`(현재 상태 한 줄), 이 기록.
+- 검증: 문서만 변경. 코드·빌드 변경 없음. Rust 미설치(`cargo` 없음)는 이번 세션에서 확인한 사실.
+
