@@ -135,3 +135,33 @@
 - 사용자 요청: doc 폴더에 개발 계획(기능 요구사항, 개발 방안, 완료된 것, 앞으로 할 것)을 정리. 기존 문서가 있으면 갱신.
 - 변경: `doc/DEVELOPMENT_PLAN.md`를 전면 개편(초기 영문 EPUB 계획 → 현재 제품 기준 한국어 로드맵). 지원 형식·공통 기능·휴대폰 조작·배포 요구사항 표와 상태, 구조와 형식별 방법, 시험·빌드 방법, 버전별 완료 내역, 우선순위별 할 일, 결정 기록. 초기 계획은 부록 요약(원문은 Git 기록). `HANDOFF.md` 문서 안내, `NEXT_TASKS.md`에 로드맵 참조와 HWP 표시 품질 제안(사용자 결정 대기) 추가.
 - 검증: 문서만 변경. 버전·명령·경로·시험 개수(142)를 현재 코드와 대조.
+
+## EPUB 열기 실패 조사 (2026-10-25)
+
+- 사용자 요청: 제공한 투자 이야기 EPUB이 안 열리는 원인부터 파악. 원본 파일·제품 코드 수정과 빌드는 하지 않음. 시작 Git 작업 트리는 깨끗했음.
+- 원인: `OEBPS/content.opf` manifest에는 `chap001`~`chap010`만 있으나 spine 앞부분에 존재하지 않는 `c0`~`c9` 참조 10개가 남아 있음. 뒤에는 정상 chap 참조 10개도 있어 총 20개로 해석됨.
+- 검증: JSZip CRC 검사 통과(6,965,026바이트, 150항목), XML/XHTML/OPF 파싱 오류 미검출. 설치된 epubjs의 Packaging → Spine.unpack → 첫 Section.load → Archive.request 경로를 Node에서 재현: 원본 첫 href가 undefined이고 `Cannot read properties of undefined (reading indexOf)` 발생. 잘못된 itemref 10개를 메모리에서만 제거하면 spine 10개·첫 href chap001.xhtml·첫 장 로딩 성공. 이는 렌더링 전체 성공이나 정식 EPUB 적합성 검사 결과는 아님.
+- Electron 별도 진단 프로세스는 유효한 출력이 없어 UI 재현 증거로 사용하지 않음. Android 실기기 및 전체 책 표시 미검증. 기능 변경이 없으므로 빌드·단위 시험은 실행하지 않음.
+- 다음 단계(제안, 미착수): EPUB 생성기의 오래된 spine 참조 누적을 수정하거나 원본과 별도 교정 사본에서 잘못된 참조를 제거. 뷰어에는 누락 manifest 참조 사전 검증과 명확한 오류 안내 검토. 자동으로 추측하여 장을 연결하지 않음.
+- 재현: 로컬 샘플 ZIP의 OEBPS/content.opf에서 manifest item id와 spine itemref idref 집합을 비교한 뒤, 설치된 epubjs/lib/{packaging,spine,archive}.js로 첫 Section.load를 실행. 개인 EPUB은 저장소에 복사하지 않음.
+
+- 변경 파일: doc/NEXT_TASKS.md(조사 범위·결과), doc/HANDOFF.md(현재 진단 상태), doc/WORK_LOG.md(근거·미검증 기록).
+
+## EPUB 교정본 생성 완료 (2026-10-25)
+
+- 사용자 요청에 따라 원본 옆 `포즈랑 의 투자 이야기_교정본.epub` 생성(6,965,277바이트). 원본 보존.
+- OPF spine의 존재하지 않는 c0~c9 참조 10개만 제거. OPF 외 모든 파일의 압축 해제 바이트가 원본과 동일함을 확인. mimetype은 첫 항목·무압축 유지.
+- 검증: 교정 ZIP CRC 통과, spine 10개 모두 manifest에 존재, 설치된 epubjs Packaging/Spine/Archive/Section으로 전체 10개 장 로딩 성공. 원본 바이트 불변 확인.
+- 미검증: 실제 뷰어 화면·Android 실기기 표시 및 정식 EPUBCheck. 뷰어 코드 변경·빌드·커밋 없음. 개인 EPUB은 저장소에 넣지 않음.
+- 남은 제안: 생성기 spine 갱신 문제 및 뷰어 오류 안내 개선은 미착수. 이번 EPUB 교정 요청 완료.
+
+## 휴대폰 HWP 원본 서식 표시 (2026-11-01)
+
+- 사용자 요청: 모바일에서 HWP 내용은 잘 보이지만 원본 포맷(폰트, 색상 등)과 너무 다름. 원본 포맷·스타일대로 보여 줄 수 없는지.
+- 조사: `@ohah/hwpjs`의 Android 사전 빌드 정적 라이브러리는 React Native 브리지용이며 toHtml 없음(toJson/toMarkdown). 공개 WASM은 공유 메모리 필요. Rust 도구 없음. → 원본 쪽 배치 대신 자체 해석기에 DocInfo 서식 적용(2026-10-18 제안 1단계).
+- 변경 파일: `src/core/hwpBinary.js`(DocInfo 글꼴·글자 모양·문단 모양·테두리/배경 해석, 글자 모양 구간 span, 문단 모양 유지한 표 앞뒤 문단 재개, 표 칸 너비 비율·안쪽 여백·세로 정렬, 문단 끝 공백 제거), `web/document-reader.js`(다크 테마 반전용 `has-own-colors`), `scripts/sample-documents.cjs`(`createSampleHwp({ styled: true })`로 DocInfo 포함 시험 파일), `test/core/hwpBinary.test.js`(서식 클래스·DocInfo 없는 문서 시험 2개), 문서(NEXT_TASKS, HANDOFF, DEVELOPMENT_PLAN, 이 기록).
+- 결정 이유: 실제 HWP 샘플 3개(`test/sample/`, `test/`의 개인 문서, Git 제외)의 DocInfo 값을 PC hwpjs `toHtml` 결과(cs/ps 클래스의 글꼴·크기·색·굵게·자간·정렬)와 대조해 위치·단위를 확인. 문단 테두리는 일반 문단 다수가 실선 테두리 ID를 가리켜 적용하지 않고 배경색만 적용. 기본 크기 17px는 15pt 본문이 25px로 너무 커서 1rem=14px로 정함.
+- 검증: `npm.cmd test` 144개 통과. `node --check web/app.js` 통과. `npm.cmd run test:reader` 통과. `npm.cmd run android:sync` 통과. 실제 샘플 3개를 375px 폭 브라우저(앱의 BASE_CSS와 같은 스타일)로 렌더링해 글꼴 크기·굵게·색·표 배경/테두리·내어쓰기·다크 반전을 눈으로 확인. 가로 넘침: 2개 문서 없음, 1개 문서는 넓은 숫자 표 하나가 약 90px 넘침.
+- 이어서 사용자 요청으로 `npm.cmd run android:apk` 실행: 성공, 버전 0.1.9 → 0.1.10(versionCode 11), `build/MinsReader_ver0.1.10.apk` 7.5MB. 변경 파일 추가: `package.json`, `package-lock.json`, `android/app/build.gradle`, `installer.nsi`(release 스크립트의 버전 올림).
+- 미검증: Android 실기기 설치와 표시. 기기에 없는 한글 글꼴(휴먼명조, HY헤드라인M 등)은 명조/고딕 대체 글꼴로 보임. 그림·자동 번호·머리말/꼬리말·장평은 아직 미지원.
+- 재현: `node --input-type=module -e "..."`로 `convertHwpBinary(bytes, zlib inflateRaw)` 결과를 HTML로 저장하고 `web/document-reader.js`의 BASE_CSS와 함께 375px 폭에서 열기. 참조값은 `require('@ohah/hwpjs/dist/index.js').toHtml(buffer)`.

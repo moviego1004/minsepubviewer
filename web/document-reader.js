@@ -36,6 +36,8 @@ body.is-flow .hwp-notes p { margin: 0.2em 0; }
 body.is-layout { padding: 12px 0 48px; background: transparent; }
 body.is-layout .hpa { margin: 0 auto 6mm !important; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25) !important; }
 body.is-layout.theme-dark { filter: invert(0.9) hue-rotate(180deg); }
+/* Documents with their own colours (styled HWP) are drawn light and inverted for the dark theme. */
+body.is-flow.has-own-colors.theme-dark { background: #fffdf8; color: #202327; filter: invert(0.9) hue-rotate(180deg); }
 mark.mins-doc-mark { color: inherit; border-radius: 2px; }
 mark.mins-doc-mark.is-yellow { background: rgba(248, 217, 74, 0.55); }
 mark.mins-doc-mark.is-orange { background: rgba(255, 159, 28, 0.45); }
@@ -66,7 +68,7 @@ export function buildDocumentHtml({ html, layout = false, lang = "ko" }) {
   }
   return `<!doctype html><html lang="${escapeAttribute(lang)}"><head><meta charset="utf-8">`
     + `<style>${styles.join("\n")}</style><style>${BASE_CSS}</style></head>`
-    + `<body class="${layout ? "is-layout" : "is-flow"}">${parsed.body.innerHTML}</body></html>`;
+    + `<body class="${layout ? "is-layout" : "is-flow"}${parsed.querySelector(".hwp-styled") ? " has-own-colors" : ""}">${parsed.body.innerHTML}</body></html>`;
 }
 
 export class DocumentReader {

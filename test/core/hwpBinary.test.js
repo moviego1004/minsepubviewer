@@ -20,6 +20,27 @@ test("HWP 5.0 paragraphs, tables and footnotes become HTML", async () => {
   assert.doesNotMatch(html, /<p>(?:(?!<\/p>).)*<table/);
 });
 
+test("DocInfo fonts, character and paragraph shapes and cell borders become classes", async () => {
+  const html = await convertHwpBinary(new Uint8Array(createSampleHwp({ paragraphCount: 1, styled: true })), inflateRaw);
+  const css = /^<style>([^<]*)<\/style>/.exec(html)?.[1] || "";
+  assert.match(css, /html\{font-size:14px\}/);
+  assert.match(css, /\.hwp-styled \.hc0\{font-family:"바탕", "Arial", "Noto Serif KR", "Noto Serif CJK KR", serif;font-size:1rem\}/);
+  assert.match(css, /\.hwp-styled \.hc1\{[^}]*font-size:1\.5rem;font-weight:bold;letter-spacing:-0\.03em;color:#ff0000;background-color:#ffff00\}/);
+  // Margins are stored doubled; the negative indent hangs the first line.
+  assert.match(css, /\.hwp-styled \.hp1\{white-space:pre-wrap;text-align:center;margin:0rem 0 0\.3rem;padding:0 0rem 0 3rem;text-indent:-2rem;line-height:1\.3\}/);
+  assert.match(css, /\.hwp-styled \.hb1\{border-left:1px solid #000000;border-right:1px solid #000000;border-top:none;border-bottom:none;background-color:#d9d9d9\}/);
+  assert.match(html, /<section class="hwp-styled"><p class="hp1" style="font-size:1\.5rem"><span class="hc1">HWP <\/span><span class="hc0">5\.0 검사 문서<\/span><\/p>/);
+  assert.match(html, /<table class="hwp-table" style="width:min\(100%, 40rem\)"><tbody><tr><td colspan="2" class="hb1" style="padding:0rem 0rem 0rem 0rem;vertical-align:top;width:100%">/);
+  assert.match(html, /<td style="[^"]*width:25%"><p class="hp0">HWP 표 왼쪽<\/p><\/td><td style="[^"]*width:75%">/);
+  // The paragraph that held the table is reopened with its own shape.
+  assert.doesNotMatch(html, /data-hwp-continue/);
+});
+
+test("documents without DocInfo keep the plain HTML", async () => {
+  const html = await convertHwpBinary(new Uint8Array(createSampleHwp({ paragraphCount: 1 })), inflateRaw);
+  assert.doesNotMatch(html, /<style>|class="h[cpb]\d|data-hwp-continue/);
+});
+
 test("large uncompressed streams are read through the regular sector chain", async () => {
   const bytes = new Uint8Array(createSampleHwp({ paragraphCount: 400, compressed: false }));
   const file = readCompoundFile(bytes);

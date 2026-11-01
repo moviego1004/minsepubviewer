@@ -48,18 +48,81 @@ const hwpControlChar = (code, id) => {
 };
 const hwpControlId = (id) => Buffer.from(id.split("").reverse().join(""), "latin1");
 
-function hwpParagraph(level, text) {
-  return [hwpRecord(66, level, Buffer.alloc(22)), hwpRecord(67, level + 1, hwpText(text))];
+// runs: [position, character shape id] pairs (PARA_CHAR_SHAPE) for styled samples.
+function hwpParagraph(level, text, { paraShape = 0, runs = null } = {}) {
+  const header = Buffer.alloc(22);
+  header.writeUInt16LE(paraShape, 8);
+  const records = [hwpRecord(66, level, header), hwpRecord(67, level + 1, hwpText(text))];
+  if (runs) {
+    const data = Buffer.alloc(runs.length * 8);
+    runs.forEach(([position, id], index) => { data.writeUInt32LE(position, index * 8); data.writeUInt32LE(id, index * 8 + 4); });
+    records.push(hwpRecord(68, level + 1, data));
+  }
+  return records;
 }
 
-function hwpCell(level, col, row, text, colSpan = 1) {
+function hwpCell(level, col, row, text, colSpan = 1, { width = 0, borderFill = 0 } = {}) {
   const list = Buffer.alloc(34);
   list.writeUInt16LE(1, 0);
   list.writeUInt16LE(col, 8);
   list.writeUInt16LE(row, 10);
   list.writeUInt16LE(colSpan, 12);
   list.writeUInt16LE(1, 14);
+  list.writeUInt32LE(width, 16);
+  [24, 26, 28, 30].forEach((offset) => list.writeUInt16LE(0xffff, offset));
+  list.writeUInt16LE(borderFill, 32);
   return [hwpRecord(72, level, list), ...hwpParagraph(level, text)];
+}
+
+// DocInfo of a styled sample: faces 바탕 (Hangul) and Arial (Latin); character shape 0 is plain
+// 10pt, 1 is 15pt bold red on yellow; paragraph shape 0 is justified, 1 centred with a hanging
+// indent; border fill 1 has solid left/right lines and a grey fill.
+function hwpDocInfo() {
+  const mappings = Buffer.alloc(72);
+  mappings.writeInt32LE(1, 4);
+  mappings.writeInt32LE(1, 8);
+  const face = (name) => {
+    const data = Buffer.alloc(3 + name.length * 2);
+    data.writeUInt16LE(name.length, 1);
+    Buffer.from(name, "utf16le").copy(data, 3);
+    return data;
+  };
+  const borderFill = Buffer.alloc(53);
+  for (const [index, type] of [[0, 1], [1, 1], [2, 0], [3, 0]]) {
+    borderFill[2 + index * 6] = type;
+    borderFill[3 + index * 6] = 1;
+  }
+  borderFill.writeUInt32LE(1, 32);
+  borderFill.writeUInt32LE(0xd9d9d9, 36);
+  const charShape = ({ size, props = 0, color = 0, shade = 0xffffffff, spacing = 0 }) => {
+    const data = Buffer.alloc(74);
+    data.fill(100, 14, 21);
+    data.writeInt8(spacing, 21);
+    data.fill(100, 28, 35);
+    data.writeInt32LE(size, 42);
+    data.writeUInt32LE(props, 46);
+    data.writeUInt32LE(color, 52);
+    data.writeUInt32LE(shade, 60);
+    return data;
+  };
+  const paraShape = ({ align, left = 0, indent = 0, bottom = 0, lineSpacing = 160 }) => {
+    const data = Buffer.alloc(54);
+    data.writeUInt32LE(align << 2, 0);
+    data.writeInt32LE(left, 4);
+    data.writeInt32LE(indent, 12);
+    data.writeInt32LE(bottom, 20);
+    data.writeInt32LE(lineSpacing, 24);
+    data.writeUInt32LE(lineSpacing, 50);
+    return data;
+  };
+  return Buffer.concat([
+    hwpRecord(17, 0, mappings), hwpRecord(19, 1, face("바탕")), hwpRecord(19, 1, face("Arial")),
+    hwpRecord(20, 1, borderFill),
+    hwpRecord(21, 1, charShape({ size: 1000 })),
+    hwpRecord(21, 1, charShape({ size: 1500, props: 2, color: 0x0000ff, shade: 0x00ffff, spacing: -6 })),
+    hwpRecord(25, 1, paraShape({ align: 0 })),
+    hwpRecord(25, 1, paraShape({ align: 3, left: 2000, indent: -4000, bottom: 600, lineSpacing: 130 }))
+  ]);
 }
 
 // Like Hangul, compressed sections end with the CRC-32 and the size of the uncompressed records.
@@ -70,14 +133,15 @@ function hwpCompress(records) {
   return Buffer.concat([zlib.deflateRawSync(records), trailer]);
 }
 
-function createSampleHwp({ paragraphCount = 40, compressed = true } = {}) {
-  const records = [...hwpParagraph(0, "HWP 5.0 검사 문서")];
+function createSampleHwp({ paragraphCount = 40, compressed = true, styled = false } = {}) {
+  const records = [...hwpParagraph(0, "HWP 5.0 검사 문서", styled ? { paraShape: 1, runs: [[0, 1], [4, 0]] } : {})];
   for (const text of paragraphs(paragraphCount, "HWP")) records.push(...hwpParagraph(0, text));
   // A 2x2 table whose first row is one merged cell, inside a paragraph of its own.
   records.push(hwpRecord(66, 0, Buffer.alloc(22)),
     hwpRecord(67, 1, Buffer.concat([hwpControlChar(11, "tbl "), Buffer.from("\r", "utf16le")])),
     hwpRecord(71, 1, hwpControlId("tbl ")), hwpRecord(77, 2, Buffer.alloc(22)),
-    ...hwpCell(2, 0, 0, "병합된 머리 칸", 2), ...hwpCell(2, 0, 1, "HWP 표 왼쪽"), ...hwpCell(2, 1, 1, "HWP 표 오른쪽"));
+    ...hwpCell(2, 0, 0, "병합된 머리 칸", 2, { width: 40000, borderFill: 1 }),
+    ...hwpCell(2, 0, 1, "HWP 표 왼쪽", 1, { width: 10000 }), ...hwpCell(2, 1, 1, "HWP 표 오른쪽", 1, { width: 30000 }));
   // Text with a footnote.
   const footnoteText = Buffer.concat([Buffer.from("각주가 있는 문장", "utf16le"), hwpControlChar(17, "fn  "), Buffer.from("\r", "utf16le")]);
   records.push(hwpRecord(66, 0, Buffer.alloc(22)), hwpRecord(67, 1, footnoteText),
@@ -89,6 +153,7 @@ function createSampleHwp({ paragraphCount = 40, compressed = true } = {}) {
   header.writeUInt32LE(compressed ? 1 : 0, 36);
   const file = CFB.utils.cfb_new();
   CFB.utils.cfb_add(file, "FileHeader", header);
+  if (styled) CFB.utils.cfb_add(file, "DocInfo", compressed ? hwpCompress(hwpDocInfo()) : hwpDocInfo());
   CFB.utils.cfb_add(file, "BodyText/Section0", compressed ? hwpCompress(Buffer.concat(records)) : Buffer.concat(records));
   return Buffer.from(CFB.write(file, { type: "buffer", fileType: "cfb" }));
 }
