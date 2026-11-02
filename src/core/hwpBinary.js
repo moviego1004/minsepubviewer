@@ -4,6 +4,7 @@
 // borders/backgrounds of DocInfo; page layout, images and drawings are not rendered.
 // inflateRaw(bytes) -> Promise<Uint8Array> is passed in so the browser and tests can each supply one.
 import { fontCss } from "./hwpFonts.js";
+import { symbolFontTable, symbolHtml } from "./hwpSymbols.js";
 
 const FREE_SECTOR = 0xffffffff;
 const END_OF_CHAIN = 0xfffffffe;
@@ -24,10 +25,6 @@ const TAG_TABLE = 77;
 const WIDE_CONTROLS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
 // Wide controls that have their own CTRL_HEADER record, in the order they appear in the text.
 const OBJECT_CONTROLS = new Set([1, 2, 3, 11, 12, 14, 15, 16, 17, 18, 21, 22, 23]);
-
-function escapeHtml(value) {
-  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 export function isOleBytes(bytes) {
   return OLE_SIGNATURE.every((value, index) => bytes[index] === value);
@@ -278,22 +275,27 @@ function paraShapeCss(data, borderFills) {
 export function readDocInfo(bytes) {
   const records = readRecords(bytes);
   const faceRecords = records.filter((record) => record.tag === TAG_FACE_NAME).map((record) => readFaceName(record.data));
-  // ID_MAPPINGS (tag 17) holds the number of faces for each language after the BinData count.
+  // ID_MAPPINGS (tag 17) holds the number of faces for each of the 7 languages (Hangul, Latin,
+  // Hanja, Japanese, other, symbol, user) after the BinData count.
   const mappings = records.find((record) => record.tag === 17);
   const faces = [];
   if (mappings && mappings.data.length >= 8) {
     const view = dataView(mappings.data);
     let offset = 0;
-    for (let language = 0; language < 2; language += 1) {
+    for (let language = 0; language < 7 && 8 + language * 4 <= mappings.data.length; language += 1) {
       const count = Math.max(0, view.getInt32(4 + language * 4, true));
       faces.push(faceRecords.slice(offset, offset + count));
       offset += count;
     }
   } else {
-    faces.push(faceRecords, faceRecords);
+    faces.push(...Array(7).fill(faceRecords));
   }
   const borderFills = records.filter((record) => record.tag === TAG_BORDER_FILL).map((record) => readBorderFill(record.data));
-  const charShapes = records.filter((record) => record.tag === TAG_CHAR_SHAPE).map((record) => charShapeCss(record.data, faces));
+  const charShapeRecords = records.filter((record) => record.tag === TAG_CHAR_SHAPE);
+  const charShapes = charShapeRecords.map((record) => charShapeCss(record.data, faces));
+  // Symbol-font characters follow the fonts of their character shape (see hwpSymbols.js).
+  const symbolTables = charShapeRecords.map(({ data }) => symbolFontTable(faces.map((list, language) => (
+    2 * language + 2 <= data.length ? list[dataView(data).getUint16(2 * language, true)] : ""))));
   const paraShapes = records.filter((record) => record.tag === TAG_PARA_SHAPE).map((record) => paraShapeCss(record.data, borderFills));
   const rules = [
     // rem in this document: 10pt of the original. 14px keeps common 10-15pt body text readable on
@@ -308,6 +310,7 @@ export function readDocInfo(bytes) {
     // An empty paragraph keeps the height of its character shape.
     charSize: (id) => /font-size:([^;]+)/.exec(charShapes[id] || "")?.[1] || "",
     hasCharShape: (id) => id >= 0 && id < charShapes.length,
+    symbolTable: (id) => symbolTables[id] || symbolFontTable(),
     hasParaShape: (id) => id >= 0 && id < paraShapes.length,
     hasBorderFill: (id) => id >= 1 && id <= borderFills.length
   };
@@ -336,7 +339,7 @@ function paragraphText(record, controls, renderControl, runs = []) {
   let nextRun = 0;
   const flush = () => {
     if (!pending) return;
-    const text = escapeHtml(pending);
+    const text = symbolHtml(pending, docStyles?.symbolTable(shape));
     html += docStyles?.hasCharShape(shape) ? `<span class="hc${shape}">${text}</span>` : text;
     pending = "";
   };

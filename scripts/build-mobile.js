@@ -52,6 +52,16 @@ for (const id of ["nanum-gothic", "nanum-myeongjo"]) {
   }
   await copyFile(`node_modules/@fontsource/${id}/LICENSE`, resolve(fonts, "LICENSE"));
 }
+// Symbols for Wingdings characters (src/core/hwpSymbols.js): the symbols subset only.
+{
+  const id = "noto-sans-symbols-2";
+  const fonts = resolve(output, "vendor/fonts", id);
+  await rm(fonts, { recursive: true, force: true });
+  await mkdir(resolve(fonts, "files"), { recursive: true });
+  const file = `${id}-symbols-400-normal.woff2`;
+  await copyFile(`node_modules/@fontsource/${id}/files/${file}`, resolve(fonts, "files", file));
+  await copyFile(`node_modules/@fontsource/${id}/LICENSE`, resolve(fonts, "LICENSE"));
+}
 const html = (await readFile("web/index.html", "utf8"))
   .replace('src="/node_modules/jszip/dist/jszip.min.js"', 'src="/vendor/jszip.min.js"')
   .replace('src="/node_modules/epubjs/dist/epub.min.js"', 'src="/vendor/epub.min.js"')

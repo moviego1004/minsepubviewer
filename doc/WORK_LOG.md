@@ -262,3 +262,20 @@
 - 검증(이번 실행): `npm.cmd test` 159개 통과, `node --check web/app.js`·`web/document-convert.js` 통과, `npm.cmd run test:documents` 통과(HWPX 서식 단계 포함; 직전까지 시간 초과 나던 DOCX 위치 복원도 이번엔 통과), `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. 실제 HWPX 9개 Node 변환 오류 없음(5.7MB 문서 0.6초). Electron 화면: 제목 표 빨간 테두리·가운데 큰 글씨, 칸 배경, 내어쓰기, 명조/고딕 구분, 표 머리 배경색. API 36 에뮬레이터에 설치해 VIEW로 열어 같은 서식(나눔명조·나눔고딕) 확인.
 - `npm.cmd run test:reader`: Markdown 최근 파일 다시 열기 단계에서 시간 초과 — 이번 변경을 빼고 돌려도 같은 곳에서 실패(기존 문제).
 - 미검증: 실기기, 글자 단위 여백(`unit="CHAR"`)·고정 줄 간격 문서, 그림·각주·머리말, WebView 83. XML HWP(HWPML) 서식은 하지 않음.
+
+## M7 HWP 기호(PUA) 대응 (2026-11-02)
+
+- 사용자 요청: "내가 수동으로 빌드 했었어. 반영해서 푸시하고 M7 진행해줘." 0.1.11 버전 올림(사용자 빌드 `build/MinsReader_ver0.1.11.apk`·`.exe`, 13:09)은 `704fc1a`로 커밋해 M8(`f2f83e4`)과 함께 푸시. HANDOFF에 빌드 시각상 M8 포함 여부가 불확실하다고 기록.
+- 조사(실제 문서): PC의 HWP 72개·HWPX 20개 중 앱 변환기로 읽히는 58개에서 사설 영역 문자를 글자 모양의 7개 언어 글꼴과 함께 셈. 13개 문서에서 두 종류만 나옴.
+  - U+F0xx(F06D, F071, F072, F075, F09E, F09F, F0E0, F0E8): 글자의 기호 글꼴 칸도 휴먼명조·맑은 고딕 같은 일반 글꼴. 한컴 Haan Wing2(HANWing2.ttf)로 그리면 ④⑨⦿ 등이 되어 문맥("OS◇DB", "운영◇관리", 목록 머리)과 안 맞고, MS Wingdings로 그리면 ❍ ❑ ❒ ◆ · • → ➔로 모두 맞음 → Wingdings 기준으로 결정.
+  - U+F0000대(F02B1–F02B8, F012B, F0832): 한컴오피스 2020과 함께 설치된 함초롬바탕·돋움(HANBatang.ttf 등)에 글자 모양이 있음(네모 숫자, 동그라미 "인", 굵은 이중 가로줄). 공개 대응표는 찾지 못함(검색: 한컴 PUA 표 없음, 공개 표는 옛한글용 한양 PUA뿐).
+- 표의 근거:
+  - Wingdings·Wingdings 2·Wingdings 3·Webdings → Unicode WG2 N4384(L2/12-368, 2012, https://www.unicode.org/wg2/docs/n4384.pdf)의 상세 표에서 글자 열(U+F0xx)과 UCS 열을 읽음(221/216/172/222개). LibreOffice `fontcvt.cxx`는 대부분 자체 사설 영역(StarSymbol)으로 보내서 쓰지 않음.
+  - Symbol → https://www.unicode.org/Public/MAPPINGS/VENDORS/ADOBE/symbol.txt (사설 영역 대상 제외, 160개).
+  - 한컴 확장 영역 245자(동그라미/네모 한글 단어 64자 ×2, 가–하 네모, 모음 ㅏ–ㅣ 네모·동그라미, 숫자 6종, 이중 가로줄): 함초롬바탕 글자를 그려 읽은 뒤, 테두리를 연결 요소로 떼어 내고 남은 글자를 후보 글자들과 겹쳐 비교 → 231자 자동 일치, 14자는 글자가 테두리에 붙어 자동 비교가 틀린 것으로 확대해 눈으로 확인. 반쯤 칠한 동그라미 숫자(F02A6–F02AF)는 대응 문자가 없어 제외. F0832는 가장 가까운 ═(U+2550).
+- 변경: `src/core/hwpSymbols.js`(새), `src/core/hwpBinary.js`(DocInfo 7개 언어 글꼴, `symbolTable`), `src/core/hwpXml.js`(HWPX `symbolTable`, HWPML·HWPX 글자에 적용), `web/document-reader.js`(`.hwp-sym` 네모·동그라미·검은 네모, 기호 글꼴), `scripts/build-mobile.js`, `package.json`·`package-lock.json`(`@fontsource/noto-sans-symbols-2` 5.3.0 고정, OFL), `test/core/hwpSymbols.test.js`(새, 3개).
+- 휴대폰 글꼴 확인: API 36 에뮬레이터의 `/system/fonts` 207개(이모지 제외)를 가져와 대응 대상 문자를 셈 → Wingdings 221개 중 135개, Wingdings 2 157개, Wingdings 3 155개, Webdings 204개를 그릴 수 없음(❍ U+1F53E, 화살표 U+1F86A·1F87A 등; 처음 설치에서 실제로 빈칸). Noto Sans Symbols 2 기호 부분 글꼴의 unicode-range를 더하면 0개. 그래서 U+2B00 이상 대상 문자만 `unicode-range`로 붙여 필요할 때만 읽음.
+- 검증(이번 실행): `npm.cmd test` 162개 통과, `node --check`(document-reader) 통과, 실제 문서 58개 재변환 시 남은 사설 영역 문자 0개, `npm.cmd run test:pdf` 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. Electron에서 기호 시험 HWPX를 밝게·어둡게 표시 확인. API 36 에뮬레이터: 처음엔 ❍·화살표 빈칸 → 기호 글꼴 추가 후 모두 표시 확인.
+- 기존 실패: `npm.cmd run test:documents`는 DOCX 위치 복원(스크롤 732) 단계에서 시간 초과 — M7 변경을 빼고도 3/3 실패(M8 때 한 번 통과는 우연으로 보임). `npm.cmd run test:reader`는 Markdown 최근 파일 단계 시간 초과(기존).
+- 미검증: 실기기, 한컴 화면과의 직접 비교, 기호 글꼴 칸이 Symbol인 실제 문서(이번 문서들엔 없음), WebView 83.
+- 사용자 질문 답: XLSX·PPTX·XLS·PPT는 현재 열 수 없음(Android 열기 목록에도 없음). 제안은 NEXT_TASKS M7 항목.

@@ -99,7 +99,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 | HWP 5.0 (Android) | 자체 해석기 `src/core/hwpBinary.js`(OLE 복합 파일 → 레코드 → 본문·표·글상자·각주), 압축 해제는 pako | 위와 같음 |
 
 - 변환 문서는 스크립트를 제거한 HTML을 격리된 iframe에 보여 준다.
-- 변환 문서 iframe에는 무료 한글 글꼴(나눔고딕·나눔명조, OFL, `@fontsource` 5.3.0의 한국어 단일 부분 글꼴 WOFF2, 보통·굵게)을 `@font-face`로 넣는다. 쓰일 때만 읽는다. PC는 `node_modules/@fontsource/...`, Android는 `/vendor/fonts/...`(`MINS_DOC_FONT_URL`). HWP 글꼴 이름은 `src/core/hwpFonts.js`가 명조/고딕/고정폭/기호로 나누고 원래 이름 뒤에 나눔 글꼴을 붙인다.
+- 변환 문서 iframe에는 무료 한글 글꼴(나눔고딕·나눔명조, OFL, `@fontsource` 5.3.0의 한국어 단일 부분 글꼴 WOFF2, 보통·굵게)을 `@font-face`로 넣는다. 쓰일 때만 읽는다. PC는 `node_modules/@fontsource/...`, Android는 `/vendor/fonts/...`(`MINS_DOC_FONT_URL`). HWP 글꼴 이름은 `src/core/hwpFonts.js`가 명조/고딕/고정폭/기호로 나누고 원래 이름 뒤에 나눔 글꼴을 붙인다. 기호 변환(M7)이 만드는 U+2B00 이상 기호는 Noto Sans Symbols 2 기호 부분 글꼴(OFL, `@fontsource` 5.3.0, 382KB)을 같은 글꼴 이름에 `unicode-range`로 붙여 그 문자가 나올 때만 읽는다(Android `/vendor/fonts/noto-sans-symbols-2/`).
 - 변환 문서 형식은 `src/core/documentSniff.js`가 내용으로 판별한다(OLE → HWP, ZIP 목록의 `Contents/sectionN.xml` → HWPX, `word/document.xml` → DOCX, `<HWPML` → HWP). 모르면 파일 이름을 따른다.
 - Android에서 변환 문서와 Markdown 사본은 플러그인 `readDocument`로 읽는다. 앱 파일 URL은 `.hwp` 같은 확장자를 서버가 몰라 실패하기 때문이다.
 - HWP 압축 해제는 브라우저 기본 기능(`DecompressionStream`)을 쓰지 않는다. 한글이 압축 데이터 뒤에 붙이는 검사값 때문에 실패한다.
@@ -191,7 +191,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
        | M4 | **내용으로 형식 판별**: 확장자와 내용이 다른 변환 문서(예: `.hwp`인데 실제로는 HWPX ZIP, `.docx`인데 HWPX)를 첫 바이트와 ZIP 목록으로 판별(`src/core/documentSniff.js`) | ✅ 2026-11-02 |
        | M5 | **DOCX 서식 보기**: mammoth는 서식이 대부분 사라짐. `docx-preview`(Apache-2.0)로 글꼴·색·표·쪽 모양을 살리는 보기를 시험하고, 휴대폰 기본은 재배치 유지. 크기·라이선스·WebView 호환 확인 후 결정 → **적용**(75KB, Apache-2.0): PC는 쪽 모양, 휴대폰은 쪽 크기·머리말 없이 화면 폭 재배치, 글꼴은 M1 대체 목록 추가, Symbol 글머리표는 유니코드로, 실패 시 mammoth. PC Chromium·API 36 에뮬레이터 확인, 실기기 ⏳ | ✅ |
        | M6 | **PDF 재배치 보기**: PDF.js `getTextContent()` 위치로 줄·문단을 묶어 화면 폭 HTML로 다시 흘림(글자 PDF만, 표·다단 한계). 보기 메뉴 전환 → **적용**: 줄·문단·제목(본문보다 큰 글자)·목록 구분, 반복 머리글·쪽 번호 제거, 쪽 사이 번호 구분선. PC 도구 막대 "재배치", 휴대폰 ☰ 메뉴 "PDF 재배치 보기". 위치는 PDF 쪽으로 공유. PC Chromium·API 36 에뮬레이터 확인, 실기기·실제 PDF ⏳ | ✅ |
-       | M7 | **HWP 기호(PUA) 대응**: 한글 전용 기호 코드 → 유니코드 변환표. 공개 자료 조사 후 확인된 것만 적용(추측 금지) | ⬜ 조사 필요 |
+       | M7 | **HWP 기호(PUA) 대응**: 한글 전용 기호 코드 → 유니코드 변환표. 공개 자료 조사 후 확인된 것만 적용(추측 금지) → **적용**(`src/core/hwpSymbols.js`): U+F020–F0FF 기호 글꼴 문자는 Wingdings 기준(글꼴 이름이 Symbol·Wingdings 2/3·Webdings면 그 표), 표는 Unicode WG2 N4384·unicode.org Adobe Symbol. 한컴 확장 영역(U+F0000대) 숫자·동그라미/네모 한글 245자는 함초롬바탕 글자 모양을 읽고 대조 검증. 휴대폰에 없는 기호는 Noto Sans Symbols 2(OFL, 382KB, 필요할 때만 읽음)로 표시. 옛한글(한양 PUA)은 실제 문서에 없어 제외. PC Chromium·API 36 에뮬레이터 확인, 실기기 ⏳ | ✅ |
        | M8 | **HWPX·XML HWP 서식**: `hwpXml.js`에도 글꼴·글자·문단 모양 적용(M1·M2 재사용) → **HWPX 적용**: `Contents/header.xml`의 글꼴·글자 모양·문단 모양·테두리/배경을 이진 HWP와 같은 `.hcN/.hpN/.hbN` 클래스로, 표 칸 너비·여백·세로 정렬, 글상자 글자. XML HWP(HWPML)는 시험 파일이 없어 보류. PC Chromium·API 36 에뮬레이터 확인, 실기기 ⏳ | ✅ (HWPX) |
        | M9 | 원본 쪽 보기(위 C-1 → C-2) | ⬜ 사용자 결정 대기 |
 

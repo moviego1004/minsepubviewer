@@ -4,16 +4,9 @@
 // HWPX also gets the fonts, character, paragraph and cell styles of Contents/header.xml.
 // Functions take a parsed XML Document so the browser's DOMParser and test parsers both work.
 import { fontCss } from "./hwpFonts.js";
+import { symbolFontTable, symbolHtml } from "./hwpSymbols.js";
 
 const BLOCK_TABLE_ATTRIBUTES = ' class="hwp-table"';
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function localName(node) {
   return String(node.localName || node.nodeName || "").replace(/^.*:/, "");
@@ -62,7 +55,7 @@ function hwpmlParagraph(paragraph) {
     if (localName(child) !== "TEXT") continue;
     for (const part of elementChildren(child)) {
       const name = localName(part);
-      if (name === "CHAR") html += escapeHtml(part.textContent || "");
+      if (name === "CHAR") html += symbolHtml(part.textContent || "");
       else if (name === "TABLE") html += `</p>${hwpmlTable(part)}<p>`;
       else if (name === "LINEBREAK") html += "<br>";
       else if (name === "TAB") html += "\t";
@@ -238,6 +231,11 @@ export function readOwpmlHeader(document) {
   const faces = readFaces(root);
   const borderFills = shapeMap(root, "borderFill", readBorderFill);
   const charShapes = shapeMap(root, "charPr", (node) => charPrCss(node, faces));
+  // Symbol-font characters follow the fonts of their character shape (see hwpSymbols.js).
+  const symbolTables = shapeMap(root, "charPr", (node) => {
+    const fontRef = child(node, "fontRef");
+    return symbolFontTable(Object.keys(faces).map((language) => faces[language].get(attribute(fontRef, language))));
+  });
   const paraShapes = shapeMap(root, "paraPr", (node) => paraPrCss(node, borderFills));
   const rules = [
     // Same base size as binary HWP (see hwpBinary.js readDocInfo).
@@ -251,6 +249,7 @@ export function readOwpmlHeader(document) {
     // An empty paragraph keeps the height of its character shape.
     charSize: (id) => /font-size:([^;]+)/.exec(charShapes.get(id) || "")?.[1] || "",
     hasCharShape: (id) => charShapes.has(id),
+    symbolTable: (id) => symbolTables.get(id) || symbolFontTable(),
     hasParaShape: (id) => paraShapes.has(id),
     hasBorderFill: (id) => borderFills.has(id)
   };
@@ -270,7 +269,7 @@ function owpmlRunContent(run, styles, open) {
     if (name === "t") {
       let text = "";
       for (let node = part.firstChild; node; node = node.nextSibling) {
-        if (node.nodeType === 3 || node.nodeType === 4) text += escapeHtml(node.nodeValue || "");
+        if (node.nodeType === 3 || node.nodeType === 4) text += symbolHtml(node.nodeValue || "", styles?.symbolTable(id));
         else if (node.nodeType !== 1) continue;
         else if (localName(node) === "lineBreak") { html += `${wrap(text)}<br>`; text = ""; }
         else if (localName(node) === "tab") text += "\t";

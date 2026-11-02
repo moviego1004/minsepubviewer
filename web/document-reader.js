@@ -10,6 +10,7 @@ import {
   parseDocRange,
   segmentsForRange
 } from "../src/core/textAnchors.js";
+import { symbolFontRange } from "../src/core/hwpSymbols.js";
 
 const THEMES = Object.freeze({
   light: { bg: "#fffdf8", fg: "#202327", page: "#e9ecef" },
@@ -21,7 +22,7 @@ const BASE_CSS = `
 html { background: var(--doc-page); }
 body { margin: 0; color: var(--doc-fg); background: var(--doc-page); }
 body.is-flow { max-width: 46em; margin: 0 auto; padding: 32px 28px 64px; background: var(--doc-bg);
-  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Mins Symbols", system-ui, sans-serif;
   font-size: 17px; line-height: 1.7; word-break: keep-all; overflow-wrap: anywhere; min-height: 100vh; box-sizing: border-box; }
 body.is-flow:where(:not(.is-docx)) table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
 body.is-flow:where(:not(.is-docx)) :is(td, th) { border: 1px solid color-mix(in srgb, currentColor 45%, transparent); padding: 4px 8px; vertical-align: top; }
@@ -32,6 +33,14 @@ body.is-flow .hwp-box { margin: 0.8em 0; padding: 0.4em 0.8em; border: 1px dashe
 body.is-flow .hwp-note-ref { font-size: 0.7em; }
 body.is-flow .hwp-notes { margin-top: 2em; padding-top: 0.6em; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.85em; }
 body.is-flow .hwp-notes p { margin: 0.2em 0; }
+/* Hancom circled and boxed letters that Unicode lacks (src/core/hwpSymbols.js). The black box takes
+   the text colour as its fill and paints the letter in the page colour. */
+.hwp-sym { display: inline-block; box-sizing: border-box; min-width: 1.2em; margin: 0 0.04em; padding: 0 0.12em; border: 0.08em solid currentColor;
+  font-size: 0.85em; line-height: 1.1; text-align: center; text-indent: 0; vertical-align: 0.05em; }
+.hwp-sym.is-box { border-radius: 0.12em; }
+.hwp-sym.is-circle { min-width: 1.35em; height: 1.35em; padding: 0; border-radius: 50%; line-height: 1.2em; }
+.hwp-sym.is-box-black { border-radius: 0.12em; background: currentColor; -webkit-text-fill-color: var(--doc-bg); }
+body.has-own-colors .hwp-sym.is-box-black { -webkit-text-fill-color: #fff; }
 /* DOCX (docx-preview) draws its own tables. The phone drops the page margins; the desktop shows
    each page as a sheet. */
 body.is-flow section.docx { padding: 0 !important; min-height: 0 !important; overflow: visible; }
@@ -64,11 +73,19 @@ mark.mins-doc-mark.is-search.is-active { background: rgba(255, 159, 28, 0.75); o
 // is only fetched when a run uses it. The Android build copies them to /vendor/fonts.
 const BUNDLED_FONTS = [["Nanum Gothic", "nanum-gothic"], ["Nanum Myeongjo", "nanum-myeongjo"]];
 
+// Symbols that Wingdings characters map to (src/core/hwpSymbols.js) are mostly missing from phone
+// fonts, so Noto Sans Symbols 2 (OFL) joins each bundled family and "Mins Symbols" for those code
+// points only; it is fetched only when a document shows one of them.
+const SYMBOL_FONT = "noto-sans-symbols-2/files/noto-sans-symbols-2-symbols-400-normal.woff2";
+
 function bundledFontCss() {
   const base = globalThis.MINS_DOC_FONT_URL || "/node_modules/@fontsource";
-  return BUNDLED_FONTS.flatMap(([family, id]) => [400, 700].map((weight) =>
+  const symbols = `src: url("${base}/${SYMBOL_FONT}") format("woff2"); unicode-range: ${symbolFontRange()}; }`;
+  return [...BUNDLED_FONTS.flatMap(([family, id]) => [400, 700].flatMap((weight) => [
     `@font-face { font-family: "${family}"; font-style: normal; font-weight: ${weight}; font-display: swap; `
-    + `src: url("${base}/${id}/files/${id}-korean-${weight}-normal.woff2") format("woff2"); }`)).join("\n");
+      + `src: url("${base}/${id}/files/${id}-korean-${weight}-normal.woff2") format("woff2"); }`,
+    `@font-face { font-family: "${family}"; font-style: normal; font-weight: ${weight}; font-display: swap; ${symbols}`
+  ])), `@font-face { font-family: "Mins Symbols"; font-display: swap; ${symbols}`].join("\n");
 }
 
 function escapeAttribute(value) {
