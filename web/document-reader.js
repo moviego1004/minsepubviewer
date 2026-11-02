@@ -49,6 +49,18 @@ mark.mins-doc-mark.is-search { background: rgba(255, 159, 28, 0.35); }
 mark.mins-doc-mark.is-search.is-active { background: rgba(255, 159, 28, 0.75); outline: 2px solid #1c5d99; }
 `;
 
+// Free Nanum fonts (OFL, @fontsource) for documents whose own fonts the device does not have
+// (see src/core/hwpFonts.js). One Korean subset per weight holds all 11,172 Hangul syllables and
+// is only fetched when a run uses it. The Android build copies them to /vendor/fonts.
+const BUNDLED_FONTS = [["Nanum Gothic", "nanum-gothic"], ["Nanum Myeongjo", "nanum-myeongjo"]];
+
+function bundledFontCss() {
+  const base = globalThis.MINS_DOC_FONT_URL || "/node_modules/@fontsource";
+  return BUNDLED_FONTS.flatMap(([family, id]) => [400, 700].map((weight) =>
+    `@font-face { font-family: "${family}"; font-style: normal; font-weight: ${weight}; font-display: swap; `
+    + `src: url("${base}/${id}/files/${id}-korean-${weight}-normal.woff2") format("woff2"); }`)).join("\n");
+}
+
 function escapeAttribute(value) {
   return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
@@ -67,7 +79,7 @@ export function buildDocumentHtml({ html, layout = false, lang = "ko" }) {
     }
   }
   return `<!doctype html><html lang="${escapeAttribute(lang)}"><head><meta charset="utf-8">`
-    + `<style>${styles.join("\n")}</style><style>${BASE_CSS}</style></head>`
+    + `<style>${bundledFontCss()}</style><style>${styles.join("\n")}</style><style>${BASE_CSS}</style></head>`
     + `<body class="${layout ? "is-layout" : "is-flow"}${parsed.querySelector(".hwp-styled") ? " has-own-colors" : ""}">${parsed.body.innerHTML}</body></html>`;
 }
 

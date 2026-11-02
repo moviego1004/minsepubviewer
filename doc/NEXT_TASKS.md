@@ -1,6 +1,6 @@
 # 다음 작업
 
-최종 갱신: 2026-11-01
+최종 갱신: 2026-11-02
 
 전체 요구사항·개발 방안·로드맵은 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5장 "앞으로 할 일"을 기준으로 한다.
 
@@ -10,6 +10,30 @@
 - 판단: 원본 쪽 배치(PC와 동일) 재현은 지금 불가 — `@ohah/hwpjs`의 Android 사전 빌드(`node_modules/@ohah/hwpjs/android/.../libhwpjs-prebuilt.a`)는 React Native용이고 toJson/toMarkdown만 있으며 toHtml이 없음. 공개 WASM은 공유 메모리(SharedArrayBuffer) 필요. 그래서 제안 1단계(자체 해석기에 DocInfo 서식 적용)를 진행.
 - 완료: 글꼴(한글·영문 글꼴 이름 + 명조/고딕 대체), 글자 크기, 굵게·기울임·밑줄·취소선·위/아래 첨자, 글자 색, 음영(글자 배경), 자간 / 문단 정렬·왼쪽/오른쪽 여백·들여쓰기/내어쓰기·문단 위/아래 간격·줄 간격(%·고정), 문단 배경색 / 표 칸 너비 비율·안쪽 여백·세로 정렬·테두리(선 종류·굵기·색)·칸 배경색. 다크 테마는 원본 색을 밝게 그린 뒤 반전.
 - 남은 일(제안, 미착수): 그림(BinData), 자동 번호·글머리표(가., 1)), 머리말·꼬리말, 장평(글자 폭), 문단 테두리. HWPX·XML HWP(`hwpXml.js`)에도 같은 서식 적용. 휴대폰 실기기에서 실제 문서 확인(사용자, `build/MinsReader_ver0.1.10.apk`).
+
+## 현재 요청 — 폴라리스 분석 모바일 반영 (M1~M4 완료, M5부터 다음, 2026-11-02)
+
+- 사용자 요청: 폴라리스 분석을 모바일에 반영할 개발 계획을 세워 DEVELOPMENT_PLAN에 정리하고 차례대로 진행.
+- 계획: [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5.1 "모바일 반영 계획" 표(M1~M9).
+- 완료(자동 검증): M1 HWP 글꼴 대응표(`src/core/hwpFonts.js`), M2 나눔고딕·나눔명조 동봉(1.84MB, `web/document-reader.js`의 `@font-face`), M3 Android MIME `application/hangul`, M4 변환 문서 내용 판별(`src/core/documentSniff.js`, `web/document-convert.js`).
+- 에뮬레이터 확인(2026-11-02, 사용자 지시로 `scripts/install_app_adb.py` 작성): API 36(WebView 133)에서 생성 HWP의 "바탕" 글꼴이 나눔명조로 표시되고 `.woff2`가 로컬 서버에서 제공됨. API 30(WebView 83)은 `||=` 문법 오류로 앱이 멈췄음 → 휴대폰 묶음 대상을 `chrome80`으로 낮춰 시작 오류는 해결. 그래도 WebView 83에서는 화면 배치가 깨지고 외부 열기 HWP가 안 열림(원인 미조사, 낮은 우선순위, [ANDROID.md](ANDROID.md) "오래된 WebView").
+- 사용자 확인 필요: 다음 APK를 실제 휴대폰에 설치해 HWP 글꼴(명조/고딕/굵은 제목)이 나눔 글꼴로 보이는지. 이번 변경으로는 APK를 만들지 않았다(버전 0.1.10 그대로). 만들려면 `npm.cmd run android:apk`.
+- 다음(제안 순서): M5 DOCX 서식 보기(`docx-preview` 시험) → M6 PDF 재배치 보기 → M8 HWPX 서식 → M7 HWP 기호(PUA, 자료 조사 먼저) → M9 원본 쪽 보기(사용자 결정).
+- 이 PC의 기존 문제(이번 변경과 무관, 변경 전 코드에서도 같은 단계에서 실패): `npm.cmd run test:reader`는 EPUB 쪽 넘김 후 위치 저장 대기에서, `npm.cmd run test:documents`는 DOCX 위치 복원(스크롤 1466) 대기에서 시간 초과. 원인 미조사.
+
+## 현재 요청 — 폴라리스 오피스 형식별 표시 방식 분석 (완료, 2026-11-02)
+
+- 사용자 요청: REA로 폴라리스 오피스가 HWP 외 다른 문서 형식을 보여 주는 방식을 분석·정리. 코드 변경 없음.
+- 결과: [POLARIS_OFFICE_FORMATS.md](POLARIS_OFFICE_FORMATS.md). C++ 엔진 하나(워드 Bwp·Sheet·Pdf 모듈)가 모든 형식을 비트맵으로 그려 SurfaceView에 표시, 슬라이드 쇼만 OpenGL. 보기 방식은 쪽 그대로/연속/여백 없이/휴대폰 재배치, PDF는 xpdf + 자체 렌더러 + 재배치 모드.
+- 제안(미착수): DOCX "원본 모양 보기"(docx-preview 시험), PDF 재배치 보기(PDF.js getTextContent), 첫 바이트로 형식 판별, Android MIME `application/hangul` 추가 검토. XLSX/PPTX 추가는 우선순위 낮음.
+- 미검증: Java 디컴파일(JADX 미설정), 엔진 함수 분석, 실기기 화면.
+
+## 현재 요청 — 폴라리스 오피스 APK 분석 (완료, 2026-11-02)
+
+- 사용자 요청: REA로 `test/PolarisOffice.apk`를 분석해 휴대폰 HWP 표시 방식, PC 글꼴을 모두 넣었는지 정리(doc 폴더). 코드 변경 없음.
+- 결과: [POLARIS_OFFICE_ANALYSIS.md](POLARIS_OFFICE_ANALYSIS.md). C++ 엔진이 직접 쪽 배치·비트맵 그리기. 한글 본문 글꼴은 엔진 안의 나눔고딕 하나뿐이고 PC 한글 글꼴(함초롬·휴먼·HY 본문)은 없다. 기호(HY 윙딩/심볼)·수식(HyhwpEQ, STIX)·Office 영문 5종만 넣고, 나머지는 기기 글꼴과 이름 대응표로 대체.
+- 제안(미착수): 로드맵 A를 이 결과에 맞춰 진행 — 고딕·명조 무료 글꼴 부분 글꼴 동봉, 분석 문서 3.3의 별칭을 참고한 대응표, HWP PUA 기호를 유니코드로 바꾸는 표, 영문은 Liberation 글꼴 검토.
+- 미검증: Java 디컴파일(JADX 미설정), 엔진 함수 분석, 실기기 화면 비교.
 
 ## 다음에 이어서 할 일 — HWP 원본 모양 재현 (사용자 결정 대기, 2026-11-01)
 

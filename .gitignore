@@ -13,3 +13,5 @@ test/*.hwp
 test/*.hwpx
 test/*.docx
 test/*.pdf
+# Third-party APKs used for reverse-engineering reference; never commit.
+test/*.apk

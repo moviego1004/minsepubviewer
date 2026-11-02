@@ -40,6 +40,7 @@ app.whenReady().then(async () => {
     window.MINS_PDFJS_BASE = '/dist/mobile/vendor/pdfjs/';
     window.MINS_MAMMOTH_URL = '/dist/mobile/vendor/mammoth/mammoth.browser.min.js';
     window.MINS_PAKO_URL = '/dist/mobile/vendor/pako/pako_inflate.min.js';
+    window.MINS_DOC_FONT_URL = '/dist/mobile/vendor/fonts';
     const docxBytes = Uint8Array.from(atob('${docx}'), value => value.charCodeAt(0)).buffer;
     // Binary HWP 5.0 is read by the built-in text-and-table reader on the phone.
     const hwpBytes = Uint8Array.from(atob('${hwp}'), value => value.charCodeAt(0)).buffer;
@@ -383,6 +384,8 @@ app.whenReady().then(async () => {
   await waitFor(`${docZoom} > ${beforeDocZoom} && !document.querySelector('#docFrame').style.transform`);
   await run("window.__nextOpenKind = 'hwp'; document.querySelector('#mobileOpenFile').click()");
   await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('p')?.textContent === 'HWP 5.0 검사 문서' && document.querySelector('#docFrame').contentDocument.querySelector('td[colspan=\"2\"]')?.textContent === '병합된 머리 칸'");
+  // The bundled Korean fonts load from the mobile build inside the document frame.
+  assert.equal(await run("Promise.all(['400 16px \"Nanum Gothic\"', '700 16px \"Nanum Myeongjo\"'].map(font => document.querySelector('#docFrame').contentDocument.fonts.load(font, '한글'))).then(sets => sets.map(set => set.length).join(','))"), "1,1", "Bundled Nanum fonts load in converted documents");
   await run("window.__nextOpenKind = 'hwpx'; document.querySelector('#mobileOpenFile').click()");
   await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('p')?.textContent === 'HWPX 검사 문서' && document.querySelector('#docFrame').contentDocument.querySelector('td')?.textContent === 'HWPX 표'");
   await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");

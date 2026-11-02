@@ -3320,7 +3320,7 @@ async function openConvertedDocument(fileLike) {
     const settings = mergeReadingSettings(state.book.settings, {});
     await reader.open({ html: converted.html, layout: converted.layout, location: state.book.lastLocation, theme: settings.theme, zoom: settings.zoom, lang: getLocale() });
     if (state.docReader !== reader) return;
-    state.docMeta = { name, size: (bytes.byteLength / 1024 / 1024).toFixed(2), format: format.toUpperCase() };
+    state.docMeta = { name, size: (bytes.byteLength / 1024 / 1024).toFixed(2), format: (converted.format || format).toUpperCase() };
     state.progressLabel = docProgressLabel();
     persistBook();
     render();

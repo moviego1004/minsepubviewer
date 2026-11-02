@@ -2,6 +2,7 @@
 // DOCX: mammoth (loaded on first use). HWPX and XML HWP (HWPML): own converter.
 // Binary HWP 5.0: platform.convertHwp where available (the desktop app converts it with page layout
 // in the main process), otherwise the built-in text-and-table reader (the phone app).
+import { sniffDocumentFormat } from "../src/core/documentSniff.js";
 import { convertHwpBinary, isOleBytes } from "../src/core/hwpBinary.js";
 import {
   convertHwpmlDocument,
@@ -103,8 +104,10 @@ async function convertHwp(bytes, fileLike, platform) {
   return { html: await convertHwpBinary(bytes, inflateRaw), layout: false };
 }
 
+// The content decides between the converted formats; the file name is the fallback.
 export async function convertDocument(fileLike, bytes, platform) {
-  const format = getDocumentFormat(fileLike?.name);
+  const sniffed = sniffDocumentFormat(bytes);
+  const format = ["docx", "hwpx", "hwp"].includes(sniffed) ? sniffed : getDocumentFormat(fileLike?.name);
   if (format === "docx") return { format, ...await convertDocx(bytes) };
   if (format === "hwpx") return { format, ...await convertHwpx(bytes) };
   if (format === "hwp") return { format, ...await convertHwp(bytes, fileLike, platform) };

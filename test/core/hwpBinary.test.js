@@ -24,7 +24,7 @@ test("DocInfo fonts, character and paragraph shapes and cell borders become clas
   const html = await convertHwpBinary(new Uint8Array(createSampleHwp({ paragraphCount: 1, styled: true })), inflateRaw);
   const css = /^<style>([^<]*)<\/style>/.exec(html)?.[1] || "";
   assert.match(css, /html\{font-size:14px\}/);
-  assert.match(css, /\.hwp-styled \.hc0\{font-family:"바탕", "Arial", "Noto Serif KR", "Noto Serif CJK KR", serif;font-size:1rem\}/);
+  assert.match(css, /\.hwp-styled \.hc0\{font-family:"바탕", "Arial", "Nanum Myeongjo", "Noto Serif KR", "Noto Serif CJK KR", serif;font-size:1rem\}/);
   assert.match(css, /\.hwp-styled \.hc1\{[^}]*font-size:1\.5rem;font-weight:bold;letter-spacing:-0\.03em;color:#ff0000;background-color:#ffff00\}/);
   // Margins are stored doubled; the negative indent hangs the first line.
   assert.match(css, /\.hwp-styled \.hp1\{white-space:pre-wrap;text-align:center;margin:0rem 0 0\.3rem;padding:0 0rem 0 3rem;text-indent:-2rem;line-height:1\.3\}/);

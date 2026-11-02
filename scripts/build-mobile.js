@@ -37,6 +37,18 @@ await copyFile("node_modules/mammoth/LICENSE", resolve(output, "vendor/mammoth/L
 await mkdir(resolve(output, "vendor/pako"), { recursive: true });
 await copyFile("node_modules/pako/dist/pako_inflate.min.js", resolve(output, "vendor/pako/pako_inflate.min.js"));
 await copyFile("node_modules/pako/LICENSE", resolve(output, "vendor/pako/LICENSE"));
+// Bundled Korean fonts for converted documents (see web/document-reader.js): one Korean subset
+// per weight, regular and bold.
+for (const id of ["nanum-gothic", "nanum-myeongjo"]) {
+  const fonts = resolve(output, "vendor/fonts", id);
+  await rm(fonts, { recursive: true, force: true });
+  await mkdir(resolve(fonts, "files"), { recursive: true });
+  for (const weight of [400, 700]) {
+    const file = `${id}-korean-${weight}-normal.woff2`;
+    await copyFile(`node_modules/@fontsource/${id}/files/${file}`, resolve(fonts, "files", file));
+  }
+  await copyFile(`node_modules/@fontsource/${id}/LICENSE`, resolve(fonts, "LICENSE"));
+}
 const html = (await readFile("web/index.html", "utf8"))
   .replace('src="/node_modules/jszip/dist/jszip.min.js"', 'src="/vendor/jszip.min.js"')
   .replace('src="/node_modules/epubjs/dist/epub.min.js"', 'src="/vendor/epub.min.js"')
@@ -48,7 +60,8 @@ await build({
   outfile: resolve(output, "web/mobile.js"),
   bundle: true,
   format: "esm",
-  target: "es2022",
+  // Older Android System WebViews (83 on an un-updated Android 11 image) reject `||=`; esbuild lowers it.
+  target: "chrome80",
   legalComments: "eof"
 });
 console.log("Android web assets built: dist/mobile");

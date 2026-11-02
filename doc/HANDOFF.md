@@ -1,6 +1,6 @@
 # 다른 PC에서 이어서 작업하기
 
-최종 갱신: 2026-11-01 (한국 시간)
+최종 갱신: 2026-11-02 (한국 시간)
 
 ## 먼저 읽을 문서
 
@@ -10,6 +10,7 @@
 4. [WORK_LOG.md](WORK_LOG.md): 실제 작업과 검증 이력.
 5. [ANDROID.md](ANDROID.md): Android 구조, 빌드, 설치, 데이터 정책.
 6. [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md): 기능 요구사항, 개발 방안, 완료 내역, 앞으로 할 일(전체 로드맵). 2026-10-18 전면 개편.
+7. [POLARIS_OFFICE_ANALYSIS.md](POLARIS_OFFICE_ANALYSIS.md): 폴라리스 오피스 APK의 HWP 표시·글꼴 전략 분석(2026-11-02), 로드맵 A 참고 자료. 형식별(워드·시트·슬라이드·PDF) 표시 방식은 [POLARIS_OFFICE_FORMATS.md](POLARIS_OFFICE_FORMATS.md).
 
 ## 현재 상태
 
@@ -22,6 +23,7 @@
 - PDF: `web/pdf-reader.js`(PDF.js 뷰어 래퍼), `src/core/pdfLocation.js`(위치·형광펜 좌표 문자열). 이어보기(쪽·배율·위치), 목차, 검색, 책갈피, 형광펜/메모(앱 내부 저장, 원본 미수정), 테마, 두 쪽 보기, 회전, PC 전체 화면(F11).
 - 다국어: `src/locales/ko.js`, `en.js`(키 일치 테스트), `web/i18n.js`(`data-i18n` 적용). Electron 대화상자와 Android Java 오류(`native.*` 키)도 같은 사전을 쓴다.
 - 변환 문서(읽기 전용): DOCX(mammoth 1.13.0), HWPX·XML HWP(자체 변환기 `src/core/hwpXml.js`, 텍스트·표), 바이너리 HWP 5.0(PC는 Electron 메인 프로세스의 `@ohah/hwpjs@0.1.0-rc.10` 네이티브 모듈로 쪽 배치 재현, Android와 브라우저는 자체 모듈 `src/core/hwpBinary.js`로 본문·표·각주와 DocInfo 서식(글꼴·크기·색·문단 정렬·여백·표 테두리/배경, 2026-11-01)을 화면 폭에 맞춰 재배치, 압축 해제는 pako — 브라우저 `DecompressionStream`은 HWP 구역 끝의 CRC·크기 꼬리 때문에 실패). 뷰어는 `web/document-reader.js`(스크립트 없는 iframe), 위치·형광펜은 `src/core/textAnchors.js`.
+- 변환 문서 글꼴(2026-11-02): 나눔고딕·나눔명조(OFL, `@fontsource/*` 5.3.0) 한국어 WOFF2 보통·굵게를 iframe `@font-face`로 동봉(1.84MB). HWP 글꼴 이름 → 명조/고딕/굵은 제목/고정폭/기호 분류는 `src/core/hwpFonts.js`. 변환 문서 형식은 내용으로 판별(`src/core/documentSniff.js`). API 36 에뮬레이터 확인, 실기기 확인 전. adb.exe 전송이 막히면 `python scripts/install_app_adb.py --tcp|--usb`([ANDROID.md](ANDROID.md)). 휴대폰 묶음은 esbuild `chrome80` 대상.
 - 배포 축소: PC 패키지는 필요한 파일만 넣고(Electron 언어 ko·en만, PDF.js min, HWP는 Windows용 `.node`만), Toast UI는 devDependency로 옮겼다. 사용자 샘플 `test/sample/`은 Git 제외.
 - iOS는 Mac/Xcode가 없어 보류.
 - 휴대폰 터치 구역(`src/core/touchNavigation.js`): 위·아래 1/3 탭은 쪽 이동(스크롤 화면은 한 화면씩), 가운데 한 번 탭은 선택·형광펜용으로 비워 두고 가운데 두 번 탭(`isCenterTap` + 350ms)이 전체 화면 전환. PDF 탭은 `PdfReader.step`(확대한 쪽 안에서 먼저 스크롤). PDF 쪽 보기에서 쪽이 화면보다 크면 쪽 끝에 닿은 채 계속 미는 동작이 쪽 이동(`getEdgeSwipe`, `touch-reader`의 `scrollElement`/`edgePaging`; 밀기 시작 150ms 안에 스크롤이 있었거나 밀기 중 스크롤되면 무시).

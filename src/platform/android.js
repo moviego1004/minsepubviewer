@@ -9,6 +9,7 @@ const Documents = registerPlugin("ReaderDocuments");
 globalThis.MINS_PDFJS_BASE = "/vendor/pdfjs/";
 globalThis.MINS_MAMMOTH_URL = "/vendor/mammoth/mammoth.browser.min.js";
 globalThis.MINS_PAKO_URL = "/vendor/pako/pako_inflate.min.js";
+globalThis.MINS_DOC_FONT_URL = "/vendor/fonts";
 let preview = null;
 
 function closeImagePreview() {

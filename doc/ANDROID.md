@@ -113,6 +113,29 @@ npm.cmd run android:install
 서명이 다른 기존 앱이 있으면 설치가 실패할 수 있으며, 스크립트는 기존 앱을 자동 삭제하지 않습니다.
 Windows에서 USB 기기가 인식되지 않으면 해당 휴대폰 제조사의 USB 드라이버가 추가로 필요할 수 있습니다.
 
+### adb.exe 전송이 막힐 때: `scripts/install_app_adb.py` (2026-11-02)
+
+이 PC에서는 `adb install`/`adb push`가 `connection reset`으로 실패했습니다. 이때는 adb.exe 없이 ADB 프로토콜을 직접 쓰는 스크립트로 설치합니다(YTHelper의 `install_app.py`를 이 앱에 맞게 옮김). 필요: Python 3, `python -m pip install adb-shell==0.4.4`. 다른 adb 서버가 같은 에뮬레이터를 잡고 있으면 먼저 `adb kill-server`.
+
+```powershell
+python scripts\install_app_adb.py --check   # 고를 APK와 연결 방식만 표시
+python scripts\install_app_adb.py --tcp     # 에뮬레이터 127.0.0.1:5555(콘솔 포트+1)
+python scripts\install_app_adb.py --usb     # USB 휴대폰(Windows WinUSB)
+python scripts\install_app_adb.py --apk build\MinsReader_ver0.1.11.apk
+```
+
+- APK: `--apk` → `MINS_APK` → Gradle 디버그 출력(`android/app/build/outputs/apk/debug`)과 `build/`의 가장 높은 `MinsReader_ver*.apk` 가운데 더 최근 파일.
+- 환경 변수: `MINS_ADB_TRANSPORT`(tcp|usb), `MINS_ADB_HOST`, `MINS_ADB_PORT`, `MINS_ADB_KEY`(기본 `~/.android/adbkey`), `MINS_BOOT_TIMEOUT`(초, 기본 180. 막 켠 에뮬레이터는 400 정도).
+- `pm install -t -r`로 바꿔 설치하고 앱을 지우지 않습니다. 서명이 다르면 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`을 알리고 멈춥니다. 설치 뒤 MainActivity를 실행합니다(`--no-launch`로 생략).
+- 디버그 APK만 빌드(버전 번호 그대로): `cd android; $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"; .\gradlew.bat assembleDebug`.
+- Git Bash에서 기기 경로(`/sdcard/...`)를 쓰는 명령은 `MSYS_NO_PATHCONV=1`이 필요합니다(경로가 `C:/Program Files/Git/...`로 바뀜).
+- 확인(2026-11-02): API 30(WebView 83)·API 36(WebView 133) 에뮬레이터에서 설치·실행 성공.
+
+### 오래된 WebView
+
+- 휴대폰용 묶음(`dist/mobile/web/mobile.js`)은 esbuild `target: "chrome80"`으로 만듭니다(2026-11-02, 이전 `es2022`). WebView 83은 `||=`를 몰라 앱이 시작하자마자 멈췄습니다(`Uncaught SyntaxError: Unexpected token '='`).
+- 문법 오류를 고친 뒤에도 WebView 83(업데이트 안 된 Android 11 에뮬레이터)에서는 화면 배치가 깨지고 외부 열기로 받은 HWP가 열리지 않았습니다. 원인 미조사(CSS 기능 지원 범위로 추정). 실제 휴대폰은 Play 스토어로 WebView가 갱신되므로 우선순위는 낮게 둡니다.
+
 이 APK는 개인 기기 테스트용 디버그 서명을 사용합니다. Play 스토어 등록에는 별도 배포 서명이 필요합니다.
 
 Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/release.cjs`를 거칩니다: `build.bat`·`npm.cmd run build`·`npm.cmd run release`(PC+APK), `makeSetup.bat`·`release:pc`(PC만), `android:apk`·`release:android`(APK만). 빌드마다 버전 +1, 결과는 `build/MinsReader_ver<버전>.exe/.apk`이며 `build/`에 있는 기존 배포 파일보다 항상 높은 번호를 씁니다.
@@ -130,7 +153,8 @@ Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/rele
 - PDF 확대·축소는 앱이 두 손가락 움직임을 PDF.js `updateScale`로 넘겨 바로 확대하고, 잠시 뒤 선명하게 다시 그립니다(2026-10-18, PDF.js 뷰어 라이브러리는 핀치를 직접 처리하지 않음). 쪽이 화면에 다 들어올 때만 상하단 탭/스와이프로 쪽을 넘기고, 확대해서 스크롤이 생기면 스크롤을 우선합니다.
 - DOCX·HWPX·XML 형식 HWP(64MB 이하)는 앱 사본을 읽어 HTML로 바꿔 읽기 전용으로 보여 줍니다(mammoth는 `dist/mobile/vendor/mammoth/`).
   변환 문서와 Markdown 사본은 플러그인 `readDocument`로 읽습니다. 앱 파일 URL(`convertFileSrc`)은 Capacitor 로컬 서버가 확장자로 형식을 정하는데 `.hwp`/`.hwpx`를 몰라 "Failed to fetch"가 났습니다(0.1.8에서 수정).
-- 다른 앱으로 열기/공유 MIME: EPUB, PDF(`application/pdf`, `application/x-pdf`), DOCX, HWP(`application/x-hwp`, `application/hwp`, `application/haansofthwp`, `application/vnd.hancom.hwp`, `application/vnd.hancom.hwpml`), HWPX(`application/hwp+zip`, `application/x-hwpx`, `application/vnd.hancom.hwpx`, `application/haansofthwpx`), Markdown·TXT, 그리고 메신저가 쓰는 `application/octet-stream`·ZIP(파일 이름으로 형식 확인).
+- 변환 문서용 동봉 글꼴(2026-11-02): `scripts/build-mobile.js`가 `@fontsource/nanum-gothic`·`nanum-myeongjo`의 한국어 WOFF2(보통·굵게)와 LICENSE를 `dist/mobile/vendor/fonts/`로 복사(1.84MB). `src/platform/android.js`가 `MINS_DOC_FONT_URL=/vendor/fonts`를 설정. API 36 에뮬레이터(WebView 133)에서 로컬 서버가 `.woff2`를 제공하고 HWP의 "바탕" 글꼴이 나눔명조로 그려지는 것을 확인(2026-11-02). 실기기는 사용자 확인 대기.
+- 다른 앱으로 열기/공유 MIME: EPUB, PDF(`application/pdf`, `application/x-pdf`), DOCX, HWP(`application/x-hwp`, `application/hwp`, `application/haansofthwp`, `application/hangul`(2026-11-02, 폴라리스 오피스 목록 참고), `application/vnd.hancom.hwp`, `application/vnd.hancom.hwpml`), HWPX(`application/hwp+zip`, `application/x-hwpx`, `application/vnd.hancom.hwpx`, `application/haansofthwpx`), Markdown·TXT, 그리고 메신저가 쓰는 `application/octet-stream`·ZIP(파일 이름으로 형식 확인).
   바이너리 HWP 5.0은 자체 모듈(`src/core/hwpBinary.js`)로 본문·표·글상자·각주를 읽고, 2026-11-01부터 DocInfo의 글꼴·크기·색·문단 정렬/여백·표 테두리/배경을 화면 폭에 맞춰 적용합니다(쪽 배치·그림·자동 번호 제외, 압축 해제는 pako `inflateRaw`(`dist/mobile/vendor/pako/`). WebView의 `DecompressionStream`은 한글이 압축 본문 뒤에 붙이는 CRC·크기 8바이트 때문에 "Failed to fetch"로 실패해 0.1.9에서 교체).
   암호·배포용 HWP는 안내 문구만 보입니다.
 - 화면 터치(2026-10-18): 위쪽 1/3 탭은 이전, 아래쪽 1/3 탭은 다음(연속 스크롤·확대한 PDF에서는 한 화면씩 스크롤 후 쪽 이동). 가운데 한 번 탭은 아무 동작도 하지 않아 선택·형광펜에 쓰고, 가운데를 **두 번** 탭하면 전체 화면을 켜고 끕니다(처음 3번은 안내 문구). 밀기(스와이프) 쪽 넘김은 내용이 스스로 스크롤되지 않을 때. PDF 쪽 보기에서 쪽이 화면보다 크면 쪽 안을 스크롤하고, 쪽 끝(처음)에 닿은 뒤 한 번 더 밀면 다음(이전) 쪽으로 넘어갑니다(2026-10-18). 연속 보기는 스크롤로 문서 전체를 이동합니다.

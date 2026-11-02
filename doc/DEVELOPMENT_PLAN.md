@@ -1,6 +1,6 @@
 # Mins Reader 개발 계획
 
-최종 갱신: 2026-10-18 · 기준 버전 0.1.9 (versionCode 10)
+최종 갱신: 2026-11-02 · 기준 버전 0.1.10 (versionCode 11, 이번 변경은 아직 배포 파일 미생성)
 
 이 문서는 제품이 갖춰야 할 기능(요구사항), 그 기능을 만드는 방법(개발 방안), 지금까지 완료된 것, 앞으로 할 일을 한곳에 정리한다.
 매 작업의 상세 기록과 검증 결과는 [WORK_LOG.md](WORK_LOG.md), 진행 중인 요청은 [NEXT_TASKS.md](NEXT_TASKS.md), 환경과 재개 절차는 [HANDOFF.md](HANDOFF.md), Android 세부는 [ANDROID.md](ANDROID.md)를 따른다.
@@ -38,7 +38,7 @@
 
 | 요구사항 | 상태 |
 |---|---|
-| 파일 열기 하나로 모든 형식 열기(형식은 파일 이름으로 판단) | ✅ |
+| 파일 열기 하나로 모든 형식 열기(형식은 파일 이름으로 판단, 변환 문서 DOCX·HWPX·HWP는 내용으로 다시 판별) | ✅ |
 | 최근 파일, 여러 문서 탭(휴대폰은 "열린 문서" 창) | ✅ |
 | 이어 읽기: 문서별 마지막 위치·배율 저장과 복원 | ✅ 📱 |
 | 목차(EPUB·PDF), 본문 검색과 결과 이동 | ✅ |
@@ -99,6 +99,8 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 | HWP 5.0 (Android) | 자체 해석기 `src/core/hwpBinary.js`(OLE 복합 파일 → 레코드 → 본문·표·글상자·각주), 압축 해제는 pako | 위와 같음 |
 
 - 변환 문서는 스크립트를 제거한 HTML을 격리된 iframe에 보여 준다.
+- 변환 문서 iframe에는 무료 한글 글꼴(나눔고딕·나눔명조, OFL, `@fontsource` 5.3.0의 한국어 단일 부분 글꼴 WOFF2, 보통·굵게)을 `@font-face`로 넣는다. 쓰일 때만 읽는다. PC는 `node_modules/@fontsource/...`, Android는 `/vendor/fonts/...`(`MINS_DOC_FONT_URL`). HWP 글꼴 이름은 `src/core/hwpFonts.js`가 명조/고딕/고정폭/기호로 나누고 원래 이름 뒤에 나눔 글꼴을 붙인다.
+- 변환 문서 형식은 `src/core/documentSniff.js`가 내용으로 판별한다(OLE → HWP, ZIP 목록의 `Contents/sectionN.xml` → HWPX, `word/document.xml` → DOCX, `<HWPML` → HWP). 모르면 파일 이름을 따른다.
 - Android에서 변환 문서와 Markdown 사본은 플러그인 `readDocument`로 읽는다. 앱 파일 URL은 `.hwp` 같은 확장자를 서버가 몰라 실패하기 때문이다.
 - HWP 압축 해제는 브라우저 기본 기능(`DecompressionStream`)을 쓰지 않는다. 한글이 압축 데이터 뒤에 붙이는 검사값 때문에 실패한다.
 
@@ -148,6 +150,8 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 | 2026-10-18 | 0.1.7 | 확대한 PDF를 밀어서 쪽 이동, 형식별 스크롤 이동 시험 |
 | 2026-10-18 | 0.1.8 | 변환 문서·Markdown을 플러그인으로 읽기, 열기/공유 형식 추가 |
 | 2026-10-18 | 0.1.9 | HWP 압축 해제를 pako로 교체 → 휴대폰에서 실제 HWP 5.0 열림(📱 사용자 확인) |
+| 2026-11-01 | 0.1.10 | 휴대폰 HWP에 DocInfo 서식(글꼴·크기·색·정렬·여백·표 테두리/배경) 적용 |
+| 2026-11-02 | (미배포) | 폴라리스 분석 반영 M1~M4: HWP 글꼴 대응표, 나눔고딕·나눔명조 동봉(약 1.8MB), Android MIME `application/hangul`, 변환 문서 내용 판별 |
 
 ## 5. 앞으로 할 일
 
@@ -169,11 +173,30 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
      - 한계의 핵심은 글꼴: HWP는 글꼴 이름만 담고 파일은 담지 않는다. 휴대폰에 휴먼명조·HY헤드라인M 등이 없어 글자 폭이 달라지고 줄바꿈·쪽 나눔이 어긋난다.
      - 상용 뷰어(폴라리스 오피스, 한컴 뷰어)의 일반적 방식: 자체 C++ 문서 엔진이 직접 쪽 배치·그리기(HTML 변환 아님), 한글 글꼴을 앱에 넣거나 내려받고(라이선스) 없는 글꼴은 폭이 비슷한 글꼴로 대체, HWP에 저장된 줄 위치 정보(PARA_LINE_SEG: 한글이 저장할 때 계산한 줄 위치·높이)로 줄바꿈을 그대로 재현. PC의 hwpjs도 LINE_SEG를 쓴다.
      - 자체 엔진을 처음부터 만드는 것(AI로 코드 작성은 빠름)의 실제 병목: ① 한글이 "어떻게 그리는지"는 공개 문서에 없어 한글 결과(PDF로 내보낸 정답)와 문서마다 비교해야 함 — 사용자가 정답 PDF와 휴대폰 결과 확인을 반복 제공해야 함 ② 글꼴 라이선스는 코드로 해결 불가 ③ 수식·차트·그리기 개체·다단·바탕쪽 등 기능별 작업량.
+     - 폴라리스 오피스 9.0.10 APK 분석(2026-11-02, [POLARIS_OFFICE_ANALYSIS.md](POLARIS_OFFICE_ANALYSIS.md)): 한글 본문 글꼴은 나눔고딕 하나만 엔진에 넣었고 PC 한글 글꼴은 없음. 기호·수식·Office 영문 5종만 넣고 기기 글꼴 + 이름 대응표로 대체. A안과 같은 방식임을 확인.
      - **진행 순서(제안, 사용자 결정 대기)**:
        1. **A. 무료 한글 글꼴 동봉 + 글꼴 대응표** (추천, 먼저): 사용자 문서에 자주 나오는 글꼴부터 조사(`readDocInfo`의 글꼴 이름 집계) → 나눔명조/나눔고딕/나눔스퀘어 등 무료 글꼴 2~4개를 `@font-face`로 동봉, `hwpBinary.js`의 `fontFamily`에 "휴먼명조→나눔명조", "HY헤드라인M→굵은 고딕" 같은 대응표 추가. APK 글꼴당 약 2~4MB 증가. 화면 폭 재배치는 유지.
        2. **C-1. hwpjs를 공유 메모리 없는 WASM으로 직접 빌드** (가장 빠른 원본 쪽 보기 경로): Rust 도구 설치(이 PC에는 없음, `cargo` 미설치 확인), `@ohah/hwpjs`(github.com/ohah/hwpjs) 저장소를 스레드 없는 `wasm32` 대상으로 빌드해 Android WebView에서 `toHtml` 동작 시험(1~2일). 되면 보기 메뉴에 "원본 쪽 모양 / 읽기 편한 모양" 전환. 참고: npm 패키지의 Android 사전 빌드(`android/src/main/jni/libs/*/libhwpjs-prebuilt.a`)는 React Native(JSI)용이고 toHtml이 없어 쓸 수 없음.
        3. **C-2. 안 되면 자체 해석기에 쪽 배치 추가**: `hwpBinary.js`에서 PARA_LINE_SEG(태그 69)로 줄 위치·높이를 읽어 쪽 단위 절대 배치. 며칠~몇 주, 한글 PDF 정답과 비교 필요. A와 같이 해야 글자가 칸을 넘치지 않음.
      - 휴대폰에서 A4 쪽 그대로는 글씨가 작으므로 기본은 재배치 보기, 원본 쪽 보기는 선택 메뉴로 둔다.
+   - **모바일 반영 계획 — 폴라리스 분석 기반 (2026-11-02 사용자 요청 "개발 계획을 세우고 차례대로 진행")**
+     - 근거: [POLARIS_OFFICE_ANALYSIS.md](POLARIS_OFFICE_ANALYSIS.md)(HWP·글꼴), [POLARIS_OFFICE_FORMATS.md](POLARIS_OFFICE_FORMATS.md)(형식별). 폴라리스는 네이티브 엔진·비트맵 구조지만 Mins Reader는 WebView HTML 구조를 유지하고, 그 안에서 글꼴 전략·보기 방식·형식 판별을 가져온다.
+     - 진행 순서와 상태(작고 위험이 낮은 것부터):
+
+       | 단계 | 내용 | 상태 |
+       |---|---|---|
+       | M1 | **HWP 글꼴 대응표**: 문서 글꼴 이름을 명조/고딕/굵은 제목체/고정폭/기호로 분류(`src/core/hwpFonts.js`). 폴라리스 별칭 표의 한글·영문 이름(함초롬·한컴·HY·휴먼·한양·나눔·문체부 등) 반영. 헤드라인·견고딕 계열은 굵게 | ✅ 2026-11-02 |
+       | M2 | **무료 한글 글꼴 동봉**: 나눔고딕·나눔명조(OFL, `@fontsource/*` 5.3.0) 한국어 단일 부분 글꼴 WOFF2, 보통·굵게 4개(1.84MB, 한글 11,172자 전부). 변환 문서 보기 iframe에 `@font-face`로 넣어 기기와 상관없이 같은 글꼴로 보이게 함 | ✅ 2026-11-02 (PC Chromium·API 36 에뮬레이터에서 확인, 실기기 ⏳) |
+       | M3 | **Android 열기 목록**: 폴라리스가 쓰는 HWP MIME 별칭 중 빠진 `application/hangul` 추가 | ✅ 2026-11-02 |
+       | M4 | **내용으로 형식 판별**: 확장자와 내용이 다른 변환 문서(예: `.hwp`인데 실제로는 HWPX ZIP, `.docx`인데 HWPX)를 첫 바이트와 ZIP 목록으로 판별(`src/core/documentSniff.js`) | ✅ 2026-11-02 |
+       | M5 | **DOCX 서식 보기**: mammoth는 서식이 대부분 사라짐. `docx-preview`(Apache-2.0)로 글꼴·색·표·쪽 모양을 살리는 보기를 시험하고, 휴대폰 기본은 재배치 유지. 크기·라이선스·WebView 호환 확인 후 결정 | ⬜ 다음 |
+       | M6 | **PDF 재배치 보기**: PDF.js `getTextContent()` 위치로 줄·문단을 묶어 화면 폭 HTML로 다시 흘림(글자 PDF만, 표·다단 한계). 보기 메뉴 전환 | ⬜ |
+       | M7 | **HWP 기호(PUA) 대응**: 한글 전용 기호 코드 → 유니코드 변환표. 공개 자료 조사 후 확인된 것만 적용(추측 금지) | ⬜ 조사 필요 |
+       | M8 | **HWPX·XML HWP 서식**: `hwpXml.js`에도 글꼴·글자·문단 모양 적용(M1·M2 재사용) | ⬜ |
+       | M9 | 원본 쪽 보기(위 C-1 → C-2) | ⬜ 사용자 결정 대기 |
+
+     - 하지 않기로 한 것: 폴라리스처럼 상용 글꼴(HY, Monotype Arial/Times 등)을 넣는 것(라이선스), 네이티브 렌더링 엔진으로 바꾸는 것, XLSX·PPTX 지원(5.3 검토로 미룸).
+     - 각 단계 검증: `npm.cmd test`, 화면 변경 시 `node --check web/app.js`·`npm.cmd run test:reader`, Android 연결부 변경 시 `npm.cmd run android:sync`. 휴대폰 실기기 확인은 사용자 몫으로 기록.
 2. **실기기 확인 대기 항목** ⏳
    - 카카오톡·메일 첨부 열기 목록에 Mins Reader가 나오는지(앱별 MIME). 안 나오면 앱 이름과 형식을 받아 추가한다.
    - 실제 HWPX 사용자 파일

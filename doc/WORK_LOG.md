@@ -172,3 +172,54 @@
 - 변경 파일: `doc/DEVELOPMENT_PLAN.md`(5.1 "원본 모양 재현 로드맵": 원인, 상용 뷰어 방식, 병목, A → C-1 → C-2 진행 순서), `doc/NEXT_TASKS.md`(다음에 이어서 할 일, 재개 방법), `doc/HANDOFF.md`(현재 상태 한 줄), 이 기록.
 - 검증: 문서만 변경. 코드·빌드 변경 없음. Rust 미설치(`cargo` 없음)는 이번 세션에서 확인한 사실.
 
+
+## 폴라리스 오피스 APK 분석 (2026-11-02)
+
+- 사용자 요청: REA로 `test/PolarisOffice.apk`를 분석해 휴대폰 HWP 표시 방식과 PC 글꼴 동봉 여부를 정리하고 doc 폴더에 기록.
+- 시작 상태: 미추적 `minsepubviewer.7z`, `test/PolarisOffice.apk`(둘 다 보존, 커밋하지 않음).
+- 방법: REA `open_binary`·`inspect_artifact`(항목 7,743개, 전체)·`extract_artifact`. REA Android 디컴파일은 `REA_JADX_MCP_JAR` 미설정으로 쓰지 못함 → dex·`.so` 문자열, 소스 경로 문자열, 엔진 안 sfnt 글꼴 검사(fontTools 4.61.1). `aapt2 dump badging`으로 판 확인(9.0.10).
+- 결과: `libpolarisoffice8.so`(62.7MB)가 HWP 5.0/HWPX/HWP 3.0 해석·쪽 배치·비트맵 그리기를 모두 한다. 엔진 안 글꼴 18개(약 9MB): 나눔고딕(한글 전부), 라틴 문자만 있는 HYGulim/HYDotum/HYBatang/HYTRSerif, HY 윙딩·심볼(PUA), HyhwpEQ, STIX TTC, Times New Roman/Arial/Tahoma/Courier New/Verdana. PC 한글 글꼴은 없다. 기기 `/system/fonts` 사용, 한글↔영문 글꼴 별칭 표와 폴라리스 자체 글꼴(PolarisNewBatang 등, APK에는 없음)로 대체.
+- 변경 파일: `doc/POLARIS_OFFICE_ANALYSIS.md`(새 문서), `doc/DEVELOPMENT_PLAN.md`(5.1 근거 한 줄), `doc/NEXT_TASKS.md`, `doc/HANDOFF.md`, 이 기록, `.gitignore`(`test/*.apk` 제외).
+- 검증: 문서만 변경. 분석 문서의 수치는 이번 실행 결과(arm64·armeabi 두 엔진에서 같은 글꼴 목록 확인). 코드·빌드 변경 없음.
+- 미검증: Java 디컴파일, 엔진 함수 분석(LINE_SEG 사용 여부, 대체 우선순위), 폴라리스 실기기 화면 비교.
+- 재현: 분석 문서 6장.
+
+## 폴라리스 오피스 형식별 표시 방식 분석 (2026-11-02)
+
+- 사용자 요청: REA로 폴라리스 오피스가 다른 문서 형식을 보여 주는 방식을 분석·정리.
+- 방법: REA `open_binary`·`extract_artifact`(Evidence `ev_63d0e2b0…`)로 다시 풀고, `aapt2 dump xmltree`로 매니페스트(열기 화면·MIME·pathPattern) 확인. dex·엔진 문자열에서 소스 모듈, `E$EV_DOCTYPE`, 열기 방식, 그리기 콜백, PDF·슬라이드 쇼 경로 확인. JADX는 여전히 미설정.
+- 결과: 엔진 하나가 모든 형식을 비트맵으로 그림(`UxSurfaceView`, `OnDrawBitmap` 계열). 형식별 화면 6개. 슬라이드 쇼 OpenGL. PDF는 xpdf 3.02pl2 해석 + 자체 렌더러(Splash 없음) + 재배치 + 원본 주석. EPUB은 enum만 있고 열기 목록에는 없음. HWPX MIME 미등록. 점이 많은 파일 이름용 pathPattern 반복.
+- 변경 파일: `doc/POLARIS_OFFICE_FORMATS.md`(새 문서), `doc/POLARIS_OFFICE_ANALYSIS.md`(링크), `doc/NEXT_TASKS.md`, `doc/HANDOFF.md`, 이 기록.
+- 검증: 문서만 변경. Mins Reader Android MIME 목록을 `android/app/src/main/AndroidManifest.xml`과 대조(`application/hangul`만 없음). 코드·빌드 변경 없음.
+- 미검증: Java 디컴파일, 엔진 함수 분석, 실기기 화면.
+
+## 폴라리스 분석 모바일 반영 M1~M4 (2026-11-02)
+
+- 사용자 요청: 폴라리스 분석을 모바일에 반영할 개발 계획을 세워 개발 계획 문서에 갱신하고 차례대로 진행.
+- 계획: `doc/DEVELOPMENT_PLAN.md` 5.1 "모바일 반영 계획" M1~M9(작고 위험 낮은 것부터). 상용 글꼴 동봉·네이티브 엔진 전환·XLSX/PPTX는 하지 않기로 기록.
+- 변경 파일:
+  - M1: `src/core/hwpFonts.js`(새, 글꼴 분류·CSS), `src/core/hwpBinary.js`(인라인 대응 → `fontCss`, 헤드라인·견고딕 계열 굵게), `test/core/hwpFonts.test.js`(새), `test/core/hwpBinary.test.js`(글꼴 목록 기대값).
+  - M2: `package.json`·`package-lock.json`(`@fontsource/nanum-gothic`·`nanum-myeongjo` 5.3.0 고정, PC 패키지 파일 목록), `web/document-reader.js`(`bundledFontCss`), `scripts/build-mobile.js`(글꼴 복사), `src/platform/android.js`(`MINS_DOC_FONT_URL`), `scripts/smoke-reader.cjs`(글꼴 로드 확인 추가).
+  - M3: `android/app/src/main/AndroidManifest.xml`(열기·공유 두 곳에 `application/hangul`), `doc/ANDROID.md`.
+  - M4: `src/core/documentSniff.js`(새, ZIP 중앙 목록·OLE·HWPML·PDF 판별), `web/document-convert.js`(내용 우선, 이름은 대체), `web/app.js`(정보 표시 형식은 변환 결과 형식), `test/core/documentSniff.test.js`(새).
+  - 문서: DEVELOPMENT_PLAN, ANDROID, NEXT_TASKS, HANDOFF, 이 기록.
+- 결정 이유: `@fontsource`의 한국어 단일 부분 글꼴이 한글 11,172자를 모두 담고 굵기당 0.34~0.58MB라 분할 파일(굵기당 1.5~2MB) 대신 사용(fontTools로 WOFF 판 cmap 확인). 보통·굵게만 넣고 800 굵기는 브라우저가 700으로 대신. 기본 본문 글꼴(DOCX 등)은 바꾸지 않음. HWPX는 `META-INF/container.xml`도 있어 EPUB보다 먼저 판별.
+- 검증(이번 실행):
+  - `npm.cmd test` 150개 통과. `node --check web/app.js` 통과.
+  - `npm.cmd run build:mobile`·`npm.cmd run android:sync` 통과(`android/app/src/main/assets/public/vendor/fonts/`에 4개 파일).
+  - Electron Chromium에서 `buildDocumentHtml` 결과를 `sandbox="allow-same-origin"` srcdoc iframe에 넣고 `document.fonts.load`로 네 글꼴 모두 로드 확인(`dist/mobile/vendor/fonts` 경로, 임시 스크립트, 저장소 밖).
+  - `ANDROID_HOME` 지정 후 `gradlew assembleDebug` 성공(디버그, 버전 변경 없음, 빌드 결과물 삭제).
+  - `npm.cmd run test:reader`·`npm.cmd run test:documents`: 실패. 변경을 잠시 stash한 기준 코드에서도 같은 단계(EPUB 위치 저장 대기, DOCX 스크롤 1466 복원 대기)에서 실패해 이번 변경과 무관한 이 PC의 기존 문제로 판단. 그래서 새로 넣은 스모크 글꼴 검사 단계까지는 도달하지 못함.
+- 미검증: Android 실기기·에뮬레이터 표시. API 30 에뮬레이터(WebView 83)는 켜졌으나 `adb install`/`push`가 `connection reset`으로 계속 실패해 중단. 구형 WebView가 Capacitor 로컬 서버의 `.woff2`(MIME 추측 실패 가능)를 받는지 확인 필요. 실제 사용자 HWP의 글꼴 분류(이 PC에 `test/sample/` 없음).
+- 재현: `npm.cmd test`; `npm.cmd run build:mobile` 후 `dist/mobile/vendor/fonts` 확인; `npm.cmd run android:apk`로 APK를 만들어 HWP를 열고 글꼴 확인.
+
+## adb 없이 에뮬레이터 설치 스크립트 + 에뮬레이터 확인 (2026-11-02)
+
+- 사용자 요청: adb 차단 때문에 `scripts/install_app_adb` 참고, 필요하면 수정해서 에뮬레이터 설치.
+- 발견: 사용자가 넣은 `scripts/install_app_adb.py`는 YTHelper의 호환용 진입점으로 `scripts/scripts/install_app.py`(없음)를 불렀다. `D:/dev/YTHelper/scripts/install_app.py`(adb-shell 0.4.4 직접 TCP·WinUSB)를 이 앱에 맞게 옮겨 전체 구현으로 교체: 패키지 `com.mins.epubviewer`, APK 선택(`--apk`/`MINS_APK`/디버그 출력·`build/MinsReader_ver*.apk` 중 최신), `MINS_*` 환경 변수, `--no-launch`, 서명 불일치 안내(앱 자동 삭제 없음).
+- 에뮬레이터 결과:
+  - API 30 Pixel_5(WebView 83.0.4103.106): 스크립트로 설치·실행 성공. 앱은 `Uncaught SyntaxError: Unexpected token '='`(mobile.js의 `||=`, 이번 변경 전부터 있던 코드)로 시작하지 못함 → `scripts/build-mobile.js`의 esbuild 대상을 `es2022` → `chrome80`으로 바꿔 해결(`||=` 0개 확인). 이후에도 화면 배치가 깨지고 외부 열기 HWP가 열리지 않음 — 원인 미조사, 기록만.
+  - API 36 Pixel_7(WebView 133.0.6943.137): 부팅 대기 후 설치·실행 성공. `createSampleHwp({ styled: true })`를 `/sdcard/Download`에 넣고 `am start VIEW content://media/...`로 열어 화면 캡처: "5.0 검사 문서"(원래 "바탕")가 나눔명조로 표시, logcat에 `Handling local request: .../nanum-myeongjo-korean-400-normal.woff2`.
+- 변경 파일: `scripts/install_app_adb.py`, `scripts/build-mobile.js`, `doc/ANDROID.md`, `doc/DEVELOPMENT_PLAN.md`, `doc/NEXT_TASKS.md`, `doc/HANDOFF.md`, 이 기록.
+- 검증: `npm.cmd test` 150개 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공(버전 번호 그대로). 에뮬레이터 결과는 위와 같음.
+- 미검증: 실제 휴대폰(USB `--usb` 경로 포함), WebView 83 화면 배치 문제의 원인.

@@ -3,6 +3,7 @@
 // tables and text boxes are kept with the fonts, sizes, colours, alignment, indents and cell
 // borders/backgrounds of DocInfo; page layout, images and drawings are not rendered.
 // inflateRaw(bytes) -> Promise<Uint8Array> is passed in so the browser and tests can each supply one.
+import { fontCss } from "./hwpFonts.js";
 
 const FREE_SECTOR = 0xffffffff;
 const END_OF_CHAIN = 0xfffffffe;
@@ -184,7 +185,6 @@ function controlId(record) {
 // Sizes are relative: 1rem is 10pt of the original (see readDocInfo).
 
 const NO_COLOR = 0xffffffff;
-const SERIF_FONT = /명조|바탕|궁서|batang|myeong|gungsuh|times|^(?!.*sans).*serif/i;
 const ALIGNMENTS = ["justify", "left", "right", "center", "justify", "justify"];
 const LINE_STYLES = [null, "solid", "dashed", "dotted", "dashed", "dotted", "dashed", "dotted",
   "double", "double", "double", "double", "solid", "double", "inset", "outset", "groove", "ridge"];
@@ -196,14 +196,6 @@ const dataView = (data) => new DataView(data.buffer, data.byteOffset, data.byteL
 // COLORREF is 0x00BBGGRR.
 function cssColor(value) {
   return `#${[value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
-}
-
-function fontFamily(names) {
-  const unique = [...new Set(names.map((name) => String(name || "").replace(/[^\p{L}\p{N} _.-]/gu, "").trim()).filter(Boolean))];
-  const generic = SERIF_FONT.test(unique[0] || "")
-    ? '"Noto Serif KR", "Noto Serif CJK KR", serif'
-    : '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
-  return [...unique.map((name) => `"${name}"`), generic].join(", ");
 }
 
 function readFaceName(data) {
@@ -220,12 +212,13 @@ function charShapeCss(data, faces) {
   const view = dataView(data);
   const props = view.getUint32(46, true);
   const sizePt = (view.getInt32(42, true) / 100) * ((data[28] || 100) / 100);
-  const css = [`font-family:${fontFamily([faces[0]?.[view.getUint16(0, true)], faces[1]?.[view.getUint16(2, true)]])}`];
+  const font = fontCss([faces[0]?.[view.getUint16(0, true)], faces[1]?.[view.getUint16(2, true)]]);
+  const css = [`font-family:${font.family}`];
   const script = props & (1 << 15) ? "super" : props & (1 << 16) ? "sub" : "";
   if (sizePt > 0) css.push(`font-size:${rem(script ? sizePt * 0.7 : sizePt)}`);
   if (script) css.push(`vertical-align:${script}`);
   if (props & 1) css.push("font-style:italic");
-  if (props & 2) css.push("font-weight:bold");
+  if (props & 2 || font.heavy) css.push("font-weight:bold");
   const lines = [];
   const underline = (props >>> 2) & 3;
   if (underline === 1) lines.push("underline");
