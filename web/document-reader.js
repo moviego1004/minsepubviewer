@@ -31,6 +31,8 @@ body.is-flow img { max-width: 100%; height: auto; }
 body.is-flow a { color: inherit; }
 body.is-flow .hwp-box { margin: 0.8em 0; padding: 0.4em 0.8em; border: 1px dashed color-mix(in srgb, currentColor 35%, transparent); }
 body.is-flow .hwp-note-ref { font-size: 0.7em; }
+body.is-flow .hwp-figure { margin: 0.6em 0; }
+body.is-flow img.hwp-pic { vertical-align: bottom; }
 body.is-flow .hwp-notes { margin-top: 2em; padding-top: 0.6em; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.85em; }
 body.is-flow .hwp-notes p { margin: 0.2em 0; }
 /* Hancom circled and boxed letters that Unicode lacks (src/core/hwpSymbols.js). The black box takes

@@ -6,7 +6,8 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const os = require("node:os");
 const assert = require("node:assert/strict");
-const deadlineTimer = setTimeout(() => { console.error("Reader smoke test timed out"); app.exit(1); }, 90000);
+// The whole run takes about 100 seconds; each step still has its own 10-second limit.
+const deadlineTimer = setTimeout(() => { console.error("Reader smoke test timed out"); app.exit(1); }, 180000);
 
 const root = path.resolve(__dirname, "..");
 const { createSamplePdf } = require("./sample-pdf.cjs");

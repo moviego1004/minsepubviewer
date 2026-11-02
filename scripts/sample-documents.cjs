@@ -15,10 +15,35 @@ async function createSampleDocx() {
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
+// A tiny solid PNG (width x height, RGB) for picture tests.
+function createSamplePng(width, height, [red, green, blue]) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (bytes) => {
+    let c = 0xffffffff;
+    for (const byte of bytes) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+    const check = Buffer.alloc(4); check.writeUInt32BE(crc(body));
+    return Buffer.concat([length, body, check]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2;
+  const rows = Buffer.concat(Array.from({ length: height }, () => Buffer.from([0, ...Array.from({ length: width }, () => [red, green, blue]).flat()])));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header), chunk("IDAT", zlib.deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
+
 async function createSampleHwpx() {
   const zip = new JSZip();
   zip.file("mimetype", "application/hwp+zip");
-  zip.file("Contents/content.hpf", '<?xml version="1.0" encoding="UTF-8"?><opf:package xmlns:opf="http://www.idpf.org/2007/opf/"/>');
+  zip.file("Contents/content.hpf", '<?xml version="1.0" encoding="UTF-8"?><opf:package xmlns:opf="http://www.idpf.org/2007/opf/"><opf:manifest><opf:item id="image1" href="BinData/image1.png" media-type="image/png" isEmbeded="1"/></opf:manifest></opf:package>');
+  zip.file("BinData/image1.png", createSamplePng(4, 4, [200, 30, 30]));
   // Header styles: character shape 1 is bold red, paragraph shape 1 is centred, border fill 2 is a grey cell.
   zip.file("Contents/header.xml", '<?xml version="1.0" encoding="UTF-8"?><hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core"><hh:refList>'
     + '<hh:fontfaces><hh:fontface lang="HANGUL"><hh:font id="0" face="함초롬바탕"/></hh:fontface><hh:fontface lang="LATIN"><hh:font id="0" face="함초롬바탕"/></hh:fontface></hh:fontfaces>'
@@ -27,7 +52,7 @@ async function createSampleHwpx() {
     + '<hh:paraProperties><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr><hh:paraPr id="1"><hh:align horizontal="CENTER"/></hh:paraPr></hh:paraProperties>'
     + '</hh:refList></hh:head>');
   const body = paragraphs(40, "HWPX").map((text) => `<hp:p><hp:run><hp:t>${text}</hp:t></hp:run></hp:p>`).join("");
-  zip.file("Contents/section0.xml", `<?xml version="1.0" encoding="UTF-8"?><hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"><hp:p paraPrIDRef="1"><hp:run charPrIDRef="1"><hp:t>HWPX 검사 문서</hp:t></hp:run></hp:p>${body}<hp:p><hp:run><hp:tbl><hp:tr><hp:tc borderFillIDRef="2"><hp:subList><hp:p><hp:run><hp:t>HWPX 표</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></hp:run></hp:p></hs:sec>`);
+  zip.file("Contents/section0.xml", `<?xml version="1.0" encoding="UTF-8"?><hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"><hp:p paraPrIDRef="1"><hp:run charPrIDRef="1"><hp:t>HWPX 검사 문서</hp:t></hp:run></hp:p>${body}<hp:p><hp:run><hp:pic><hc:img xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" binaryItemIDRef="image1"/><hp:sz width="7200" height="7200"/><hp:pos treatAsChar="0"/></hp:pic></hp:run></hp:p><hp:p><hp:run><hp:tbl><hp:tr><hp:tc borderFillIDRef="2"><hp:subList><hp:p><hp:run><hp:t>HWPX 표</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></hp:run></hp:p></hs:sec>`);
   return zip.generateAsync({ type: "nodebuffer" });
 }
 

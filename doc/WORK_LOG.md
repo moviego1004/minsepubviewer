@@ -279,3 +279,14 @@
 - 기존 실패: `npm.cmd run test:documents`는 DOCX 위치 복원(스크롤 732) 단계에서 시간 초과 — M7 변경을 빼고도 3/3 실패(M8 때 한 번 통과는 우연으로 보임). `npm.cmd run test:reader`는 Markdown 최근 파일 단계 시간 초과(기존).
 - 미검증: 실기기, 한컴 화면과의 직접 비교, 기호 글꼴 칸이 Symbol인 실제 문서(이번 문서들엔 없음), WebView 83.
 - 사용자 질문 답: XLSX·PPTX·XLS·PPT는 현재 열 수 없음(Android 열기 목록에도 없음). 제안은 NEXT_TASKS M7 항목.
+
+## 실패하던 화면 시험 2개 수정, HWPX 그림 표시 (2026-11-02)
+
+- 사용자 요청: 실패하는 시험과 "xml 형식 hwp"(`test/트러스트기획_화주 중심 무역 증빙 관리 서비스.hwpx`, 사용자 개인 문서, `.gitignore` 대상이라 커밋 안 함) 표시, 끝나면 커밋·푸시. M7(`08bd5b1`)은 요청대로 먼저 푸시함. 엑셀·PPT는 사용자 보류.
+- 받은 파일: ZIP 안에 XML이 든 보통 HWPX. M8 서식으로 이미 잘 보였고(제목 선, 표 머리 배경, 오른쪽 정렬), 빠진 것은 `hp:pic` 그림 1개(`BinData/image1.png`, 3000×2253, 725KB)뿐.
+- HWPX 그림: `hc:img binaryItemIDRef` → `Contents/content.hpf` 항목(없으면 `BinData/<id>.*`) → data URL. 본문이 참조하는 그림만 읽음. PNG·JPEG·GIF·BMP·WebP만(WMF/EMF 제외). `treatAsChar="1"`이면 줄 안, 아니면 문단 사이 `.hwp-figure`. 너비는 `hp:sz`(1/100pt)를 rem으로, 화면 폭 넘지 않게.
+- `test:documents` 원인: DOCX 형광펜 위치(스크롤 732)를 저장한 뒤 "문단 7"을 검색하면 화면이 맨 앞으로 가고, 앱이 그 위치를 제때 기록하면 다시 열 때 맨 앞이 맞는 동작인데 시험은 732를 기대함. 숨긴 창에서 requestAnimationFrame·400ms 저장 대기 타이밍에 따라 통과/실패가 갈림(M8 때 통과는 기록을 놓친 경우). 앱은 `beforeunload`에서 대기 중 위치를 저장하므로 앱 버그 아님. 시험을 "검색 뒤 형광펜 문단으로 돌아가 → 그 위치가 저장된 것 확인 → 다시 열기"로 수정, 시간 초과 메시지에 스크롤 값 추가. HWPX 시험 파일에 4×4 PNG를 넣고 그림 표시 확인 추가.
+- `test:reader` 원인: 단계별 대기가 아니라 시험 전체 제한 90초. 단계마다 경과 시간을 찍어 보니 멈춘 곳 없이 360줄 근처에서 90초를 다 씀(전체 약 100~107초). 180초로 늘림. 그 과정에서 6번 중 1번 epub.js 콘솔 오류(`reading 'bounds'`, 공유 Markdown → EPUB 다시 열기 직후)가 나서 마지막 "콘솔 오류 없음" 검사에 걸림. 압축 안 된 epub.js·오류 스택 출력으로 5번 더 돌렸으나 재현 안 됨 → 원인 미확정, 앱 코드는 바꾸지 않음.
+- 변경: `src/core/hwpXml.js`, `web/document-convert.js`, `web/document-reader.js`, `test/core/hwpXml.test.js`(그림 시험 1개), `scripts/sample-documents.cjs`(4×4 PNG 생성), `scripts/smoke-documents.cjs`, `scripts/smoke-reader.cjs`.
+- 검증(이번 실행): `npm.cmd test` 163개 통과, `node --check`(app.js, document-convert.js) 통과, `npm.cmd run test:documents` 4번 연속 통과(수정 후), `npm.cmd run test:reader` 2번 통과(+임시 사본 5번 통과), `npm.cmd run test:pdf` 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. Electron에서 받은 HWPX의 서비스 구성도 그림 표시 확인, API 36 에뮬레이터에서 같은 그림을 넣은 시험 HWPX로 표시 확인(시험 파일·에뮬레이터 사본은 삭제).
+- 미검증: 실기기, 큰 그림 여러 장 문서의 메모리·속도, 떠 있는 그림의 원래 위치(왼쪽/가운데/글 뒤 등은 재현 안 함), HWP 5.0 이진 문서의 그림(아직 미지원).

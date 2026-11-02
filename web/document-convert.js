@@ -10,6 +10,7 @@ import {
   convertOwpmlSection,
   decodeXmlBytes,
   isXmlDocumentBytes,
+  owpmlImagePaths,
   readOwpmlHeader,
   sortOwpmlSectionPaths
 } from "../src/core/hwpXml.js";
@@ -134,12 +135,28 @@ async function convertHwpx(bytes) {
       styles = null;
     }
   }
+  const xmls = [];
+  for (const path of sections) xmls.push(decodeXmlBytes(await zip.file(path).async("uint8array")));
+  const images = await readHwpxImages(zip, xmls);
   const parts = styles ? [`<style>${styles.css}</style>`] : [];
-  for (const path of sections) {
-    const xml = decodeXmlBytes(await zip.file(path).async("uint8array"));
-    parts.push(convertOwpmlSection(parseXml(xml, "document.invalidHwpx"), styles));
-  }
+  for (const xml of xmls) parts.push(convertOwpmlSection(parseXml(xml, "document.invalidHwpx"), styles, images));
   return { html: parts.join(""), layout: false };
+}
+
+// Pictures the sections use, as data URLs. A missing or unreadable manifest only loses pictures.
+async function readHwpxImages(zip, xmls) {
+  let manifest = null;
+  try {
+    const file = zip.file("Contents/content.hpf");
+    if (file) manifest = parseXml(decodeXmlBytes(await file.async("uint8array")), "document.invalidHwpx");
+  } catch {
+    manifest = null;
+  }
+  const images = new Map();
+  for (const [id, { path, type }] of owpmlImagePaths(xmls, manifest, Object.keys(zip.files))) {
+    images.set(id, `data:${type};base64,${await zip.file(path).async("base64")}`);
+  }
+  return images;
 }
 
 async function convertHwp(bytes, fileLike, platform) {

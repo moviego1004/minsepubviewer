@@ -6,6 +6,7 @@ import {
   convertOwpmlSection,
   decodeXmlBytes,
   isXmlDocumentBytes,
+  owpmlImagePaths,
   readOwpmlHeader,
   sortOwpmlSectionPaths
 } from "../../src/core/hwpXml.js";
@@ -97,6 +98,26 @@ test("HWPX sections use the header classes for runs, paragraphs, cells and text 
     + '<td class="hb2" style="padding:0.141rem 0.51rem 0.141rem 0.51rem;vertical-align:middle;width:75%"><p class="hp0" style="font-size:1rem"><span class="hc0">A1</span></p></td>'
     + '<td class="hb1" style="padding:0rem 0rem 0rem 0rem;vertical-align:top;width:25%"><p class="hp0" style="font-size:1rem"><span class="hc0">B1</span></p></td>'
     + '</tr></tbody></table><div class="hwp-box"><p class="hp0" style="font-size:1rem"><span class="hc0">글상자</span></p></div></section>');
+});
+
+test("HWPX pictures are found through the manifest and placed inline or between paragraphs", () => {
+  const section = `<?xml version="1.0"?>
+    <hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core">
+      <hp:p><hp:run><hp:t>앞 </hp:t><hp:pic><hc:img binaryItemIDRef="image1"/><hp:sz width="46000" height="34546"/><hp:pos treatAsChar="1"/></hp:pic><hp:t> 뒤</hp:t></hp:run></hp:p>
+      <hp:p><hp:run><hp:t>문단</hp:t><hp:pic><hc:img binaryItemIDRef="image2"/><hp:orgSz width="10000"/><hp:pos treatAsChar="0"/></hp:pic></hp:run></hp:p>
+      <hp:p><hp:run><hp:pic><hc:img binaryItemIDRef="image3"/></hp:pic></hp:run></hp:p>
+    </hs:sec>`;
+  const manifest = parse(`<?xml version="1.0"?><opf:package xmlns:opf="http://www.idpf.org/2007/opf/"><opf:manifest>
+    <opf:item id="image1" href="BinData/image1.png" media-type="image/png"/><opf:item id="image3" href="BinData/image3.wmf" media-type="image/x-wmf"/>
+  </opf:manifest></opf:package>`);
+  const found = owpmlImagePaths([section], manifest, ["BinData/image1.png", "BinData/image2.JPG", "BinData/image3.wmf"]);
+  assert.deepEqual([...found], [["image1", { path: "BinData/image1.png", type: "image/png" }], ["image2", { path: "BinData/image2.JPG", type: "image/jpeg" }]]);
+  const images = new Map([["image1", "data:image/png;base64,AAA="], ["image2", "data:image/jpeg;base64,BBB="]]);
+  assert.equal(convertOwpmlSection(parse(section), null, images), "<section>"
+    + '<p>앞 <img class="hwp-pic" src="data:image/png;base64,AAA=" alt="" style="width:46rem"> 뒤</p>'
+    + '<p>문단</p><div class="hwp-figure"><img class="hwp-pic" src="data:image/jpeg;base64,BBB=" alt="" style="width:10rem"></div>'
+    // A paragraph left with only a picture the browser cannot draw keeps its line.
+    + "<p><br></p></section>");
 });
 
 test("HWPX section files are read in numeric order", () => {

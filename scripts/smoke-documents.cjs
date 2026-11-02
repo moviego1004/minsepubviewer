@@ -43,7 +43,7 @@ app.whenReady().then(async () => {
     const deadline = Date.now() + timeout;
     while (!await run(expression)) {
       if (Date.now() > deadline) {
-        const status = await run("document.querySelector('#bookMeta')?.textContent").catch(() => "");
+        const status = await run("document.querySelector('#bookMeta')?.textContent + ' | scroll ' + document.querySelector('#docFrame')?.contentDocument?.scrollingElement?.scrollTop").catch(() => "");
         throw new Error(`Timeout: ${expression}\n  status: ${status}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -90,7 +90,6 @@ app.whenReady().then(async () => {
   await waitFor("document.querySelector('#annotationList').textContent.includes('DOCX 문단 30')");
   await run("document.querySelector('#bookmarkButton').click()");
   await waitFor("document.querySelector('#bookmarkList')?.textContent.includes('% 위치')");
-  const savedScroll = await run(frame("doc.scrollingElement.scrollTop"));
   console.log("DOCX highlight and bookmark stored");
 
   await run("document.querySelector('#searchTab').click(); document.querySelector('#searchInput').value = '문단 7'; document.querySelector('#searchForm').requestSubmit()");
@@ -101,7 +100,17 @@ app.whenReady().then(async () => {
   assert.ok(await run(frame("doc.querySelectorAll('mark.is-search').length === 0 && doc.querySelectorAll('mark.is-yellow').length === 1")), "highlights stay after clearing search");
   console.log("DOCX search works");
 
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  // Jumping to a search result moves the reading position too, so go back to the highlight and wait
+  // until that position is the stored one before reopening.
+  await run(frame("[...doc.querySelectorAll('p')].find((item) => item.textContent.includes('DOCX 문단 30 ')).scrollIntoView()"));
+  const savedScroll = await run(frame("doc.scrollingElement.scrollTop"));
+  assert.ok(savedScroll > 100, `the highlight is down the document: ${savedScroll}`);
+  await waitFor(`(() => {
+    const book = JSON.parse(localStorage.getItem('minsepubviewer.library') || '{}').books?.find((item) => item.title === 'sample');
+    const ratio = Number(/scroll=([0-9.]+)/.exec(book?.lastLocation || '')?.[1]);
+    const scroller = document.querySelector('#docFrame').contentDocument.scrollingElement;
+    return Math.abs(ratio * (scroller.scrollHeight - scroller.clientHeight) - ${savedScroll}) < 40;
+  })()`);
   await load();
   await open("sample.docx");
   await opened("DOCX 검사 문서");
@@ -114,7 +123,8 @@ app.whenReady().then(async () => {
   assert.ok(await run(frame("doc.querySelectorAll('table.hwp-table td').length === 1")));
   const hwpxStyles = await run(frame("(() => { const title = getComputedStyle(doc.querySelector('.hwp-styled .hc1')); const cell = getComputedStyle(doc.querySelector('td.hb2')); return { color: title.color, weight: title.fontWeight, align: getComputedStyle(doc.querySelector('p.hp1')).textAlign, cell: cell.backgroundColor, border: cell.borderTopStyle }; })()"));
   assert.deepEqual(hwpxStyles, { color: "rgb(255, 0, 0)", weight: "700", align: "center", cell: "rgb(217, 217, 217)", border: "solid" });
-  console.log("HWPX opened with its header styles");
+  assert.ok(await run(frame("(() => { const image = doc.querySelector('.hwp-figure img.hwp-pic'); return image?.complete && image.naturalWidth === 4 && image.getBoundingClientRect().width > 50; })()")), "HWPX picture is shown");
+  console.log("HWPX opened with its header styles and picture");
 
   await open("sample.hwp");
   await opened("HWPML 검사 문서");

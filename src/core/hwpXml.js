@@ -1,7 +1,8 @@
 // Text-and-table conversion for the XML forms of Hangul documents:
 // HWPML (a single XML file, often saved with a .hwp extension) and HWPX/OWPML
-// (a zip of section XML files). Page layout, images and drawing objects are not rendered.
-// HWPX also gets the fonts, character, paragraph and cell styles of Contents/header.xml.
+// (a zip of section XML files). Page layout and drawing objects are not rendered.
+// HWPX also gets the fonts, character, paragraph and cell styles of Contents/header.xml and its
+// pictures (BinData).
 // Functions take a parsed XML Document so the browser's DOMParser and test parsers both work.
 import { fontCss } from "./hwpFonts.js";
 import { symbolFontTable, symbolHtml } from "./hwpSymbols.js";
@@ -278,6 +279,8 @@ function owpmlRunContent(run, styles, open) {
       html += wrap(text);
     } else if (name === "tbl") {
       html += `</p>${owpmlTable(part, styles)}${open}`;
+    } else if (name === "pic") {
+      html += owpmlPicture(part, open);
     } else {
       // Drawing objects (rect, ellipse, ...) keep a text box's text in <hp:drawText>.
       const content = children(child(part, "drawText"), "subList").map((list) => owpmlBlocks(list, styles)).join("");
@@ -337,10 +340,47 @@ function owpmlCellAttributes(cell, width, tableWidth, inMargin, styles) {
   return `${className} style="${css.join(";")}"`;
 }
 
-export function convertOwpmlSection(document, styles = null) {
+// Pictures of the section being converted: BinData item id -> data URL (see convertOwpmlSection).
+let sectionImages = null;
+
+// <hc:img binaryItemIDRef> names a BinData item. A picture placed like a character stays in its
+// line; other pictures sit between paragraphs. Its size (1/100 pt) is kept up to the screen width.
+function owpmlPicture(pic, open) {
+  const src = sectionImages?.get(attribute(descendants(pic, "img")[0], "binaryItemIDRef"));
+  if (!src) return "";
+  const width = number(child(pic, "sz"), "width") || number(child(pic, "orgSz"), "width");
+  const image = `<img class="hwp-pic" src="${src}" alt=""${width > 0 ? ` style="width:${rem(width / 100)}"` : ""}>`;
+  return attribute(child(pic, "pos"), "treatAsChar") === "1" ? image : `</p><div class="hwp-figure">${image}</div>${open}`;
+}
+
+// images: Map of BinData item id -> data URL (owpmlImagePaths finds the files), or null.
+export function convertOwpmlSection(document, styles = null, images = null) {
   const root = document.documentElement;
   if (!root || localName(root) !== "sec") throw new Error("document.invalidHwpx");
-  return `<section${styles ? ' class="hwp-styled"' : ""}>${owpmlBlocks(root, styles)}</section>`;
+  sectionImages = images;
+  try {
+    return `<section${styles ? ' class="hwp-styled"' : ""}>${owpmlBlocks(root, styles)}</section>`;
+  } finally {
+    sectionImages = null;
+  }
+}
+
+const IMAGE_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", bmp: "image/bmp", webp: "image/webp" };
+
+// BinData items the section XML refers to, with the zip path and image type of each. Items are
+// listed in Contents/content.hpf (manifest: a parsed document or null); without it the file is
+// found by its name in BinData/. Formats a browser cannot draw (WMF, EMF, ...) are left out.
+export function owpmlImagePaths(sectionXml, manifest, paths) {
+  const ids = new Set([...sectionXml.join("").matchAll(/binaryItemIDRef="([^"]+)"/g)].map((match) => match[1]));
+  const hrefs = new Map((manifest ? descendants(manifest.documentElement, "item") : [])
+    .map((item) => [attribute(item, "id"), attribute(item, "href")]));
+  const found = new Map();
+  for (const id of ids) {
+    const path = hrefs.get(id) || paths.find((name) => name.startsWith(`BinData/${id}.`));
+    const type = IMAGE_TYPES[/\.([a-z0-9]+)$/i.exec(path || "")?.[1].toLowerCase()];
+    if (type && paths.includes(path)) found.set(id, { path, type });
+  }
+  return found;
 }
 
 // Section files are Contents/section0.xml, section1.xml, ... in reading order.
