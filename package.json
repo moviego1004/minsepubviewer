@@ -1,6 +1,6 @@
 {
   "name": "MinsEPUBviewer",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Mins Reader: shared EPUB, PDF and Markdown reader for Windows and Android.",
   "author": "Mins",
   "private": true,

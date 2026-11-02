@@ -296,3 +296,10 @@
 - 사용자 요청: "커밋 푸시해줘. 다른 pc에서도 작업 이어서 할 수 있도록 관련 문서들도 다 커밋해줘". 시작 시 작업 트리 깨끗, `master`와 `origin/master`가 `c8e4f34`로 일치.
 - 변경: `doc/HANDOFF.md`에 "최신 상태와 재개 절차 (2026-11-02)" 절 추가(이날 커밋 목록, `npm.cmd ci` 필요 이유, 확인 명령과 이날 결과, 에뮬레이터 설치 방법, Git 제외 개인 시험 문서, 0.1.12 빌드 필요, 알려진 epub.js `bounds` 오류가 2026-09-28부터 있던 문제라는 점). 기존 "이번 검증 (2026-10-17)" 제목은 "이전 검증"으로 바꿈. `doc/NEXT_TASKS.md`에 재개 절차 위치와 `bounds` 오류 이력 표시.
 - 검증: 문서만 변경. 적은 명령·경로(`scripts/install_app_adb.py`, `.gitignore`의 `test/*.hwpx`·`test/*.apk`, `npm.cmd run test:*`)가 실제와 맞는지 확인. 시험·빌드는 다시 돌리지 않음(직전 결과는 위 항목).
+
+## 0.1.12 빌드 기록 (2026-11-03)
+
+- 사용자 요청: "작업 계획 중 1, 3 진행하고 커밋, 푸시 해줘"(1 = 0.1.12 기록·커밋).
+- 확인: 작업 시작 시 미커밋 변경은 버전 올림(`package.json`·`package-lock.json` 0.1.12, `android/app/build.gradle` versionCode 13, `installer.nsi`)과 줄바꿈만 다른 파일(`android/app/capacitor.build.gradle`, `android/capacitor.settings.gradle`, `web/vendor/toastui-editor-*`, `android:sync` 부산물)뿐. `build/MinsReader_ver0.1.12.apk`(10,180,255 B)·`.exe`가 2026-11-02 16:04에 있음 → 마지막 커밋 `3443b1a`(15:59) 뒤 빌드라 M7·M8·HWPX 그림 포함.
+- 변경: 버전 파일 4개 커밋, `doc/HANDOFF.md`(현재 버전 0.1.12), `doc/NEXT_TASKS.md`(이번 요청과 계획). 줄바꿈만 다른 파일은 커밋하지 않음.
+- 검증: 빌드는 다시 돌리지 않음(기존 산출물의 파일 시각·크기만 확인). 실기기 설치·표시는 미검증.

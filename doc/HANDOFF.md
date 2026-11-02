@@ -30,7 +30,7 @@
 - 휴대폰 두 손가락 확대: EPUB·MD·변환 문서는 움직이는 동안 화면을 바로 확대(transform)하고 손을 떼면 글자 크기/배율로 다시 배치, PDF는 `PdfReader.pinchZoom`(PDF.js `updateScale`)으로 실시간 확대. 공통 제스처는 `src/platform/touch-reader.js`의 `pinch: { begin, move, end }`.
 - Android 문서 읽기 경로: EPUB(압축 해제 폴더 URL)·PDF(앱 사본 URL)는 `convertFileSrc`, DOCX·HWP·HWPX·Markdown은 플러그인 `readDocument`(base64). Capacitor 로컬 서버가 `.hwp` 등 모르는 확장자를 제공하지 못해 "Failed to fetch"가 났기 때문(2026-10-18).
 - Android에는 네이티브 문서 가져오기/저장, 다른 앱의 열기/공유 수신, 앱 내부 사본과 상태 저장, 모바일 메뉴/전체 화면/터치 조작이 구현되어 있다.
-- 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 모든 빌드 명령이 `scripts/release.cjs`를 거친다: `build.bat`·`npm.cmd run build`·`release`(둘 다), `makeSetup.bat`·`release:pc`, `android:apk`·`release:android`. 다음 번호는 PC 버전·Android 버전·`build/`의 기존 `MinsReader_ver*` 파일 중 가장 높은 것 +1(기존 파일 덮어쓰기 방지). 실패하면 버전을 되돌린다. Electron 폴더 빌드만 필요하면 내부용 `build:pc-dir`. 현재 0.1.11(versionCode 12): 2026-11-02 13:09 사용자가 직접 빌드한 `build/MinsReader_ver0.1.11.apk`·`.exe`. 빌드 시각상 M6 PDF 재배치(`be3c242`)까지 들어 있고, M8 HWPX 서식(`f2f83e4`, 13:47 커밋)은 작업 도중이라 포함 여부가 불확실하므로 HWPX 서식을 확인하려면 다음 빌드를 쓴다.
+- 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 모든 빌드 명령이 `scripts/release.cjs`를 거친다: `build.bat`·`npm.cmd run build`·`release`(둘 다), `makeSetup.bat`·`release:pc`, `android:apk`·`release:android`. 다음 번호는 PC 버전·Android 버전·`build/`의 기존 `MinsReader_ver*` 파일 중 가장 높은 것 +1(기존 파일 덮어쓰기 방지). 실패하면 버전을 되돌린다. Electron 폴더 빌드만 필요하면 내부용 `build:pc-dir`. 현재 0.1.12(versionCode 13): 2026-11-02 16:04에 빌드된 `build/MinsReader_ver0.1.12.apk`(10.2MB)·`.exe`. 빌드 시각이 `3443b1a`(15:59) 뒤라 M7 기호, M8 HWPX 서식, HWPX 그림까지 모두 들어 있다. 버전 올림은 2026-11-03에 커밋. 이전 0.1.11(versionCode 12, 13:09)은 M6까지.
 - 화면 영역에 맞춘 반응형 배치와 ResizeObserver 기반 EPUB 재배치가 있다. Android 최소 API 24(7.0), target/compile API 36이다.
 - 기기 모델 자동 분류나 전자잉크 전용 갱신/잔상 제어는 없다. Android 버전만으로 호환성을 보장할 수 없으며 WebView와 실제 기기 검증이 필요하다.
 
@@ -82,7 +82,7 @@ npm.cmd run android:install
   - Android 빌드: `android` 폴더에서 `gradlew.bat assembleDebug`(SDK 경로는 `ANDROID_HOME` 또는 `android/local.properties`, 커밋 안 함).
 - 에뮬레이터 확인(adb.exe가 막힌 PC): AVD를 `emulator -avd <이름> -no-window -no-audio -no-snapshot-save -no-boot-anim`으로 띄우고 `python scripts/install_app_adb.py --tcp [--no-launch]`(첫 부팅은 `MINS_BOOT_TIMEOUT=400`). 이날은 API 36 `Pixel_7`에서 HWP·HWPX 서식, 기호, 그림, DOCX, PDF 재배치를 확인. 실기기는 아직 확인 전.
 - 개인 시험 문서는 저장소에 없다: `test/*.hwp`, `test/*.hwpx`, `test/*.docx`, `test/*.pdf`, `test/sample/`, `test/*.apk`는 `.gitignore` 대상(예: `test/트러스트기획_화주 중심 무역 증빙 관리 서비스.hwpx`, `test/PolarisOffice.apk`). 다른 PC에서는 각자 가진 파일로 확인한다. 자동 시험은 `scripts/sample-*.cjs`가 만드는 시험 파일만 쓴다.
-- 배포 파일: 현재 버전 0.1.11. 휴대폰에서 M7·M8·HWPX 그림을 보려면 `npm.cmd run android:apk`로 0.1.12를 새로 만든다(버전이 자동으로 올라감).
+- 배포 파일: 현재 버전 0.1.12(2026-11-02 16:04 빌드, M7·M8·HWPX 그림 포함). 실기기 확인은 이 APK로 한다. 다음 빌드는 `npm.cmd run android:apk`로 0.1.13이 된다(버전이 자동으로 올라감).
 - 알려진 문제: `test:reader` 중 가끔(2026-11-02 6번 중 1번) epub.js 콘솔 오류 `Cannot read properties of undefined (reading 'bounds')`가 공유 Markdown → EPUB 다시 열기 직후 나서 마지막 "콘솔 오류 없음" 검사가 실패할 수 있다. 2026-09-28에도 같은 오류가 기록됨(아래). 원인 미확정.
 - 남은 일과 순서는 [NEXT_TASKS.md](NEXT_TASKS.md) 첫 항목, 단계별 근거는 [WORK_LOG.md](WORK_LOG.md) 끝부분, 전체 로드맵(M1~M9 표)은 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5.1.
 
