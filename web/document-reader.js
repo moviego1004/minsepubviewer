@@ -36,6 +36,12 @@ body.is-flow .hwp-notes p { margin: 0.2em 0; }
    each page as a sheet. */
 body.is-flow section.docx { padding: 0 !important; min-height: 0 !important; overflow: visible; }
 body.is-layout section.docx { margin: 0 auto 6mm; background: #fff; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25); }
+/* PDF reflow (src/core/pdfReflow.js): a thin rule with the PDF page number between pages, drawn by
+   CSS so it stays out of the text used for search and highlights. */
+body.is-flow .pdf-reflow-page + .pdf-reflow-page::before { content: attr(data-page); display: block; margin: 1.4em 0 0.8em;
+  border-top: 1px dashed color-mix(in srgb, currentColor 30%, transparent); font-size: 0.7em; text-align: right; opacity: 0.6; }
+body.is-flow .pdf-reflow h2 { font-size: 1.4em; line-height: 1.35; }
+body.is-flow .pdf-reflow h3 { font-size: 1.15em; line-height: 1.4; }
 /* HWP pages (.hpa) paint their white sheet with a negative z-index, so the body stays transparent. */
 body.is-layout { padding: 12px 0 48px; background: transparent; }
 body.is-layout .hpa { margin: 0 auto 6mm !important; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25) !important; }

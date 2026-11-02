@@ -192,6 +192,9 @@ export default {
   "pdf.zoomCustom": "{percent}%",
   "pdf.rotate": "Rotate clockwise",
   "pdf.spread": "Two-page view",
+  "pdf.reflow": "Reflow",
+  "pdf.reflowTitle": "Re-flow the PDF text to the screen width (no images or tables)",
+  "pdf.reflowNoText": "This PDF has no text (it may be scanned), so it cannot be reflowed. Turn reflow off to see the original.",
   "pdf.opening": "Opening PDF...",
   "pdf.meta": "{name} - {size} MB · {pages} pages",
   "pdf.progress": "{page} / {total}",
@@ -273,6 +276,7 @@ export default {
 
   "mobile.menu": "Menu",
   "mobile.progressToggle": "Progress in full screen: {state}",
+  "mobile.pdfReflowToggle": "PDF reflow view: {state}",
   "mobile.newMarkdown": "New Markdown document",
   "mobile.tocBookmarks": "Contents & bookmarks",
   "mobile.readingSettings": "Reading settings",

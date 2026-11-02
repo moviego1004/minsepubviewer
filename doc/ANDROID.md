@@ -147,6 +147,7 @@ Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/rele
 - 앱 표시 이름을 **Mins Reader**로 바꿨습니다. `appId`/패키지 이름 `com.mins.epubviewer`는 기존 설치 업데이트를 위해 유지합니다.
 - PDF를 **파일 열기**, 다른 앱으로 열기/공유(`application/pdf`)로 받을 수 있습니다. PDF는 앱 내부 보관함(`reader-documents/*.pdf`, 512MB 이하)에 복사하고,
   웹 화면에는 바이트 대신 `convertFileSrc` URL을 넘겨 PDF.js가 직접 읽습니다.
+- PDF 재배치 보기(2026-11-02): ☰ 메뉴 "PDF 재배치 보기: 켜짐/꺼짐". 글자만 화면 폭으로 다시 흘립니다(그림·표 모양·다단 순서 제외, 스캔 PDF는 안내 문구).
 - PDF.js 6.3.289(`pdfjs-dist`, Apache-2.0)의 **legacy 빌드**를 `scripts/build-mobile.js`가 `dist/mobile/vendor/pdfjs/`로 복사합니다(약 5.3MB, CMap·표준 글꼴·wasm 포함).
 - PDF 기능은 PDF.js가 제공하는 범위만 씁니다: 페이지/연속 보기, 확대·맞춤, 회전, 두 쪽 보기, 텍스트 선택, 검색, 목차, 링크, 테마 색상.
   형광펜·메모·책갈피는 앱 내부 기록(PDF 좌표)이며 원본 PDF를 수정하지 않습니다. 스캔 PDF 영역 형광펜, OCR, 양식 저장은 지원하지 않습니다.

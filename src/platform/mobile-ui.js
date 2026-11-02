@@ -83,6 +83,11 @@ export function installMobileUI({ storage, platform, resize, openFile, tabs, act
       const enabled = document.body.classList.toggle('show-reading-progress');
       storage.setItem(progressKey, String(enabled)); dialog.close(); menu();
     }));
+    const reflow = document.getElementById('pdfReflowButton');
+    if (reflow && !reflow.hidden) {
+      const state = t(reflow.getAttribute('aria-pressed') === 'true' ? 'common.on' : 'common.off');
+      dialog.append(button({ text: t('mobile.pdfReflowToggle', { state }) }, () => { dialog.close(); reflow.click(); }));
+    }
     for (const [label, id] of [['mobile.newMarkdown', 'newMarkdownButton'], ['mobile.tocBookmarks', 'leftPanelToggle'], ['mobile.readingSettings', 'rightPanelToggle'], ['mobile.paginated', 'paginatedModeButton'], ['mobile.continuous', 'continuousModeButton']]) dialog.append(button(label, () => click(id)));
     if (document.body.classList.contains('markdown-mode')) {
       for (const [label, id] of [['mobile.editDocument', 'markdownEditButton'], ['mobile.readMode', 'markdownViewButton'], ['markdown.saveCopy', 'saveMarkdownButton'], ['markdown.exportFile', 'saveMarkdownAsButton']]) dialog.append(button(label, () => click(id)));

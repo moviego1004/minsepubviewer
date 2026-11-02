@@ -119,6 +119,16 @@ app.whenReady().then(async () => {
   assert.ok(await run("document.querySelector('#bookmarkButton').classList.contains('is-active')"), "page 2 bookmark is restored");
   console.log("Reading position, zoom, bookmark and highlight restored");
 
+  const reflowFrame = "document.querySelector('#docFrame').contentDocument";
+  await run("document.querySelector('#pdfReflowButton').click()");
+  await waitFor(`document.body.classList.contains('doc-mode') && ${reflowFrame}?.querySelectorAll('.pdf-reflow-page').length === 3`);
+  assert.ok(await run(`${reflowFrame}.querySelector('.pdf-reflow-page[data-page="2"]').textContent.includes('Highlight target text on page 2')`), "reflow keeps page text");
+  await waitFor("document.querySelector('#pdfReflowButton').getAttribute('aria-pressed') === 'true' && !document.querySelector('#pdfReflowButton').hidden && document.querySelector('#bookMeta').textContent.includes('PDF')");
+  await run("document.querySelector('#pdfReflowButton').click()");
+  await waitFor("document.body.classList.contains('pdf-mode') && /^\\d \\/ 3$/.test(document.querySelector('#pageLabel').textContent)");
+  assert.equal(await run("localStorage.getItem('minsepubviewer.pdf-reflow')"), "false");
+  console.log("Reflow view opens the PDF text and returns to the page view");
+
   await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");
   await waitFor("document.querySelector('#pdfSpreadButton').textContent === 'Two-page view' && document.querySelector('#bookmarkList').textContent.includes('Page 2')");
 

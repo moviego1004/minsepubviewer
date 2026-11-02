@@ -237,3 +237,16 @@
 - 검증(이번 실행): `npm.cmd test` 151개 통과, `node --check web/app.js` 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. Electron에서 python-docx로 만든 서식 DOCX(빨간 바탕체, 맑은 고딕 굵게, 가운데 정렬, 표 테두리, 글머리표)를 휴대폰/PC 모드로 그려 화면 확인. API 36 에뮬레이터에 `scripts/install_app_adb.py --tcp`로 설치, VIEW로 열어 같은 서식과 나눔명조 표시 확인(처음엔 글머리표가 안 보여 유니코드 대체 추가 후 재확인).
 - `npm.cmd run test:documents`: DOCX 열기·형광펜·책갈피·검색 통과, 위치 복원 대기(이번엔 스크롤 732)에서 시간 초과 — 변경 전과 같은 단계의 기존 문제. `npm.cmd run test:reader`: 기존과 같은 EPUB 단계에서 시간 초과.
 - 미검증: 실기기, 큰 실제 DOCX(그림·각주·섹션 여러 개)의 속도와 모양, WebView 83.
+
+## M6 PDF 재배치 보기 (2026-11-02)
+
+- 사용자 요청: "pdf 진행해줘" — 계획 M6 PDF 재배치 보기.
+- 변경:
+  - `src/core/pdfReflow.js`(새): `reflowPdfPages(pages)` — 기준선으로 줄, 줄 간격·들여쓰기·글자 크기·목록 기호·문장 끝으로 문단, 본문(가장 많은 글자 크기)의 1.2배 이상은 h3, 1.6배 이상은 h2. 영어 하이픈 이음, 한자·가나는 공백 없이 이음. 3줄 이상 쪽의 첫/끝 줄이 쪽의 절반 이상(최소 3쪽)에서 반복되면(숫자 무시) 머리글로 제거, 끝 줄의 쪽 번호 제거. `test/core/pdfReflow.test.js`(새, 6개).
+  - `web/pdf-reader.js`: 문서 열기 옵션 공통화(`loadDocument`), `readPdfText`.
+  - `web/app.js`: `openPdfReflow`, `togglePdfReflow`, `reflowPageNumber`, `reflowPdfLocation`; `state.pdfReflow`(탭 전환·닫기·전환 시 초기화), 설정 키 `minsepubviewer.pdf-reflow`.
+  - `web/index.html`(`#pdfReflowButton`), `src/platform/mobile-ui.js`(☰ 메뉴 항목), `src/locales/ko.js`·`en.js`(`pdf.reflow`, `pdf.reflowTitle`, `pdf.reflowNoText`, `mobile.pdfReflowToggle`), `web/document-reader.js`(쪽 구분선은 CSS `attr(data-page)`라 검색·형광펜 글자에 안 들어감).
+  - `scripts/smoke-pdf.cjs`: 재배치 켜기 → 3쪽 글자 확인 → 끄기 단계 추가.
+- 결정 이유: 재배치를 변환 문서 뷰어에 태워 검색·형광펜·확대·테마를 그대로 재사용. 책 기록은 PDF와 공유하고 위치는 쪽 단위 PDF 위치로 저장(배율·회전은 유지)해 보기를 바꿔도 같은 쪽.
+- 검증(이번 실행): `npm.cmd test` 157개 통과, `node --check web/app.js` 통과, `npm.cmd run test:pdf` 통과(재배치 단계 포함, 콘솔 오류 없음), `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. PyMuPDF로 만든 한국어 3쪽 PDF(제목, 절 제목, 들여쓴 문단, 목록, 반복 머리글, 쪽 번호)를 Node PDF.js로 재배치해 구조 확인, Electron에서 화면 확인. API 36 에뮬레이터: PDF 열기 → ☰ "PDF reflow view: Off" → 켜짐 시 화면 폭 재배치·쪽 구분선 표시, 끄면 원본 보기가 같은 쪽(2/3)으로 돌아옴.
+- 미검증: 실제 PDF(다단 논문, 표, 각주), 큰 PDF의 글자 추출 시간(모든 쪽을 한 번에 읽음), 실기기, WebView 83.

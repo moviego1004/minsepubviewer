@@ -39,6 +39,51 @@ export function loadPdfLibrary() {
   return libraryPromise;
 }
 
+function loadDocument(pdfjsLib, base, { data, url }, requestPassword, onCancel) {
+  const task = pdfjsLib.getDocument({
+    ...(url ? { url } : { data }),
+    cMapUrl: `${base}cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${base}standard_fonts/`,
+    wasmUrl: `${base}wasm/`,
+    iccUrl: `${base}iccs/`,
+    isEvalSupported: false,
+    enableXfa: false
+  });
+  task.onPassword = (update, reason) => {
+    const password = requestPassword(reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD);
+    if (typeof password === "string") update(password);
+    else {
+      onCancel();
+      void task.destroy();
+    }
+  };
+  return task;
+}
+
+// The text items of every page, for the reflow view (src/core/pdfReflow.js), without a viewer.
+export async function readPdfText({ data, url, requestPassword = () => null }) {
+  const { pdfjsLib, base } = await loadPdfLibrary();
+  let passwordCancelled = false;
+  const task = loadDocument(pdfjsLib, base, { data, url }, requestPassword, () => { passwordCancelled = true; });
+  try {
+    const pdfDocument = await task.promise;
+    const pages = [];
+    for (let number = 1; number <= pdfDocument.numPages; number += 1) {
+      const page = await pdfDocument.getPage(number);
+      const content = await page.getTextContent();
+      pages.push({ items: content.items.filter((item) => typeof item.str === "string") });
+      page.cleanup();
+    }
+    return { documentId: createPdfDocumentId(pdfDocument.fingerprints?.[0]), pages };
+  } catch (error) {
+    if (passwordCancelled) throw Object.assign(new Error("pdf.passwordCancelled"), { cause: error });
+    throw error;
+  } finally {
+    await task.destroy();
+  }
+}
+
 function pageNumberOf(node) {
   const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
   return Number(element?.closest?.(".page")?.dataset.pageNumber) || null;
@@ -99,24 +144,7 @@ export class PdfReader {
     this.linkService.setViewer(this.viewer);
     this.#installEvents();
 
-    this.loadingTask = pdfjsLib.getDocument({
-      ...(url ? { url } : { data }),
-      cMapUrl: `${base}cmaps/`,
-      cMapPacked: true,
-      standardFontDataUrl: `${base}standard_fonts/`,
-      wasmUrl: `${base}wasm/`,
-      iccUrl: `${base}iccs/`,
-      isEvalSupported: false,
-      enableXfa: false
-    });
-    this.loadingTask.onPassword = (update, reason) => {
-      const password = this.requestPassword(reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD);
-      if (typeof password === "string") update(password);
-      else {
-        this.passwordCancelled = true;
-        void this.loadingTask?.destroy();
-      }
-    };
+    this.loadingTask = loadDocument(pdfjsLib, base, { data, url }, this.requestPassword, () => { this.passwordCancelled = true; });
     this.pdfDocument = await this.loadingTask.promise;
     const documentId = createPdfDocumentId(this.pdfDocument.fingerprints?.[0]);
     const location = resolveLocation(documentId);

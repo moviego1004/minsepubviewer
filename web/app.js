@@ -70,7 +70,8 @@ import {
   t,
   tOptional
 } from "./i18n.js";
-import { PdfReader } from "./pdf-reader.js";
+import { PdfReader, readPdfText } from "./pdf-reader.js";
+import { reflowPdfPages } from "../src/core/pdfReflow.js";
 import { formatPdfLocation, isPdfLocation, isPdfRange, parsePdfLocation } from "../src/core/pdfLocation.js";
 import { DocumentReader } from "./document-reader.js";
 import { convertDocument, getDocumentFormat } from "./document-convert.js";
@@ -326,6 +327,7 @@ const state = {
   epubBook: null,
   pdf: null,
   pdfSelection: null,
+  pdfReflow: false,
   pdfMeta: null,
   docReader: null,
   docMeta: null,
@@ -425,6 +427,7 @@ const elements = {
   pdfZoomSelect: document.querySelector("#pdfZoomSelect"),
   pdfRotateButton: document.querySelector("#pdfRotateButton"),
   pdfSpreadButton: document.querySelector("#pdfSpreadButton"),
+  pdfReflowButton: document.querySelector("#pdfReflowButton"),
   fullscreenButton: document.querySelector("#fullscreenButton"),
   textOnly: document.querySelector("#textOnly"),
   zoomLabel: document.querySelector("#zoomLabel"),
@@ -2789,6 +2792,7 @@ async function activateDocumentTab(tabId) {
   await destroyEpub();
   await destroyPdf();
   await destroyDocumentReader();
+  state.pdfReflow = false;
   if (sequence !== state.tabActivationSequence) return;
   state.activeTabId = tab.id;
   if (platform.isMobile && tab.path) storage.setItem("minsepubviewer.last-document", tab.path);
@@ -2944,6 +2948,7 @@ async function closeDocumentTab(tabId) {
   await destroyEpub();
   await destroyPdf();
   await destroyDocumentReader();
+  state.pdfReflow = false;
   const next = state.tabs[Math.min(index, state.tabs.length - 1)];
   if (next) await activateDocumentTab(next.id);
   else {
@@ -2956,6 +2961,7 @@ async function closeDocumentTab(tabId) {
 }
 
 const PDF_SPREAD_KEY = "minsepubviewer.pdf-spread";
+const PDF_REFLOW_KEY = "minsepubviewer.pdf-reflow";
 const PDF_LOADING_ID = "pdf-loading";
 const PDF_FIND_NOT_FOUND = 1;
 const PDF_FIND_PENDING = 3;
@@ -3079,6 +3085,7 @@ async function destroyPdf() {
 }
 
 async function openPdfFile(fileLike) {
+  if (storage.getItem(PDF_REFLOW_KEY) === "true") return openPdfReflow(fileLike);
   const name = fileLike?.name || "document.pdf";
   const filePath = fileLike?.path || name;
   logClient("pdf.file.selected", { name, size: fileLike?.size, source: fileLike?.path ? platform.kind : "browser" });
@@ -3146,6 +3153,93 @@ async function openPdfFile(fileLike) {
   }
 }
 
+// PDF reflow view: the text of the PDF re-flowed to the screen width in the converted-document
+// reader (src/core/pdfReflow.js). It shares the PDF's book record; its position is kept as a PDF page
+// location so both views resume on the same page. Highlights made here use text offsets and show only
+// in this view.
+async function openPdfReflow(fileLike) {
+  const name = fileLike?.name || "document.pdf";
+  const filePath = fileLike?.path || name;
+  logClient("pdf.reflow.selected", { name, size: fileLike?.size });
+  state.mode = "document";
+  state.docMeta = null;
+  state.book = createBookRecord({ bookId: DOC_LOADING_ID, title: name.replace(/\.pdf$/i, ""), filePath, settings: state.book.settings });
+  state.toc = [];
+  state.progressLabel = "";
+  state.bookMeta = t("document.opening");
+  render();
+
+  const reader = new DocumentReader({
+    frame: elements.docFrame,
+    onLocationChange: handleDocLocationChange,
+    onSelectionChange: handleDocSelection,
+    onReady: installDocumentFrameHandlers,
+    getHighlights: getPdfAnnotations
+  });
+  state.docReader = reader;
+  state.pdfReflow = true;
+
+  try {
+    const source = fileLike.pdfUrl
+      ? { url: fileLike.pdfUrl }
+      : { data: new Uint8Array((await readFileArrayBuffer(fileLike)).slice(0)) };
+    const text = await readPdfText({ ...source, requestPassword: (retry) => window.prompt(t(retry ? "pdf.passwordRetry" : "pdf.passwordPrompt")) });
+    if (state.docReader !== reader) return;
+    const { html, characters } = reflowPdfPages(text.pages);
+    if (!characters) throw new Error("pdf.reflowNoText");
+    const saved = getBookRecord(state.library, text.documentId);
+    state.book = saved
+      ? { ...saved, filePath, title: state.book.title }
+      : createBookRecord({ bookId: text.documentId, title: state.book.title, filePath, settings: state.book.settings });
+    const settings = mergeReadingSettings(state.book.settings, {});
+    const page = parsePdfLocation(state.book.lastLocation)?.pageNumber || 1;
+    await reader.open({ html, location: null, theme: settings.theme, zoom: settings.zoom, lang: getLocale() });
+    if (state.docReader !== reader) return;
+    if (page > 1) reader.document.querySelector(`.pdf-reflow-page[data-page="${page}"]`)?.scrollIntoView();
+    state.docMeta = { name, size: ((fileLike.size || 0) / 1024 / 1024).toFixed(2), format: "PDF" };
+    state.progressLabel = docProgressLabel();
+    persistBook();
+    render();
+    logClient("pdf.reflow.opened", { pages: text.pages.length, characters, page });
+  } catch (error) {
+    const message = error?.message ? errorText(error) : t("pdf.openFailed");
+    logClient("pdf.reflow.rejected", { name, error: formatError(error) });
+    if (state.docReader === reader) {
+      state.docReader = null;
+      reader.destroy();
+      showDocumentMessage(message);
+    }
+    state.bookMeta = `${name} - ${message}`;
+    render();
+  }
+}
+
+// The PDF page whose reflowed text is at the top of the view.
+function reflowPageNumber() {
+  let page = 1;
+  for (const section of state.docReader?.document?.querySelectorAll(".pdf-reflow-page") || []) {
+    if (section.getBoundingClientRect().top > 8) break;
+    page = Number(section.dataset.page) || page;
+  }
+  return page;
+}
+
+function reflowPdfLocation(pageNumber) {
+  const saved = parsePdfLocation(state.book.lastLocation);
+  return formatPdfLocation({ pageNumber, zoom: saved?.zoom, rotation: saved?.rotation });
+}
+
+// Reopens the active PDF tab in the other view.
+async function togglePdfReflow() {
+  const tab = getActiveTab();
+  if (tab?.kind !== "pdf") return;
+  storage.setItem(PDF_REFLOW_KEY, String(!state.pdfReflow));
+  await destroyPdf();
+  await destroyDocumentReader();
+  state.pdfReflow = false;
+  await openPdfFile(tab.payload.file);
+}
+
 async function toggleDesktopFullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
@@ -3201,7 +3295,7 @@ function handleDocSelection(selection) {
 
 function handleDocLocationChange(location) {
   if (!state.docReader?.document || state.book.bookId === DOC_LOADING_ID) return;
-  state.book = updateLastLocation(state.book, location);
+  state.book = updateLastLocation(state.book, state.pdfReflow ? reflowPdfLocation(reflowPageNumber()) : location);
   state.progressLabel = docProgressLabel();
   clearTimeout(docLocationSaveTimer);
   docLocationSaveTimer = setTimeout(() => {
@@ -3268,6 +3362,7 @@ async function destroyDocumentReader() {
   if (!reader) return;
   state.docReader = null;
   state.docSelection = null;
+  state.pdfReflow = false;
   if (state.book.bookId !== DOC_LOADING_ID && state.mode === "document") persistBook();
   hideSelectionToolbar();
   state.searchResults = [];
@@ -3998,6 +4093,9 @@ function render() {
   elements.docWorkspace.hidden = state.mode !== "document";
   elements.pdfWorkspace.hidden = state.mode !== "pdf";
   elements.pdfActions.hidden = state.mode !== "pdf";
+  elements.pdfReflowButton.hidden = !(state.mode === "pdf" || state.pdfReflow);
+  elements.pdfReflowButton.classList.toggle("is-active", state.pdfReflow);
+  elements.pdfReflowButton.setAttribute("aria-pressed", String(state.pdfReflow));
   renderPdfControls();
 
   renderMarkdownChrome();
@@ -4418,6 +4516,7 @@ elements.pdfSpreadButton.addEventListener("click", () => {
   storage.setItem(PDF_SPREAD_KEY, String(state.pdf.spread));
   renderPdfControls();
 });
+elements.pdfReflowButton.addEventListener("click", () => void togglePdfReflow());
 elements.pdfContainer.addEventListener("wheel", (event) => {
   if (!state.pdf || !(event.ctrlKey || event.metaKey)) return;
   event.preventDefault();

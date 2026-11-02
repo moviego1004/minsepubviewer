@@ -27,7 +27,7 @@
 | 형식 | 요구 수준 | PC | Android |
 |---|---|---|---|
 | EPUB | 원본 그대로 읽기, 글꼴·여백 조절, 쪽/연속 보기 | ✅ | ✅ 📱 |
-| PDF | PDF.js 기능 범위(쪽/연속, 확대·맞춤, 회전, 두 쪽, 검색, 목차, 링크, 텍스트 선택) | ✅ | ✅ 📱 |
+| PDF | PDF.js 기능 범위(쪽/연속, 확대·맞춤, 회전, 두 쪽, 검색, 목차, 링크, 텍스트 선택), 재배치 보기(글자만 화면 폭으로) | ✅ | ✅ 📱 |
 | Markdown·TXT | 읽기·편집·새 문서·내보내기 | ✅ | ✅ 📱 |
 | DOCX | 읽기 전용(글꼴·색·문단·표 서식, PC는 쪽 모양) | ✅ | ✅ |
 | HWPX, XML 형식 HWP(HWPML) | 읽기 전용(텍스트·표) | ✅ | ✅ |
@@ -91,7 +91,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 | 형식 | 방법 | 위치·형광펜 기록 |
 |---|---|---|
 | EPUB | epub.js. Android는 앱 사본을 압축 해제한 폴더를 URL로 읽음(큰 책도 메모리 절약) | EPUB CFI |
-| PDF | PDF.js 6.3.289(PDFViewer·검색·링크). Android는 legacy 빌드, 앱 사본을 URL로 읽음 | `pdf:page=..&zoom=..`, 형광펜은 PDF 좌표 사각형 |
+| PDF | PDF.js 6.3.289(PDFViewer·검색·링크). Android는 legacy 빌드, 앱 사본을 URL로 읽음. 재배치 보기는 `getTextContent()` → `src/core/pdfReflow.js` → 변환 문서 뷰어 | `pdf:page=..&zoom=..`, 형광펜은 PDF 좌표 사각형 |
 | Markdown | Toast UI Editor(보기·편집) | 스크롤 비율 |
 | DOCX | docx-preview 0.4.1 → HTML(PC 쪽 모양, 휴대폰 화면 폭 재배치), 실패 시 mammoth 1.13.0 | 문서 스크롤 비율, 형광펜은 텍스트 문자 위치 |
 | HWPX·HWPML | 자체 XML 변환기 `src/core/hwpXml.js` | 위와 같음 |
@@ -190,7 +190,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
        | M3 | **Android 열기 목록**: 폴라리스가 쓰는 HWP MIME 별칭 중 빠진 `application/hangul` 추가 | ✅ 2026-11-02 |
        | M4 | **내용으로 형식 판별**: 확장자와 내용이 다른 변환 문서(예: `.hwp`인데 실제로는 HWPX ZIP, `.docx`인데 HWPX)를 첫 바이트와 ZIP 목록으로 판별(`src/core/documentSniff.js`) | ✅ 2026-11-02 |
        | M5 | **DOCX 서식 보기**: mammoth는 서식이 대부분 사라짐. `docx-preview`(Apache-2.0)로 글꼴·색·표·쪽 모양을 살리는 보기를 시험하고, 휴대폰 기본은 재배치 유지. 크기·라이선스·WebView 호환 확인 후 결정 → **적용**(75KB, Apache-2.0): PC는 쪽 모양, 휴대폰은 쪽 크기·머리말 없이 화면 폭 재배치, 글꼴은 M1 대체 목록 추가, Symbol 글머리표는 유니코드로, 실패 시 mammoth. PC Chromium·API 36 에뮬레이터 확인, 실기기 ⏳ | ✅ |
-       | M6 | **PDF 재배치 보기**: PDF.js `getTextContent()` 위치로 줄·문단을 묶어 화면 폭 HTML로 다시 흘림(글자 PDF만, 표·다단 한계). 보기 메뉴 전환 | ⬜ |
+       | M6 | **PDF 재배치 보기**: PDF.js `getTextContent()` 위치로 줄·문단을 묶어 화면 폭 HTML로 다시 흘림(글자 PDF만, 표·다단 한계). 보기 메뉴 전환 → **적용**: 줄·문단·제목(본문보다 큰 글자)·목록 구분, 반복 머리글·쪽 번호 제거, 쪽 사이 번호 구분선. PC 도구 막대 "재배치", 휴대폰 ☰ 메뉴 "PDF 재배치 보기". 위치는 PDF 쪽으로 공유. PC Chromium·API 36 에뮬레이터 확인, 실기기·실제 PDF ⏳ | ✅ |
        | M7 | **HWP 기호(PUA) 대응**: 한글 전용 기호 코드 → 유니코드 변환표. 공개 자료 조사 후 확인된 것만 적용(추측 금지) | ⬜ 조사 필요 |
        | M8 | **HWPX·XML HWP 서식**: `hwpXml.js`에도 글꼴·글자·문단 모양 적용(M1·M2 재사용) | ⬜ |
        | M9 | 원본 쪽 보기(위 C-1 → C-2) | ⬜ 사용자 결정 대기 |

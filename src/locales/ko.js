@@ -192,6 +192,9 @@ export default {
   "pdf.zoomCustom": "{percent}%",
   "pdf.rotate": "시계 방향으로 회전",
   "pdf.spread": "두 쪽 보기",
+  "pdf.reflow": "재배치",
+  "pdf.reflowTitle": "PDF 글자를 화면 폭에 맞춰 다시 배치해 보기(그림·표 제외)",
+  "pdf.reflowNoText": "이 PDF에는 글자 정보가 없어(스캔 문서 등) 재배치할 수 없습니다. 재배치를 끄고 원본으로 보세요.",
   "pdf.opening": "PDF 여는 중...",
   "pdf.meta": "{name} - {size} MB · {pages}쪽",
   "pdf.progress": "{page} / {total}",
@@ -273,6 +276,7 @@ export default {
 
   "mobile.menu": "메뉴",
   "mobile.progressToggle": "전체 화면 진행 표시: {state}",
+  "mobile.pdfReflowToggle": "PDF 재배치 보기: {state}",
   "mobile.newMarkdown": "새 문서 · Markdown 만들기",
   "mobile.tocBookmarks": "목차·책갈피",
   "mobile.readingSettings": "읽기 설정",
