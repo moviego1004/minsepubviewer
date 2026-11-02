@@ -28,6 +28,15 @@ test("binary HWP becomes page HTML with the paragraphs placed by their saved lin
   assert.match(html, /font-family:"바탕"/);
 });
 
+test("a paragraph Hangul continued on the next page is split there into two pages", async () => {
+  const html = await convertHwpToPageHtml(new Uint8Array(createSampleHwp({ paragraphCount: 2, styled: true, controls: false, spanning: true })));
+  const pages = html.split('class="hpa"').slice(1).map((page) => page.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " "));
+  assert.equal(pages.length, 2);
+  assert.match(pages[0], /HWP 문단 2 — .*앞 쪽 끝 줄입니다\./s);
+  assert.doesNotMatch(pages[0], /다음 쪽 첫 줄/);
+  assert.match(pages[1], /다음 쪽 첫 줄입니다\./);
+});
+
 test("documents the parser rejects fail with the HWP error, and the next one still converts", async () => {
   await assert.rejects(convertHwpToPageHtml(new Uint8Array([1, 2, 3])), { message: "document.invalidHwp" });
   await assert.rejects(convertHwpToPageHtml(new Uint8Array(createSampleHwp({ paragraphCount: 1 }))), { message: "document.invalidHwp" });

@@ -37,7 +37,6 @@
     "@fontsource/nanum-gothic": "5.3.0",
     "@fontsource/nanum-myeongjo": "5.3.0",
     "@fontsource/noto-sans-symbols-2": "5.3.0",
-    "@ohah/hwpjs": "0.1.0-rc.10",
     "docx-preview": "0.4.1",
     "epubjs": "^0.3.93",
     "mammoth": "1.13.0",
@@ -46,6 +45,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
+    "@ohah/hwpjs": "0.1.0-rc.10",
     "@toast-ui/editor": "^3.2.2",
     "@xmldom/xmldom": "0.9.8",
     "cfb": "^1.2.2",
@@ -95,11 +95,7 @@
       "node_modules/@fontsource/nanum-myeongjo/files/nanum-myeongjo-korean-400-normal.woff2",
       "node_modules/@fontsource/nanum-myeongjo/files/nanum-myeongjo-korean-700-normal.woff2",
       "node_modules/@fontsource/noto-sans-symbols-2/LICENSE",
-      "node_modules/@fontsource/noto-sans-symbols-2/files/noto-sans-symbols-2-symbols-400-normal.woff2",
-      "node_modules/@ohah/hwpjs/package.json",
-      "node_modules/@ohah/hwpjs/LICENSE",
-      "node_modules/@ohah/hwpjs/dist/index.js",
-      "node_modules/@ohah/hwpjs/dist/hwpjs.win32-x64-msvc.node"
+      "node_modules/@fontsource/noto-sans-symbols-2/files/noto-sans-symbols-2-symbols-400-normal.woff2"
     ],
     "fileAssociations": [
       {
@@ -136,9 +132,6 @@
     "electronLanguages": [
       "ko",
       "en-US"
-    ],
-    "asarUnpack": [
-      "node_modules/@ohah/hwpjs/dist/*.node"
     ]
   }
 }

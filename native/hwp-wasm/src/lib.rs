@@ -1,5 +1,7 @@
 //! Thin wasm32-unknown-unknown wrapper around hwp-core (hwpjs 0.1.0-rc.10).
 //! No threads, no shared memory, no WASI: plain C ABI.
+mod split;
+
 use hwp_core::HwpParser;
 use hwp_core::viewer::html::HtmlOptions;
 
@@ -24,7 +26,8 @@ pub unsafe extern "C" fn hwp_free(ptr: *mut u8, len: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn hwp_to_html(ptr: *const u8, len: usize) -> u32 {
     let data = std::slice::from_raw_parts(ptr, len);
-    let result = HwpParser::new().parse(data).map(|doc| {
+    let result = HwpParser::new().parse(data).map(|mut doc| {
+        split::split_paragraphs_at_page_breaks(&mut doc);
         let options = HtmlOptions {
             image_output_dir: None,
             html_output_dir: None,

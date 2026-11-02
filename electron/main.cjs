@@ -532,9 +532,20 @@ ipcMain.on("app:set-locale", (_event, locale) => {
   if (i18n?.SUPPORTED_LOCALES.includes(locale)) rendererLocale = locale;
 });
 
-// HWP 5.0 is converted with the native @ohah/hwpjs module, loaded on first use.
+// HWP 5.0 is laid out in pages by hwpjs's parser built as WebAssembly (web/hwp-wasm.js), loaded on
+// first use. It replaced the native @ohah/hwpjs addon (same output), whose panics on some documents
+// ended the whole process.
 const hwpMaxBytes = 64 * 1024 * 1024;
-let hwpModule = null;
+let hwpConverter = null;
+
+function loadHwpConverter() {
+  hwpConverter ||= Promise.all([
+    import(pathToFileURL(path.join(__dirname, "..", "web", "hwp-wasm.js")).href),
+    readFile(path.join(__dirname, "..", "web", "vendor", "hwp", "hwp_core.wasm")).then((bytes) => WebAssembly.compile(bytes))
+  ]).then(([{ convertHwpWithModule }, module]) => (bytes) => convertHwpWithModule(module, bytes));
+  hwpConverter.catch(() => { hwpConverter = null; });
+  return hwpConverter;
+}
 
 ipcMain.handle("document:convert-hwp", async (_event, payload = {}) => {
   let bytes;
@@ -546,9 +557,9 @@ ipcMain.handle("document:convert-hwp", async (_event, payload = {}) => {
     throw new Error("document.invalidHwp");
   }
   if (bytes.byteLength > hwpMaxBytes) throw new Error("native.documentTooLarge");
-  hwpModule ||= require("@ohah/hwpjs");
+  const convert = await loadHwpConverter();
   try {
-    return hwpModule.toHtml(bytes);
+    return await convert(bytes);
   } catch (error) {
     console.error("HWP conversion failed", error);
     throw new Error("document.invalidHwp");

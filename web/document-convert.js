@@ -174,19 +174,22 @@ async function convertHwp(bytes, fileLike, platform, options) {
     return { html: convertHwpmlDocument(parseXml(decodeXmlBytes(bytes), "document.invalidHwpml")), layout: false };
   }
   if (!isOleBytes(bytes)) throw new Error("document.invalidHwp");
-  if (platform?.convertHwp) {
-    const html = await platform.convertHwp({ path: fileLike.path || "", bytes: fileLike.path ? null : bytes });
-    return { html, layout: true };
-  }
   let pagesError = null;
-  if (options.hwpPages) {
+  if (platform?.convertHwp) {
+    try {
+      return { html: await platform.convertHwp({ path: fileLike.path || "", bytes: fileLike.path ? null : bytes }), layout: true };
+    } catch (error) {
+      pagesError = error;
+    }
+  } else if (options.hwpPages) {
     try {
       return { html: withPageFontFallback(await convertHwpToPageHtml(bytes)), layout: true, pages: true, pagesAvailable: true };
     } catch (error) {
       pagesError = error;
     }
   }
-  return { html: await convertHwpBinary(bytes, inflateRaw), layout: false, pagesAvailable: true, pagesError };
+  // Documents the page converter rejects are still read by the built-in reader, reflowed.
+  return { html: await convertHwpBinary(bytes, inflateRaw), layout: false, pagesAvailable: !platform?.convertHwp, pagesError };
 }
 
 // The content decides between the converted formats; the file name is the fallback.

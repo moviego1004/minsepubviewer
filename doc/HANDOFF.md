@@ -76,7 +76,9 @@ npm.cmd run android:install
 - M9: 휴대폰 HWP 원본 쪽 보기. 해석기는 `web/vendor/hwp/hwp_core.wasm`(커밋된 빌드 결과물, 다른 PC는 그대로 쓰면 됨). 원본은 `native/hwp-wasm`(래퍼 Rust 크레이트)과 `scripts/build-hwp-wasm.cjs`(hwpjs 태그 `@ohah/hwpjs@0.1.0-rc.10`을 `node_modules/.cache/hwpjs-src/`에 받아 `cargo build --release --locked --target wasm32-unknown-unknown`). `package.json`의 hwpjs 판을 올리면 스크립트의 TAG·COMMIT도 같이 바꾸고 다시 빌드한다.
 - 이날 결과: `npm.cmd test` 168개 통과, `test:documents`·`test:reader`(원본 쪽 보기·실패 시 재배치 단계 추가)·`test:pdf` 통과, `android:sync` 통과, `gradlew assembleDebug` 성공(디버그 APK 10.6MB, 이 PC는 `ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk`를 직접 지정해야 했음), API 36 Pixel_7 에뮬레이터에서 원본 쪽 보기 확인. 실기기는 다음 APK(0.1.13)로 확인.
 - 에뮬레이터 조작 시 주의: Git Bash에서 `/data/...` 같은 기기 경로 인자는 `MSYS_NO_PATHCONV=1`로 경로 변환을 꺼야 한다.
-- 다음 후보: NEXT_TASKS 첫 항목의 "발견한 문제"(PC hwpjs 네이티브 panic 시 앱 종료 위험, hwpjs 쪽 나눔 문제), XLSX·PPTX 지원 여부 논의.
+- 후속(같은 날): PC 앱도 `web/hwp-wasm.js`로 HWP를 변환(네이티브 `@ohah/hwpjs`는 개발 의존성, 설치본에서 빠짐). WASM 래퍼가 변환 전에 쪽을 넘어가는 문단을 나눔(`native/hwp-wasm/src/split.rs`) → 출력이 네이티브와 일부 문서에서 달라지는 것이 정상. 비교는 `node scripts/compare-hwp-wasm.cjs <파일...>`("DIFFERENT"는 쪽 나눔 수정 때문일 수 있으니 쪽 수로 판단).
+- 엑셀·PPT는 사용자 결정으로 제외(2026-11-03).
+- 다음 후보: 실기기 확인용 0.1.13 빌드, 조절 문자가 있는 문단의 쪽 넘김, 알려진 epub.js `bounds` 오류.
 
 ## 최신 상태와 재개 절차 (2026-11-02)
 

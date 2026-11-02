@@ -82,9 +82,10 @@ const hwpControlId = (id) => Buffer.from(id.split("").reverse().join(""), "latin
 
 // runs: [position, character shape id] pairs (PARA_CHAR_SHAPE) for styled samples.
 // Each paragraph is one line (PARA_LINE_SEG) placed below the previous one, as Hangul saves them;
-// hwpjs's page view places text by these lines.
+// hwpjs's page view places text by these lines. lines: where each line's text starts; newPageLine:
+// the line that Hangul put at the top of the next page (its position starts again at 0).
 let lineTop = 0;
-function hwpParagraph(level, text, { paraShape = 0, runs = null } = {}) {
+function hwpParagraph(level, text, { paraShape = 0, runs = null, lines = [0], newPageLine = -1 } = {}) {
   const header = Buffer.alloc(24);
   header.writeUInt32LE(text.length + 1, 0);
   header.writeUInt16LE(paraShape, 8);
@@ -94,16 +95,21 @@ function hwpParagraph(level, text, { paraShape = 0, runs = null } = {}) {
     runs.forEach(([position, id], index) => { data.writeUInt32LE(position, index * 8); data.writeUInt32LE(id, index * 8 + 4); });
     records.push(hwpRecord(68, level + 1, data));
   }
-  const line = Buffer.alloc(36);
-  line.writeInt32LE(lineTop, 4);
-  line.writeInt32LE(1000, 8);
-  line.writeInt32LE(1000, 12);
-  line.writeInt32LE(850, 16);
-  line.writeInt32LE(600, 20);
-  line.writeInt32LE(42520, 28);
-  line.writeUInt32LE(0x60000, 32);
-  lineTop += 1600;
-  records.push(hwpRecord(69, level + 1, line));
+  const segments = lines.map((start, index) => {
+    if (index === newPageLine) lineTop = 0;
+    const line = Buffer.alloc(36);
+    line.writeUInt32LE(start, 0);
+    line.writeInt32LE(lineTop, 4);
+    line.writeInt32LE(1000, 8);
+    line.writeInt32LE(1000, 12);
+    line.writeInt32LE(850, 16);
+    line.writeInt32LE(600, 20);
+    line.writeInt32LE(42520, 28);
+    line.writeUInt32LE(0x60000, 32);
+    lineTop += 1600;
+    return line;
+  });
+  records.push(hwpRecord(69, level + 1, Buffer.concat(segments)));
   return records;
 }
 
@@ -180,11 +186,16 @@ function hwpCompress(records) {
 }
 
 // controls: false leaves out the table and the footnote, whose control records are too short for
-// hwpjs's parser (web/hwp-wasm.js); the built-in reader accepts them.
-function createSampleHwp({ paragraphCount = 40, compressed = true, styled = false, controls = true } = {}) {
+// hwpjs's parser (web/hwp-wasm.js); the built-in reader accepts them. spanning: a last paragraph
+// whose second line Hangul put on the next page.
+function createSampleHwp({ paragraphCount = 40, compressed = true, styled = false, controls = true, spanning = false } = {}) {
   lineTop = 0;
   const records = [...hwpParagraph(0, "HWP 5.0 검사 문서", styled ? { paraShape: 1, runs: [[0, 1], [4, 0]] } : {})];
   for (const text of paragraphs(paragraphCount, "HWP")) records.push(...hwpParagraph(0, text));
+  if (spanning) {
+    const first = "앞 쪽 끝 줄입니다. ";
+    records.push(...hwpParagraph(0, `${first}다음 쪽 첫 줄입니다.`, { lines: [0, first.length], newPageLine: 1 }));
+  }
   // A 2x2 table whose first row is one merged cell, inside a paragraph of its own.
   if (controls) records.push(hwpRecord(66, 0, Buffer.alloc(24)),
     hwpRecord(67, 1, Buffer.concat([hwpControlChar(11, "tbl "), Buffer.from("\r", "utf16le")])),

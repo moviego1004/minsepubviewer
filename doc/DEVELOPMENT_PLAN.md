@@ -193,9 +193,9 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
        | M6 | **PDF 재배치 보기**: PDF.js `getTextContent()` 위치로 줄·문단을 묶어 화면 폭 HTML로 다시 흘림(글자 PDF만, 표·다단 한계). 보기 메뉴 전환 → **적용**: 줄·문단·제목(본문보다 큰 글자)·목록 구분, 반복 머리글·쪽 번호 제거, 쪽 사이 번호 구분선. PC 도구 막대 "재배치", 휴대폰 ☰ 메뉴 "PDF 재배치 보기". 위치는 PDF 쪽으로 공유. PC Chromium·API 36 에뮬레이터 확인, 실기기·실제 PDF ⏳ | ✅ |
        | M7 | **HWP 기호(PUA) 대응**: 한글 전용 기호 코드 → 유니코드 변환표. 공개 자료 조사 후 확인된 것만 적용(추측 금지) → **적용**(`src/core/hwpSymbols.js`): U+F020–F0FF 기호 글꼴 문자는 Wingdings 기준(글꼴 이름이 Symbol·Wingdings 2/3·Webdings면 그 표), 표는 Unicode WG2 N4384·unicode.org Adobe Symbol. 한컴 확장 영역(U+F0000대) 숫자·동그라미/네모 한글 245자는 함초롬바탕 글자 모양을 읽고 대조 검증. 휴대폰에 없는 기호는 Noto Sans Symbols 2(OFL, 382KB, 필요할 때만 읽음)로 표시. 옛한글(한양 PUA)은 실제 문서에 없어 제외. PC Chromium·API 36 에뮬레이터 확인, 실기기 ⏳ | ✅ |
        | M8 | **HWPX·XML HWP 서식**: `hwpXml.js`에도 글꼴·글자·문단 모양 적용(M1·M2 재사용) → **HWPX 적용**: `Contents/header.xml`의 글꼴·글자 모양·문단 모양·테두리/배경을 이진 HWP와 같은 `.hcN/.hpN/.hbN` 클래스로, 표 칸 너비·여백·세로 정렬, 글상자 글자. XML HWP(HWPML)는 시험 파일이 없어 보류. 그림(BinData)도 표시(2026-11-02). PC Chromium·API 36 에뮬레이터 확인, 실기기 ⏳ | ✅ (HWPX) |
-       | M9 | 원본 쪽 보기(위 C-1 → C-2) → **C-1 적용**: PC와 같은 hwpjs 0.1.0-rc.10 `hwp-core`를 `wasm32-unknown-unknown`으로 직접 빌드(`native/hwp-wasm`, `npm.cmd run build:hwp-wasm`, 가져오기 없음, 686KB). 휴대폰 ☰ 메뉴 "HWP 원본 쪽 보기"로 전환(기본 끔), 쪽을 화면 폭에 맞춤, 실패 시 재배치. 실제 HWP 14개 PC 출력과 동일, API 36 에뮬레이터 확인, 실기기 ⏳. 남은 일: hwpjs가 일부 문서의 쪽 나눔을 못 함(PC도 같음) | ✅ 2026-11-03 |
+       | M9 | 원본 쪽 보기(위 C-1 → C-2) → **C-1 적용**: PC와 같은 hwpjs 0.1.0-rc.10 `hwp-core`를 `wasm32-unknown-unknown`으로 직접 빌드(`native/hwp-wasm`, `npm.cmd run build:hwp-wasm`, 가져오기 없음, 686KB). 휴대폰 ☰ 메뉴 "HWP 원본 쪽 보기"로 전환(기본 끔), 쪽을 화면 폭에 맞춤, 실패 시 재배치. 실제 HWP 14개 PC 출력과 동일, API 36 에뮬레이터 확인, 실기기 ⏳. 후속(같은 날): PC도 같은 WASM 사용(네이티브 panic 시 앱 종료 위험 제거, 실패 시 재배치), 쪽을 넘어가는 문단을 쪽 경계에서 나눠 hwpjs의 쪽 겹침 수정(`native/hwp-wasm/src/split.rs`) | ✅ 2026-11-03 |
 
-     - 하지 않기로 한 것: 폴라리스처럼 상용 글꼴(HY, Monotype Arial/Times 등)을 넣는 것(라이선스), 네이티브 렌더링 엔진으로 바꾸는 것, XLSX·PPTX 지원(5.3 검토로 미룸).
+     - 하지 않기로 한 것: 폴라리스처럼 상용 글꼴(HY, Monotype Arial/Times 등)을 넣는 것(라이선스), 네이티브 렌더링 엔진으로 바꾸는 것, XLSX·PPTX 지원(2026-11-03 사용자 결정으로 제외).
      - 각 단계 검증: `npm.cmd test`, 화면 변경 시 `node --check web/app.js`·`npm.cmd run test:reader`, Android 연결부 변경 시 `npm.cmd run android:sync`. 휴대폰 실기기 확인은 사용자 몫으로 기록.
 2. **실기기 확인 대기 항목** ⏳
    - 카카오톡·메일 첨부 열기 목록에 Mins Reader가 나오는지(앱별 MIME). 안 나오면 앱 이름과 형식을 받아 추가한다.

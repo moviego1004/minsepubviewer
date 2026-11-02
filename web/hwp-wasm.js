@@ -1,6 +1,7 @@
-// HWP 5.0 to page-layout HTML in the browser: the hwp-core parser of @ohah/hwpjs 0.1.0-rc.10, the
-// same one the desktop app runs natively, built for wasm32 without threads or imports
-// (native/hwp-wasm, scripts/build-hwp-wasm.cjs). The phone uses it for the original page view.
+// HWP 5.0 to page-layout HTML: the hwp-core parser of @ohah/hwpjs 0.1.0-rc.10 built for wasm32
+// without threads or imports (native/hwp-wasm, scripts/build-hwp-wasm.cjs). The phone uses it for
+// the original page view; the desktop's main process runs the same module (electron/main.cjs), where
+// a parser panic is an exception instead of the end of the process as with the native addon.
 // Each conversion gets a fresh instance: its memory is dropped afterwards, and a parser panic
 // (a WebAssembly trap) cannot leave a broken instance behind.
 const DEFAULT_URL = "/web/vendor/hwp/hwp_core.wasm";
@@ -21,9 +22,20 @@ function loadModule() {
 }
 
 export async function convertHwpToPageHtml(bytes) {
+  let module;
+  try {
+    module = await loadModule();
+  } catch {
+    throw new Error("document.converterLoadFailed");
+  }
+  return convertHwpWithModule(module, bytes);
+}
+
+// module: the compiled hwp_core.wasm.
+export async function convertHwpWithModule(module, bytes) {
   let exports;
   try {
-    exports = (await WebAssembly.instantiate(await loadModule(), {})).exports;
+    exports = (await WebAssembly.instantiate(module, {})).exports;
   } catch {
     throw new Error("document.converterLoadFailed");
   }

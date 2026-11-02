@@ -313,3 +313,11 @@
 - 검증(이번 실행): 실제 HWP 14개(개인·회사 문서, 저장소에 넣지 않음)에서 WASM과 PC 네이티브 `toHtml` 출력이 바이트 단위로 같음(2개는 둘 다 같은 오류). `npm.cmd test` 168개 통과, `node --check` 통과, `npm.cmd run test:documents` 통과, `npm.cmd run test:reader` 통과, `npm.cmd run test:pdf` 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공(10.6MB, `assets/public/vendor/hwp/hwp_core.wasm` 포함). API 36 Pixel_7 에뮬레이터에 설치해 HWP 2개를 VIEW로 열고 ☰ 메뉴로 원본 쪽 보기 전환: 정관 문서는 A4 쪽이 화면 폭에 맞게 정상 표시, 공모전 문제 문서는 hwpjs가 여러 쪽 글자를 1쪽에 겹쳐 그림(PC 네이티브 출력도 같음). 에뮬레이터에 넣은 문서는 삭제.
 - 발견: `Welcome to Hwp.hwp`에서 hwpjs 네이티브 panic이 Node 프로세스를 종료시킴(PC Electron 메인 프로세스 위험, PC 앱에서 직접 재현은 안 함). WASM은 RuntimeError로 끝나 재배치로 넘어감.
 - 미검증: 실기기, WebView 83 같은 구형 WebView(WebAssembly 자체는 지원), 큰 문서의 휴대폰 메모리, PC 앱에서 위 panic 재현.
+
+## M9 후속 — PC도 WASM, 쪽을 넘어가는 문단 나누기 (2026-11-03)
+
+- 사용자 요청: "엑셀, ppt는 일단 제외하자. 나머지 작업 진행해줘". 엑셀·PPT 제외를 NEXT_TASKS·DEVELOPMENT_PLAN에 기록.
+- PC: `electron/main.cjs`가 `web/hwp-wasm.js`(`convertHwpWithModule` 추가)와 asar 안의 `hwp_core.wasm`으로 변환. `web/document-convert.js`는 PC 쪽 변환이 실패하면 내장 재배치 해석기로 열고 "원본 쪽 보기 실패"를 표시(PC는 전환 버튼 없음). `package.json`: `@ohah/hwpjs`를 devDependencies로, 설치본 `files`·`asarUnpack`에서 제거. `scripts/compare-hwp-wasm.cjs`(문서마다 별도 프로세스로 네이티브·WASM 비교) 추가.
+- 쪽 나눔: hwpjs JSON으로 공모전 문제 HWP를 보니 5·9·15·22번 문단의 줄 위치가 문단 중간에 0 근처로 돌아감(쪽 넘김). hwp-core `pagination.rs`는 문단 첫 줄만 보고, 새 위치가 본문 높이 20% 아래면 쪽을 안 나눔 → 다음 쪽 줄이 앞 쪽 위에 겹침. 한컴 파서 코드는 고치지 않고 래퍼(`native/hwp-wasm/src/split.rs`)에서 변환 전에 문단을 나눔: 줄 위치가 앞 줄보다 작고 0.5cm 미만인 줄에서, 글자(UTF-16)·글자 모양 위치·줄 정보·영역 태그·문단 머리 개수를 나눔. 조절 문자가 문단 끝(13)뿐인 문단만, 단이 2개 이상인 구역은 제외. 시험 생성기에 `spanning` 선택(둘째 줄이 다음 쪽인 문단) 추가.
+- 검증(이번 실행): `npm.cmd test` 169개 통과(새 시험: 나눈 문단이 2쪽으로 — 네이티브는 1쪽에 겹쳐 실패함을 확인), `test:documents`·`test:reader`·`test:pdf` 통과, `android:sync`·`gradlew assembleDebug` 성공(10.7MB). 실제 문서 16개 비교: 11개 동일, 5개 달라짐(모두 쪽 넘김 문단 있는 문서) — 공모전 B 13→5쪽, 공모전 A 8→4쪽, ITO 운영지침 42→13쪽, 예정가격 143→49쪽, 정관 10쪽 그대로(한 쪽 경계만 이동). 공모전 B·ITO는 Electron으로 그려 쪽 끝·다음 쪽 첫 줄과 쪽 번호가 이어지는 것 확인. Electron 개발 실행(`electron .`)으로 `Welcome to Hwp.hwp`(네이티브는 Node 종료) → 앱 유지·재배치로 열림, 정관 → 쪽 보기로 열림(로그). `build:pc-dir` 설치본 폴더의 Electron 런타임(`ELECTRON_RUN_AS_NODE`)으로 asar 안의 `web/hwp-wasm.js`·`hwp_core.wasm`을 불러 정관 10쪽 변환 확인.
+- 미검증: 설치본 창에서 직접 열어 본 화면(화면 캡처에 다른 창이 찍혀 폐기), 실기기, 휴대폰에서 바뀐 쪽 나눔(에뮬레이터는 이전 WASM으로만 확인), 한글 프로그램 화면과의 쪽 단위 비교. 설치본은 로그를 asar 안(`root/logs`)에 쓰려 해서 남기지 못하는 기존 문제 발견(미수정).
