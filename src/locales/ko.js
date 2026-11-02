@@ -209,6 +209,10 @@ export default {
 
   "bookmarks.percentLabel": "{percent}% 위치",
   "document.opening": "문서를 변환하는 중...",
+  "document.hwpPages": "원본 쪽",
+  "document.hwpPagesTitle": "HWP를 한글에서 저장한 쪽 모양 그대로 보기(작은 화면에서는 쪽을 화면 폭에 맞춰 줄임)",
+  "document.hwpPagesLabel": "원본 쪽 모양",
+  "document.hwpPagesFailed": "원본 쪽 보기 실패, 재배치로 표시",
   "document.meta": "{name} - {size} MB · {format} · 읽기 전용(원본 배치와 다를 수 있음)",
   "document.unsupported": "지원하지 않는 문서 형식입니다.",
   "document.invalidHwp": "올바르지 않거나 손상된 HWP 파일입니다.",
@@ -277,6 +281,7 @@ export default {
   "mobile.menu": "메뉴",
   "mobile.progressToggle": "전체 화면 진행 표시: {state}",
   "mobile.pdfReflowToggle": "PDF 재배치 보기: {state}",
+  "mobile.hwpPagesToggle": "HWP 원본 쪽 보기: {state}",
   "mobile.newMarkdown": "새 문서 · Markdown 만들기",
   "mobile.tocBookmarks": "목차·책갈피",
   "mobile.readingSettings": "읽기 설정",

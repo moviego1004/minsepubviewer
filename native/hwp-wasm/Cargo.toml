@@ -1,0 +1,29 @@
+# HWP 5.0 to HTML for the phone's "original page" view (DEVELOPMENT_PLAN M9).
+# hwp-core is the same parser the desktop app runs through @ohah/hwpjs 0.1.0-rc.10 (MIT),
+# built here for wasm32-unknown-unknown: no threads, no shared memory, no WASI imports.
+# Build: npm.cmd run build:hwp-wasm (writes web/vendor/hwp/hwp_core.wasm).
+[package]
+name = "hwp-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# scripts/build-hwp-wasm.cjs checks out tag @ohah/hwpjs@0.1.0-rc.10 (33cf33e3, the version in
+# package.json) into node_modules/.cache/hwpjs-src/: not committed, outside this crate (or cargo
+# takes it for a member of this workspace) and out of `node --test`'s search. A cargo git
+# dependency fails on that commit's submodule entry without a URL.
+hwp-core = { path = "../../node_modules/.cache/hwpjs-src/crates/hwp-core" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
+strip = true
+
+[workspace]

@@ -1,10 +1,13 @@
 // Converts office and Hangul documents to HTML for DocumentReader.
 // DOCX: docx-preview, mammoth as fallback (loaded on first use). HWPX and XML HWP (HWPML): own converter.
 // Binary HWP 5.0: platform.convertHwp where available (the desktop app converts it with page layout
-// in the main process), otherwise the built-in text-and-table reader (the phone app).
+// in the main process), otherwise the built-in reader that reflows it to the screen width (the phone
+// app). The phone's original page view ({ hwpPages: true }) runs the desktop's parser as WebAssembly
+// (web/hwp-wasm.js) and falls back to the reflowed view when that fails.
 import { sniffDocumentFormat } from "../src/core/documentSniff.js";
 import { convertHwpBinary, isOleBytes } from "../src/core/hwpBinary.js";
 import { withFontFallback } from "../src/core/hwpFonts.js";
+import { convertHwpToPageHtml } from "./hwp-wasm.js";
 import {
   convertHwpmlDocument,
   convertOwpmlSection,
@@ -159,7 +162,14 @@ async function readHwpxImages(zip, xmls) {
   return images;
 }
 
-async function convertHwp(bytes, fileLike, platform) {
+// The page HTML names the document's fonts only; phones lack most of them, so each font-family in its
+// style sheets gets the same fallback stack as the reflowed view (src/core/hwpFonts.js).
+export function withPageFontFallback(html) {
+  return String(html).replace(/(<style[^>]*>)([\s\S]*?)(<\/style>)/gi, (match, open, css, close) =>
+    open + css.replace(/font-family:\s*([^;}]+)/g, (declaration, value) => `font-family:${withFontFallback(value.trim())}`) + close);
+}
+
+async function convertHwp(bytes, fileLike, platform, options) {
   if (isXmlDocumentBytes(bytes)) {
     return { html: convertHwpmlDocument(parseXml(decodeXmlBytes(bytes), "document.invalidHwpml")), layout: false };
   }
@@ -168,15 +178,24 @@ async function convertHwp(bytes, fileLike, platform) {
     const html = await platform.convertHwp({ path: fileLike.path || "", bytes: fileLike.path ? null : bytes });
     return { html, layout: true };
   }
-  return { html: await convertHwpBinary(bytes, inflateRaw), layout: false };
+  let pagesError = null;
+  if (options.hwpPages) {
+    try {
+      return { html: withPageFontFallback(await convertHwpToPageHtml(bytes)), layout: true, pages: true, pagesAvailable: true };
+    } catch (error) {
+      pagesError = error;
+    }
+  }
+  return { html: await convertHwpBinary(bytes, inflateRaw), layout: false, pagesAvailable: true, pagesError };
 }
 
 // The content decides between the converted formats; the file name is the fallback.
-export async function convertDocument(fileLike, bytes, platform) {
+// options.hwpPages: show binary HWP with its own pages where the platform does not already.
+export async function convertDocument(fileLike, bytes, platform, options = {}) {
   const sniffed = sniffDocumentFormat(bytes);
   const format = ["docx", "hwpx", "hwp"].includes(sniffed) ? sniffed : getDocumentFormat(fileLike?.name);
   if (format === "docx") return { format, ...await convertDocx(bytes, platform) };
   if (format === "hwpx") return { format, ...await convertHwpx(bytes) };
-  if (format === "hwp") return { format, ...await convertHwp(bytes, fileLike, platform) };
+  if (format === "hwp") return { format, ...await convertHwp(bytes, fileLike, platform, options) };
   throw new Error("document.unsupported");
 }

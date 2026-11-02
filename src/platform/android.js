@@ -11,6 +11,7 @@ globalThis.MINS_DOCX_PREVIEW_URL = "/vendor/docx-preview/docx-preview.min.js";
 globalThis.MINS_MAMMOTH_URL = "/vendor/mammoth/mammoth.browser.min.js";
 globalThis.MINS_PAKO_URL = "/vendor/pako/pako_inflate.min.js";
 globalThis.MINS_DOC_FONT_URL = "/vendor/fonts";
+globalThis.MINS_HWP_WASM_URL = "/vendor/hwp/hwp_core.wasm";
 let preview = null;
 
 function closeImagePreview() {

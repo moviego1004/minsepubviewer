@@ -328,6 +328,10 @@ const state = {
   pdf: null,
   pdfSelection: null,
   pdfReflow: false,
+  // Binary HWP on the phone: shown with its own pages (hwpPages) or reflowed; hwpPagesAvailable when
+  // the open document can switch.
+  hwpPages: false,
+  hwpPagesAvailable: false,
   pdfMeta: null,
   docReader: null,
   docMeta: null,
@@ -428,6 +432,7 @@ const elements = {
   pdfRotateButton: document.querySelector("#pdfRotateButton"),
   pdfSpreadButton: document.querySelector("#pdfSpreadButton"),
   pdfReflowButton: document.querySelector("#pdfReflowButton"),
+  hwpPagesButton: document.querySelector("#hwpPagesButton"),
   fullscreenButton: document.querySelector("#fullscreenButton"),
   textOnly: document.querySelector("#textOnly"),
   zoomLabel: document.querySelector("#zoomLabel"),
@@ -3229,6 +3234,17 @@ function reflowPdfLocation(pageNumber) {
   return formatPdfLocation({ pageNumber, zoom: saved?.zoom, rotation: saved?.rotation });
 }
 
+const HWP_PAGES_KEY = "minsepubviewer.hwp-pages";
+
+// Reopens the active HWP tab with its own pages or reflowed (phone; the desktop always shows pages).
+async function toggleHwpPages() {
+  const tab = getActiveTab();
+  if (tab?.kind !== "document" || !state.hwpPagesAvailable) return;
+  storage.setItem(HWP_PAGES_KEY, String(!state.hwpPages));
+  await destroyDocumentReader();
+  await openConvertedDocument(tab.payload.file);
+}
+
 // Reopens the active PDF tab in the other view.
 async function togglePdfReflow() {
   const tab = getActiveTab();
@@ -3363,6 +3379,8 @@ async function destroyDocumentReader() {
   state.docReader = null;
   state.docSelection = null;
   state.pdfReflow = false;
+  state.hwpPages = false;
+  state.hwpPagesAvailable = false;
   if (state.book.bookId !== DOC_LOADING_ID && state.mode === "document") persistBook();
   hideSelectionToolbar();
   state.searchResults = [];
@@ -3405,17 +3423,30 @@ async function openConvertedDocument(fileLike) {
   try {
     const bytes = new Uint8Array(await readFileArrayBuffer(fileLike));
     if (bytes.byteLength > DOCUMENT_MAX_BYTES) throw new Error("native.documentTooLarge");
-    const converted = await convertDocument(fileLike, bytes, platform);
+    const converted = await convertDocument(fileLike, bytes, platform, { hwpPages: storage.getItem(HWP_PAGES_KEY) === "true" });
     if (state.docReader !== reader) return;
+    if (converted.pagesError) logClient("document.hwpPages.failed", { name, error: formatError(converted.pagesError) });
     const bookId = computeBookId(bytes);
     const saved = getBookRecord(state.library, bookId);
     state.book = saved
       ? { ...saved, filePath, title: state.book.title }
       : createBookRecord({ bookId, title: state.book.title, filePath, settings: state.book.settings });
     const settings = mergeReadingSettings(state.book.settings, {});
-    await reader.open({ html: converted.html, layout: converted.layout, location: state.book.lastLocation, theme: settings.theme, zoom: settings.zoom, lang: getLocale() });
+    await reader.open({
+      html: converted.html,
+      layout: converted.layout,
+      location: state.book.lastLocation,
+      theme: settings.theme,
+      zoom: settings.zoom,
+      lang: getLocale(),
+      rangeView: converted.pages ? "page" : "",
+      fitWidth: Boolean(converted.pages)
+    });
     if (state.docReader !== reader) return;
-    state.docMeta = { name, size: (bytes.byteLength / 1024 / 1024).toFixed(2), format: (converted.format || format).toUpperCase() };
+    state.hwpPages = Boolean(converted.pages);
+    state.hwpPagesAvailable = Boolean(converted.pagesAvailable);
+    const viewNote = converted.pages ? ` · ${t("document.hwpPagesLabel")}` : converted.pagesError ? ` · ${t("document.hwpPagesFailed")}` : "";
+    state.docMeta = { name, size: (bytes.byteLength / 1024 / 1024).toFixed(2), format: (converted.format || format).toUpperCase() + viewNote };
     state.progressLabel = docProgressLabel();
     persistBook();
     render();
@@ -4096,6 +4127,9 @@ function render() {
   elements.pdfReflowButton.hidden = !(state.mode === "pdf" || state.pdfReflow);
   elements.pdfReflowButton.classList.toggle("is-active", state.pdfReflow);
   elements.pdfReflowButton.setAttribute("aria-pressed", String(state.pdfReflow));
+  elements.hwpPagesButton.hidden = !(state.mode === "document" && state.hwpPagesAvailable);
+  elements.hwpPagesButton.classList.toggle("is-active", state.hwpPages);
+  elements.hwpPagesButton.setAttribute("aria-pressed", String(state.hwpPages));
   renderPdfControls();
 
   renderMarkdownChrome();
@@ -4517,6 +4551,7 @@ elements.pdfSpreadButton.addEventListener("click", () => {
   renderPdfControls();
 });
 elements.pdfReflowButton.addEventListener("click", () => void togglePdfReflow());
+elements.hwpPagesButton.addEventListener("click", () => void toggleHwpPages());
 elements.pdfContainer.addEventListener("wheel", (event) => {
   if (!state.pdf || !(event.ctrlKey || event.metaKey)) return;
   event.preventDefault();

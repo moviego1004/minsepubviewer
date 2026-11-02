@@ -29,6 +29,15 @@ test("document ranges round-trip character offsets", () => {
   assert.throws(() => formatDocRange({ start: 5, end: 5 }), TypeError);
 });
 
+test("ranges of another view carry its name and stay out of the default view", () => {
+  const page = formatDocRange({ start: 3, end: 9 }, "page");
+  assert.equal(page, "doc-range:page:3-9");
+  assert.ok(isDocRange(page));
+  assert.deepEqual(parseDocRange(page, "page"), { start: 3, end: 9 });
+  assert.equal(parseDocRange(page), null);
+  assert.equal(parseDocRange(formatDocRange({ start: 3, end: 9 }), "page"), null);
+});
+
 test("a range is split over consecutive text nodes", () => {
   assert.deepEqual(segmentsForRange([5, 3, 10], 3, 12), [
     { index: 0, from: 3, to: 5 },

@@ -81,8 +81,12 @@ const hwpControlChar = (code, id) => {
 const hwpControlId = (id) => Buffer.from(id.split("").reverse().join(""), "latin1");
 
 // runs: [position, character shape id] pairs (PARA_CHAR_SHAPE) for styled samples.
+// Each paragraph is one line (PARA_LINE_SEG) placed below the previous one, as Hangul saves them;
+// hwpjs's page view places text by these lines.
+let lineTop = 0;
 function hwpParagraph(level, text, { paraShape = 0, runs = null } = {}) {
-  const header = Buffer.alloc(22);
+  const header = Buffer.alloc(24);
+  header.writeUInt32LE(text.length + 1, 0);
   header.writeUInt16LE(paraShape, 8);
   const records = [hwpRecord(66, level, header), hwpRecord(67, level + 1, hwpText(text))];
   if (runs) {
@@ -90,6 +94,16 @@ function hwpParagraph(level, text, { paraShape = 0, runs = null } = {}) {
     runs.forEach(([position, id], index) => { data.writeUInt32LE(position, index * 8); data.writeUInt32LE(id, index * 8 + 4); });
     records.push(hwpRecord(68, level + 1, data));
   }
+  const line = Buffer.alloc(36);
+  line.writeInt32LE(lineTop, 4);
+  line.writeInt32LE(1000, 8);
+  line.writeInt32LE(1000, 12);
+  line.writeInt32LE(850, 16);
+  line.writeInt32LE(600, 20);
+  line.writeInt32LE(42520, 28);
+  line.writeUInt32LE(0x60000, 32);
+  lineTop += 1600;
+  records.push(hwpRecord(69, level + 1, line));
   return records;
 }
 
@@ -165,18 +179,21 @@ function hwpCompress(records) {
   return Buffer.concat([zlib.deflateRawSync(records), trailer]);
 }
 
-function createSampleHwp({ paragraphCount = 40, compressed = true, styled = false } = {}) {
+// controls: false leaves out the table and the footnote, whose control records are too short for
+// hwpjs's parser (web/hwp-wasm.js); the built-in reader accepts them.
+function createSampleHwp({ paragraphCount = 40, compressed = true, styled = false, controls = true } = {}) {
+  lineTop = 0;
   const records = [...hwpParagraph(0, "HWP 5.0 검사 문서", styled ? { paraShape: 1, runs: [[0, 1], [4, 0]] } : {})];
   for (const text of paragraphs(paragraphCount, "HWP")) records.push(...hwpParagraph(0, text));
   // A 2x2 table whose first row is one merged cell, inside a paragraph of its own.
-  records.push(hwpRecord(66, 0, Buffer.alloc(22)),
+  if (controls) records.push(hwpRecord(66, 0, Buffer.alloc(24)),
     hwpRecord(67, 1, Buffer.concat([hwpControlChar(11, "tbl "), Buffer.from("\r", "utf16le")])),
     hwpRecord(71, 1, hwpControlId("tbl ")), hwpRecord(77, 2, Buffer.alloc(22)),
     ...hwpCell(2, 0, 0, "병합된 머리 칸", 2, { width: 40000, borderFill: 1 }),
     ...hwpCell(2, 0, 1, "HWP 표 왼쪽", 1, { width: 10000 }), ...hwpCell(2, 1, 1, "HWP 표 오른쪽", 1, { width: 30000 }));
   // Text with a footnote.
   const footnoteText = Buffer.concat([Buffer.from("각주가 있는 문장", "utf16le"), hwpControlChar(17, "fn  "), Buffer.from("\r", "utf16le")]);
-  records.push(hwpRecord(66, 0, Buffer.alloc(22)), hwpRecord(67, 1, footnoteText),
+  if (controls) records.push(hwpRecord(66, 0, Buffer.alloc(24)), hwpRecord(67, 1, footnoteText),
     hwpRecord(71, 1, hwpControlId("fn  ")), hwpRecord(72, 2, Buffer.alloc(8)), ...hwpParagraph(2, "HWP 각주 내용"));
 
   const header = Buffer.alloc(256);
@@ -187,7 +204,22 @@ function createSampleHwp({ paragraphCount = 40, compressed = true, styled = fals
   CFB.utils.cfb_add(file, "FileHeader", header);
   if (styled) CFB.utils.cfb_add(file, "DocInfo", compressed ? hwpCompress(hwpDocInfo()) : hwpDocInfo());
   CFB.utils.cfb_add(file, "BodyText/Section0", compressed ? hwpCompress(Buffer.concat(records)) : Buffer.concat(records));
-  return Buffer.from(CFB.write(file, { type: "buffer", fileType: "cfb" }));
+  return freeUnusedFatEntries(Buffer.from(CFB.write(file, { type: "buffer", fileType: "cfb" })));
+}
+
+// SheetJS cfb fills the FAT entries past the last sector with ENDOFCHAIN; Hangul writes FREESECT
+// there, and the stricter Rust cfb crate (hwpjs, web/hwp-wasm.js) rejects anything else.
+function freeUnusedFatEntries(buffer) {
+  const sectorSize = 1 << buffer.readUInt16LE(0x1e);
+  const sectors = buffer.length / sectorSize - 1;
+  const fatSectors = buffer.readUInt32LE(0x2c);
+  for (let i = 0; i < Math.min(fatSectors, 109); i += 1) {
+    const offset = (buffer.readUInt32LE(0x4c + i * 4) + 1) * sectorSize;
+    for (let entry = 0; entry < sectorSize / 4; entry += 1) {
+      if (i * (sectorSize / 4) + entry >= sectors) buffer.writeUInt32LE(0xffffffff, offset + entry * 4);
+    }
+  }
+  return buffer;
 }
 
 module.exports = { createSampleDocx, createSampleHwpx, createSampleHwpml, createSampleHwp };

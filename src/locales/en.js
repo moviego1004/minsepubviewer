@@ -209,6 +209,10 @@ export default {
 
   "bookmarks.percentLabel": "{percent}% position",
   "document.opening": "Converting the document...",
+  "document.hwpPages": "Pages",
+  "document.hwpPagesTitle": "Show the HWP with the pages Hangul saved (shrunk to the screen width on small screens)",
+  "document.hwpPagesLabel": "original pages",
+  "document.hwpPagesFailed": "original pages failed, reflowed",
   "document.meta": "{name} - {size} MB · {format} · read-only (layout may differ from the original)",
   "document.unsupported": "This document type is not supported.",
   "document.invalidHwp": "Invalid or corrupted HWP file.",
@@ -277,6 +281,7 @@ export default {
   "mobile.menu": "Menu",
   "mobile.progressToggle": "Progress in full screen: {state}",
   "mobile.pdfReflowToggle": "PDF reflow view: {state}",
+  "mobile.hwpPagesToggle": "HWP original pages: {state}",
   "mobile.newMarkdown": "New Markdown document",
   "mobile.tocBookmarks": "Contents & bookmarks",
   "mobile.readingSettings": "Reading settings",

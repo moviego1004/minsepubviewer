@@ -70,6 +70,14 @@ npm.cmd run android:install
 - 앱 내부 책/주석/읽기 기록과 Codex 채팅은 이 저장소 문서 동기화와 별개다. 앱 데이터의 PC 간 자동 동기화는 구현되지 않았다.
 - 테스트 화면 캡처는 과거 UI 참고 자료이며 현재 버전의 실기기 검증 증거로 간주하지 않는다.
 
+## 최신 상태 (2026-11-03)
+
+- 커밋: `3ac6af5` 0.1.12 기록 → M9 원본 쪽 보기 커밋(`git log -3`으로 확인).
+- M9: 휴대폰 HWP 원본 쪽 보기. 해석기는 `web/vendor/hwp/hwp_core.wasm`(커밋된 빌드 결과물, 다른 PC는 그대로 쓰면 됨). 원본은 `native/hwp-wasm`(래퍼 Rust 크레이트)과 `scripts/build-hwp-wasm.cjs`(hwpjs 태그 `@ohah/hwpjs@0.1.0-rc.10`을 `node_modules/.cache/hwpjs-src/`에 받아 `cargo build --release --locked --target wasm32-unknown-unknown`). `package.json`의 hwpjs 판을 올리면 스크립트의 TAG·COMMIT도 같이 바꾸고 다시 빌드한다.
+- 이날 결과: `npm.cmd test` 168개 통과, `test:documents`·`test:reader`(원본 쪽 보기·실패 시 재배치 단계 추가)·`test:pdf` 통과, `android:sync` 통과, `gradlew assembleDebug` 성공(디버그 APK 10.6MB, 이 PC는 `ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk`를 직접 지정해야 했음), API 36 Pixel_7 에뮬레이터에서 원본 쪽 보기 확인. 실기기는 다음 APK(0.1.13)로 확인.
+- 에뮬레이터 조작 시 주의: Git Bash에서 `/data/...` 같은 기기 경로 인자는 `MSYS_NO_PATHCONV=1`로 경로 변환을 꺼야 한다.
+- 다음 후보: NEXT_TASKS 첫 항목의 "발견한 문제"(PC hwpjs 네이티브 panic 시 앱 종료 위험, hwpjs 쪽 나눔 문제), XLSX·PPTX 지원 여부 논의.
+
 ## 최신 상태와 재개 절차 (2026-11-02)
 
 - 마지막 커밋: `c8e4f34`(`origin/master`와 일치). 이날 커밋: `34972e9` 나눔 글꼴·내용 판별·adb 없는 설치 → `48f42b3` M5 DOCX 서식 → `be3c242` M6 PDF 재배치 → `f2f83e4` M8 HWPX 서식 → `704fc1a` 0.1.11 버전 기록 → `08bd5b1` M7 한글 기호(PUA) → `c8e4f34` HWPX 그림·화면 시험 2개 수정.

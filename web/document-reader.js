@@ -130,10 +130,16 @@ export class DocumentReader {
     this.document = null;
     this.zoom = 1;
     this.theme = "light";
+    this.rangeView = "";
+    this.fitWidth = false;
   }
 
-  async open({ html, layout = false, location, theme = "light", zoom = 1, lang = "ko" }) {
+  // rangeView: the view name stored in highlight ranges (textAnchors.js); fitWidth: shrink laid-out
+  // pages to the frame width (the phone's HWP page view).
+  async open({ html, layout = false, location, theme = "light", zoom = 1, lang = "ko", rangeView = "", fitWidth = false }) {
     this.layout = layout;
+    this.rangeView = rangeView;
+    this.fitWidth = layout && fitWidth;
     const loaded = new Promise((resolve) => this.frame.addEventListener("load", resolve, { once: true }));
     this.frame.srcdoc = buildDocumentHtml({ html, layout, lang });
     await loaded;
@@ -165,6 +171,20 @@ export class DocumentReader {
     this.document.addEventListener("click", (event) => {
       if (event.target.closest?.("a[href]")) event.preventDefault();
     }, { signal, capture: true });
+    if (this.fitWidth) view.addEventListener("resize", () => this.setZoom(this.zoom), { signal });
+  }
+
+  // How much the widest page must shrink to fit the frame (1 when it fits or fitWidth is off).
+  #fitScale() {
+    if (!this.fitWidth) return 1;
+    const body = this.document.body;
+    const previous = body.style.zoom;
+    body.style.zoom = "1";
+    let widest = 0;
+    for (const page of this.document.querySelectorAll(".hpa")) widest = Math.max(widest, page.offsetWidth);
+    body.style.zoom = previous;
+    const width = this.frame.clientWidth - 12;
+    return widest > 0 && width > 0 && widest > width ? width / widest : 1;
   }
 
   get scroller() {
@@ -221,7 +241,7 @@ export class DocumentReader {
     const ratio = this.pageState.ratio;
     this.zoom = Math.min(3, Math.max(0.4, Number(zoom) || 1));
     if (!this.document) return;
-    this.document.body.style.zoom = String(this.zoom);
+    this.document.body.style.zoom = String(this.zoom * this.#fitScale());
     this.goToLocation(formatDocLocation(ratio));
   }
 
@@ -252,7 +272,7 @@ export class DocumentReader {
     const frameRect = this.frame.getBoundingClientRect();
     return {
       quote,
-      range: formatDocRange({ start, end }),
+      range: formatDocRange({ start, end }, this.rangeView),
       location: this.currentLocation(),
       clientRect: { left: frameRect.left + rect.left, top: frameRect.top + rect.top, width: rect.width, height: rect.height }
     };
@@ -289,7 +309,7 @@ export class DocumentReader {
     if (!this.document) return;
     this.#unwrapMarks();
     for (const highlight of this.getHighlights()) {
-      const range = parseDocRange(highlight.range);
+      const range = parseDocRange(highlight.range, this.rangeView);
       if (range) this.#wrap(range.start, range.end, `is-${highlight.color || "note"}`, { annotationId: highlight.id });
     }
     this.#searchMatches.forEach((match, index) => {
@@ -310,7 +330,7 @@ export class DocumentReader {
   }
 
   goToRange(value) {
-    const range = parseDocRange(value);
+    const range = parseDocRange(value, this.rangeView);
     if (range && this.document) this.#scrollToOffset(range.start);
   }
 

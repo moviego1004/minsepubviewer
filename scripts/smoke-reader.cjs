@@ -26,6 +26,8 @@ app.whenReady().then(async () => {
   const epub = await zip.generateAsync({ type: "base64" });
   const docx = (await createSampleDocx()).toString("base64");
   const hwp = createSampleHwp().toString("base64");
+  // Without the table and footnote, whose sample records hwpjs's parser rejects: opens in page view.
+  const hwpPages = createSampleHwp({ paragraphCount: 60, styled: true, controls: false }).toString("base64");
   const hwpx = (await createSampleHwpx()).toString("base64");
   const { computeBookId } = await import("../src/core/books.js");
   const bookId = computeBookId(Buffer.from(epub, "base64"));
@@ -43,10 +45,12 @@ app.whenReady().then(async () => {
     window.MINS_MAMMOTH_URL = '/dist/mobile/vendor/mammoth/mammoth.browser.min.js';
     window.MINS_PAKO_URL = '/dist/mobile/vendor/pako/pako_inflate.min.js';
     window.MINS_DOC_FONT_URL = '/dist/mobile/vendor/fonts';
+    window.MINS_HWP_WASM_URL = '/dist/mobile/vendor/hwp/hwp_core.wasm';
     const docxBytes = Uint8Array.from(atob('${docx}'), value => value.charCodeAt(0)).buffer;
     // Binary HWP 5.0 is read by the built-in text-and-table reader on the phone.
     const hwpBytes = Uint8Array.from(atob('${hwp}'), value => value.charCodeAt(0)).buffer;
     const hwpxBytes = Uint8Array.from(atob('${hwpx}'), value => value.charCodeAt(0)).buffer;
+    const hwpPagesBytes = Uint8Array.from(atob('${hwpPages}'), value => value.charCodeAt(0)).buffer;
     const pdfFile = { path: '/app/documents/sample.pdf', name: 'sample.pdf', size: ${samplePdf.length}, pdfUrl: window.location.origin + '/_pdf/sample.pdf', type: 'application/pdf' };
     window.minsePlatform = {
       kind: 'android', isMobile: true, storage: window.localStorage,
@@ -61,6 +65,7 @@ app.whenReady().then(async () => {
         if (kind === 'pdf') return { kind, file: { ...pdfFile } };
         if (kind === 'docx') return { kind: 'document', file: { path: '/app/documents/sample.docx', name: 'sample.docx', size: docxBytes.byteLength, bytes: docxBytes.slice(0) } };
         if (kind === 'hwp') return { kind: 'document', file: { path: '/app/documents/old.hwp', name: 'old.hwp', size: hwpBytes.byteLength, bytes: hwpBytes.slice(0) } };
+        if (kind === 'hwpPages') return { kind: 'document', file: { path: '/app/documents/pages.hwp', name: 'pages.hwp', size: hwpPagesBytes.byteLength, bytes: hwpPagesBytes.slice(0) } };
         if (kind === 'hwpx') return { kind: 'document', file: { path: '/app/documents/new.hwpx', name: 'new.hwpx', size: hwpxBytes.byteLength, bytes: hwpxBytes.slice(0) } };
         return { kind: 'epub', file: { ...epubFile } };
       },
@@ -388,6 +393,22 @@ app.whenReady().then(async () => {
   await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('p')?.textContent === 'HWP 5.0 검사 문서' && document.querySelector('#docFrame').contentDocument.querySelector('td[colspan=\"2\"]')?.textContent === '병합된 머리 칸'");
   // The bundled Korean fonts load from the mobile build inside the document frame.
   assert.equal(await run("Promise.all(['400 16px \"Nanum Gothic\"', '700 16px \"Nanum Myeongjo\"'].map(font => document.querySelector('#docFrame').contentDocument.fonts.load(font, '한글'))).then(sets => sets.map(set => set.length).join(','))"), "1,1", "Bundled Nanum fonts load in converted documents");
+  // HWP original page view: the sample's table records are too short for hwpjs, so it falls back to
+  // the reflowed view; a sample without them opens with its pages shrunk to the screen width.
+  const docText = "document.querySelector('#docFrame').contentDocument";
+  await waitFor("!document.querySelector('#hwpPagesButton').hidden && document.querySelector('#hwpPagesButton').getAttribute('aria-pressed') === 'false'");
+  await run("document.querySelector('#hwpPagesButton').click()");
+  await waitFor(`document.querySelector('#bookMeta').textContent.includes('원본 쪽 보기 실패') && ${docText}?.querySelector('td[colspan="2"]')?.textContent === '병합된 머리 칸'`);
+  await run("window.__nextOpenKind = 'hwpPages'; document.querySelector('#mobileOpenFile').click()");
+  await waitFor(`${docText}?.body.classList.contains('is-layout') && ${docText}.querySelector('.hpa') && ${docText}.body.textContent.includes('HWP 문단 60') && document.querySelector('#hwpPagesButton').getAttribute('aria-pressed') === 'true'`);
+  // The page is shrunk to the width, then scaled by the reading zoom (enlarged by the pinch above).
+  const fit = await run(`(() => { const doc = ${docText}; const page = doc.querySelector('.hpa'); return { zoom: Number(doc.body.style.zoom), reading: parseInt(document.querySelector('#zoomLabel').textContent) / 100, page: page.offsetWidth, width: doc.documentElement.clientWidth, meta: document.querySelector('#bookMeta').textContent }; })()`);
+  const fitted = fit.page * fit.zoom / fit.reading;
+  // The zoom label is rounded to whole percents, hence the tolerance.
+  assert.ok(fit.zoom / fit.reading < 0.8 && Math.abs(fitted - (fit.width - 12)) < fit.width * 0.04, `HWP pages fit the phone width: ${JSON.stringify(fit)}`);
+  assert.match(fit.meta, /원본 쪽 모양/);
+  await run("document.querySelector('#hwpPagesButton').click()");
+  await waitFor(`${docText}?.body.classList.contains('is-flow') && ${docText}.querySelector('p')?.textContent === 'HWP 5.0 검사 문서' && document.querySelector('#hwpPagesButton').getAttribute('aria-pressed') === 'false'`);
   await run("window.__nextOpenKind = 'hwpx'; document.querySelector('#mobileOpenFile').click()");
   await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('p')?.textContent === 'HWPX 검사 문서' && document.querySelector('#docFrame').contentDocument.querySelector('td')?.textContent === 'HWPX 표'");
   await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");
@@ -395,7 +416,7 @@ app.whenReady().then(async () => {
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, scroll/swipe paging in EPUB (continuous), PDF (page and continuous) and DOCX, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, scroll/swipe paging in EPUB (continuous), PDF (page and continuous) and DOCX, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 (reflowed, original pages fitted to the width, fallback) and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);

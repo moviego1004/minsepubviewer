@@ -30,18 +30,25 @@ export function isDocRange(value) {
   return typeof value === "string" && value.startsWith(RANGE_PREFIX);
 }
 
-export function formatDocRange({ start, end }) {
+// A view other than the default (the phone's HWP page view, "page") has other text, so its ranges
+// carry the view name and the other view ignores them: "doc-range:page:12-20".
+function rangePrefix(view) {
+  return view ? `${RANGE_PREFIX}${view}:` : RANGE_PREFIX;
+}
+
+export function formatDocRange({ start, end }, view = "") {
   const from = Math.trunc(Number(start));
   const to = Math.trunc(Number(end));
   if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to <= from) {
     throw new TypeError("A document range needs 0 <= start < end");
   }
-  return `${RANGE_PREFIX}${from}-${to}`;
+  return `${rangePrefix(view)}${from}-${to}`;
 }
 
-export function parseDocRange(value) {
-  if (!isDocRange(value)) return null;
-  const match = /^(\d+)-(\d+)$/.exec(value.slice(RANGE_PREFIX.length));
+export function parseDocRange(value, view = "") {
+  const prefix = rangePrefix(view);
+  if (typeof value !== "string" || !value.startsWith(prefix)) return null;
+  const match = /^(\d+)-(\d+)$/.exec(value.slice(prefix.length));
   if (!match) return null;
   const start = Number(match[1]);
   const end = Number(match[2]);

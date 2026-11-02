@@ -37,6 +37,10 @@ await mkdir(resolve(output, "vendor/mammoth"), { recursive: true });
 await copyFile("node_modules/mammoth/mammoth.browser.min.js", resolve(output, "vendor/mammoth/mammoth.browser.min.js"));
 await copyFile("node_modules/mammoth/LICENSE", resolve(output, "vendor/mammoth/LICENSE"));
 // HWP 5.0 section decompression (see web/document-convert.js).
+// HWP page view (web/hwp-wasm.js): hwpjs's parser built by scripts/build-hwp-wasm.cjs.
+await mkdir(resolve(output, "vendor/hwp"), { recursive: true });
+await copyFile("web/vendor/hwp/hwp_core.wasm", resolve(output, "vendor/hwp/hwp_core.wasm"));
+await copyFile("web/vendor/hwp/LICENSE.hwpjs.txt", resolve(output, "vendor/hwp/LICENSE.hwpjs.txt"));
 await mkdir(resolve(output, "vendor/pako"), { recursive: true });
 await copyFile("node_modules/pako/dist/pako_inflate.min.js", resolve(output, "vendor/pako/pako_inflate.min.js"));
 await copyFile("node_modules/pako/LICENSE", resolve(output, "vendor/pako/LICENSE"));
