@@ -250,3 +250,15 @@
 - 결정 이유: 재배치를 변환 문서 뷰어에 태워 검색·형광펜·확대·테마를 그대로 재사용. 책 기록은 PDF와 공유하고 위치는 쪽 단위 PDF 위치로 저장(배율·회전은 유지)해 보기를 바꿔도 같은 쪽.
 - 검증(이번 실행): `npm.cmd test` 157개 통과, `node --check web/app.js` 통과, `npm.cmd run test:pdf` 통과(재배치 단계 포함, 콘솔 오류 없음), `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. PyMuPDF로 만든 한국어 3쪽 PDF(제목, 절 제목, 들여쓴 문단, 목록, 반복 머리글, 쪽 번호)를 Node PDF.js로 재배치해 구조 확인, Electron에서 화면 확인. API 36 에뮬레이터: PDF 열기 → ☰ "PDF reflow view: Off" → 켜짐 시 화면 폭 재배치·쪽 구분선 표시, 끄면 원본 보기가 같은 쪽(2/3)으로 돌아옴.
 - 미검증: 실제 PDF(다단 논문, 표, 각주), 큰 PDF의 글자 추출 시간(모든 쪽을 한 번에 읽음), 실기기, WebView 83.
+
+## M8 HWPX 서식 (2026-11-02)
+
+- 사용자 요청: "M8 진행해줘". 시작 시 미커밋 변경은 사용자의 버전 올림(0.1.10 → 0.1.11: `package.json`, `package-lock.json`, `android/app/build.gradle`, `installer.nsi`)과 줄바꿈만 다른 생성 파일이었고, 버전 올림은 보존하고 이번 커밋에 넣지 않음.
+- 변경:
+  - `src/core/hwpXml.js`: `readOwpmlHeader` — `hh:fontface`(언어별 글꼴), `hh:charPr`(크기·상대 크기·굵게·기울임·밑줄·취소선·위/아래 첨자·자간·글자 색·음영), `hh:paraPr`(정렬·여백·들여쓰기·줄 간격 %·문단 배경), `hh:borderFill`(선 종류·굵기·색, 칸 배경)을 `.hcN/.hpN/.hbN` CSS로. `convertOwpmlSection(document, styles)` — 문단·글자 구간·표 칸에 클래스, 칸 너비 비율·안쪽 여백(`hasMargin`이 0이면 표 `inMargin`)·세로 정렬, 글상자(`drawText`) 글자를 `.hwp-box`로. 끝 공백 제거.
+  - `web/document-convert.js`: HWPX의 `Contents/header.xml`을 읽어 `<style>`과 함께 적용, 실패 시 서식 없이.
+  - `test/core/hwpXml.test.js`: 머리 정보 해석·구역 적용 시험 2개. `scripts/sample-documents.cjs`·`scripts/smoke-documents.cjs`: 시험용 HWPX에 header.xml, 화면 시험에서 계산된 색·굵기·정렬·칸 배경·테두리 확인.
+- 확인한 형식 사실(PC의 실제 HWPX 10개 대조, 파일은 저장소에 넣지 않음): 한글 2016 이후 문단 여백은 `hp:switch`의 case에 실제 값, default에 2배 값(이진 HWP와 같음) → default를 /200pt로 사용. 글자 크기 `height`는 1/100pt. 취소선 없는 글자 모양도 `strikeout shape="3D"`를 씀(327개 중 325개) → 3D·NONE은 취소선 아님. 줄 간격은 PERCENT(3348)·AT_LEAST(2)만 있었고 FIXED는 없어 PERCENT만 적용. 칸 크기·여백은 1/100pt.
+- 검증(이번 실행): `npm.cmd test` 159개 통과, `node --check web/app.js`·`web/document-convert.js` 통과, `npm.cmd run test:documents` 통과(HWPX 서식 단계 포함; 직전까지 시간 초과 나던 DOCX 위치 복원도 이번엔 통과), `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. 실제 HWPX 9개 Node 변환 오류 없음(5.7MB 문서 0.6초). Electron 화면: 제목 표 빨간 테두리·가운데 큰 글씨, 칸 배경, 내어쓰기, 명조/고딕 구분, 표 머리 배경색. API 36 에뮬레이터에 설치해 VIEW로 열어 같은 서식(나눔명조·나눔고딕) 확인.
+- `npm.cmd run test:reader`: Markdown 최근 파일 다시 열기 단계에서 시간 초과 — 이번 변경을 빼고 돌려도 같은 곳에서 실패(기존 문제).
+- 미검증: 실기기, 글자 단위 여백(`unit="CHAR"`)·고정 줄 간격 문서, 그림·각주·머리말, WebView 83. XML HWP(HWPML) 서식은 하지 않음.

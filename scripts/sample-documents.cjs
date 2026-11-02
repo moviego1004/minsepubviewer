@@ -19,8 +19,15 @@ async function createSampleHwpx() {
   const zip = new JSZip();
   zip.file("mimetype", "application/hwp+zip");
   zip.file("Contents/content.hpf", '<?xml version="1.0" encoding="UTF-8"?><opf:package xmlns:opf="http://www.idpf.org/2007/opf/"/>');
+  // Header styles: character shape 1 is bold red, paragraph shape 1 is centred, border fill 2 is a grey cell.
+  zip.file("Contents/header.xml", '<?xml version="1.0" encoding="UTF-8"?><hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core"><hh:refList>'
+    + '<hh:fontfaces><hh:fontface lang="HANGUL"><hh:font id="0" face="함초롬바탕"/></hh:fontface><hh:fontface lang="LATIN"><hh:font id="0" face="함초롬바탕"/></hh:fontface></hh:fontfaces>'
+    + '<hh:borderFills><hh:borderFill id="2"><hh:leftBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:rightBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:topBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:bottomBorder type="SOLID" width="0.12 mm" color="#000000"/><hc:fillBrush><hc:winBrush faceColor="#D9D9D9"/></hc:fillBrush></hh:borderFill></hh:borderFills>'
+    + '<hh:charProperties><hh:charPr id="0" height="1000" textColor="#000000" shadeColor="none"><hh:fontRef hangul="0" latin="0"/></hh:charPr><hh:charPr id="1" height="1600" textColor="#FF0000" shadeColor="none"><hh:fontRef hangul="0" latin="0"/><hh:bold/></hh:charPr></hh:charProperties>'
+    + '<hh:paraProperties><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr><hh:paraPr id="1"><hh:align horizontal="CENTER"/></hh:paraPr></hh:paraProperties>'
+    + '</hh:refList></hh:head>');
   const body = paragraphs(40, "HWPX").map((text) => `<hp:p><hp:run><hp:t>${text}</hp:t></hp:run></hp:p>`).join("");
-  zip.file("Contents/section0.xml", `<?xml version="1.0" encoding="UTF-8"?><hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"><hp:p><hp:run><hp:t>HWPX 검사 문서</hp:t></hp:run></hp:p>${body}<hp:p><hp:run><hp:tbl><hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>HWPX 표</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></hp:run></hp:p></hs:sec>`);
+  zip.file("Contents/section0.xml", `<?xml version="1.0" encoding="UTF-8"?><hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"><hp:p paraPrIDRef="1"><hp:run charPrIDRef="1"><hp:t>HWPX 검사 문서</hp:t></hp:run></hp:p>${body}<hp:p><hp:run><hp:tbl><hp:tr><hp:tc borderFillIDRef="2"><hp:subList><hp:p><hp:run><hp:t>HWPX 표</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></hp:run></hp:p></hs:sec>`);
   return zip.generateAsync({ type: "nodebuffer" });
 }
 

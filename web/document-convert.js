@@ -10,6 +10,7 @@ import {
   convertOwpmlSection,
   decodeXmlBytes,
   isXmlDocumentBytes,
+  readOwpmlHeader,
   sortOwpmlSectionPaths
 } from "../src/core/hwpXml.js";
 
@@ -123,10 +124,20 @@ async function convertHwpx(bytes) {
   }
   const sections = sortOwpmlSectionPaths(Object.keys(zip.files));
   if (!sections.length) throw new Error("document.invalidHwpx");
-  const parts = [];
+  // A document whose styles cannot be read is still shown, without them.
+  let styles = null;
+  const header = zip.file("Contents/header.xml");
+  if (header) {
+    try {
+      styles = readOwpmlHeader(parseXml(decodeXmlBytes(await header.async("uint8array")), "document.invalidHwpx"));
+    } catch {
+      styles = null;
+    }
+  }
+  const parts = styles ? [`<style>${styles.css}</style>`] : [];
   for (const path of sections) {
     const xml = decodeXmlBytes(await zip.file(path).async("uint8array"));
-    parts.push(convertOwpmlSection(parseXml(xml, "document.invalidHwpx")));
+    parts.push(convertOwpmlSection(parseXml(xml, "document.invalidHwpx"), styles));
   }
   return { html: parts.join(""), layout: false };
 }

@@ -112,7 +112,9 @@ app.whenReady().then(async () => {
   await open("sample.hwpx");
   await opened("HWPX 검사 문서");
   assert.ok(await run(frame("doc.querySelectorAll('table.hwp-table td').length === 1")));
-  console.log("HWPX opened");
+  const hwpxStyles = await run(frame("(() => { const title = getComputedStyle(doc.querySelector('.hwp-styled .hc1')); const cell = getComputedStyle(doc.querySelector('td.hb2')); return { color: title.color, weight: title.fontWeight, align: getComputedStyle(doc.querySelector('p.hp1')).textAlign, cell: cell.backgroundColor, border: cell.borderTopStyle }; })()"));
+  assert.deepEqual(hwpxStyles, { color: "rgb(255, 0, 0)", weight: "700", align: "center", cell: "rgb(217, 217, 217)", border: "solid" });
+  console.log("HWPX opened with its header styles");
 
   await open("sample.hwp");
   await opened("HWPML 검사 문서");
