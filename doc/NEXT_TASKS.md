@@ -1,6 +1,6 @@
 # 다음 작업
 
-최종 갱신: 2026-11-02
+최종 갱신: 2026-11-02 (다른 PC 재개 절차는 HANDOFF.md "최신 상태와 재개 절차")
 
 전체 요구사항·개발 방안·로드맵은 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5장 "앞으로 할 일"을 기준으로 한다.
 
@@ -16,7 +16,7 @@
 - 사용자 요청: "xml 형식은 test 폴더 밑에 트러스트기획_화주 중심 무역 증빙 관리 서비스.hwpx 로 넣어 놨어. 실패하는 것과 xml 형식 hwp 보이기부터 진행해줘. 다되면 커밋, 푸시해줘". 엑셀·PPT는 사용자가 나중에 다시 검토하기로 함(보류).
 - 확인: 받은 파일은 보통 HWPX(ZIP 안 XML)이며 `.gitignore`(`test/*.hwpx`)로 커밋 제외. M8로 서식은 이미 표시되고, 빠진 것은 그림 1개(서비스 구성도)뿐이었음 → HWPX 그림 표시 추가. (HWPML 단일 XML 파일은 여전히 시험 파일 없음.)
 - 완료: `src/core/hwpXml.js` `owpmlImagePaths`·`hp:pic` 처리, `web/document-convert.js` 그림 data URL, `web/document-reader.js` `.hwp-figure`. `test:documents`: 검색 후 위치를 기대하던 잘못된 단계 수정 + HWPX 그림 확인. `test:reader`: 전체 제한 90초 → 180초(실제 소요 약 100~107초).
-- 남은 일: `test:reader` 실행 중 가끔(6번 중 1번) epub.js 콘솔 오류 `Cannot read properties of undefined (reading 'bounds')` — 공유 Markdown을 보다 EPUB을 다시 열 때. 압축 안 된 epub.js로 5번 재현 시도했으나 재현 안 됨, 원인 미확정.
+- 남은 일: `test:reader` 실행 중 가끔(6번 중 1번) epub.js 콘솔 오류 `Cannot read properties of undefined (reading 'bounds')` — 공유 Markdown을 보다 EPUB을 다시 열 때. 압축 안 된 epub.js로 5번 재현 시도했으나 재현 안 됨, 원인 미확정. 2026-09-28 기록(HANDOFF)에도 같은 오류가 있었던 오래된 문제.
 - 다음(제안): 실기기 확인용 새 빌드(0.1.12) → M9 원본 쪽 보기(사용자 결정). XLSX·PPTX는 보류.
 
 ## 이전 요청 — M7 HWP 기호(PUA) 대응 (완료, 2026-11-02)

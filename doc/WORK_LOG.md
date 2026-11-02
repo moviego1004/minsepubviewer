@@ -290,3 +290,9 @@
 - 변경: `src/core/hwpXml.js`, `web/document-convert.js`, `web/document-reader.js`, `test/core/hwpXml.test.js`(그림 시험 1개), `scripts/sample-documents.cjs`(4×4 PNG 생성), `scripts/smoke-documents.cjs`, `scripts/smoke-reader.cjs`.
 - 검증(이번 실행): `npm.cmd test` 163개 통과, `node --check`(app.js, document-convert.js) 통과, `npm.cmd run test:documents` 4번 연속 통과(수정 후), `npm.cmd run test:reader` 2번 통과(+임시 사본 5번 통과), `npm.cmd run test:pdf` 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. Electron에서 받은 HWPX의 서비스 구성도 그림 표시 확인, API 36 에뮬레이터에서 같은 그림을 넣은 시험 HWPX로 표시 확인(시험 파일·에뮬레이터 사본은 삭제).
 - 미검증: 실기기, 큰 그림 여러 장 문서의 메모리·속도, 떠 있는 그림의 원래 위치(왼쪽/가운데/글 뒤 등은 재현 안 함), HWP 5.0 이진 문서의 그림(아직 미지원).
+
+## 다른 PC 인수인계 문서 정리 (2026-11-02)
+
+- 사용자 요청: "커밋 푸시해줘. 다른 pc에서도 작업 이어서 할 수 있도록 관련 문서들도 다 커밋해줘". 시작 시 작업 트리 깨끗, `master`와 `origin/master`가 `c8e4f34`로 일치.
+- 변경: `doc/HANDOFF.md`에 "최신 상태와 재개 절차 (2026-11-02)" 절 추가(이날 커밋 목록, `npm.cmd ci` 필요 이유, 확인 명령과 이날 결과, 에뮬레이터 설치 방법, Git 제외 개인 시험 문서, 0.1.12 빌드 필요, 알려진 epub.js `bounds` 오류가 2026-09-28부터 있던 문제라는 점). 기존 "이번 검증 (2026-10-17)" 제목은 "이전 검증"으로 바꿈. `doc/NEXT_TASKS.md`에 재개 절차 위치와 `bounds` 오류 이력 표시.
+- 검증: 문서만 변경. 적은 명령·경로(`scripts/install_app_adb.py`, `.gitignore`의 `test/*.hwpx`·`test/*.apk`, `npm.cmd run test:*`)가 실제와 맞는지 확인. 시험·빌드는 다시 돌리지 않음(직전 결과는 위 항목).

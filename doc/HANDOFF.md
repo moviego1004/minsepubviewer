@@ -70,7 +70,23 @@ npm.cmd run android:install
 - 앱 내부 책/주석/읽기 기록과 Codex 채팅은 이 저장소 문서 동기화와 별개다. 앱 데이터의 PC 간 자동 동기화는 구현되지 않았다.
 - 테스트 화면 캡처는 과거 UI 참고 자료이며 현재 버전의 실기기 검증 증거로 간주하지 않는다.
 
-## 이번 검증 (2026-10-17)
+## 최신 상태와 재개 절차 (2026-11-02)
+
+- 마지막 커밋: `c8e4f34`(`origin/master`와 일치). 이날 커밋: `34972e9` 나눔 글꼴·내용 판별·adb 없는 설치 → `48f42b3` M5 DOCX 서식 → `be3c242` M6 PDF 재배치 → `f2f83e4` M8 HWPX 서식 → `704fc1a` 0.1.11 버전 기록 → `08bd5b1` M7 한글 기호(PUA) → `c8e4f34` HWPX 그림·화면 시험 2개 수정.
+- 새 PC에서는 반드시 `npm.cmd ci`(이날 `docx-preview` 0.4.1, `@fontsource/noto-sans-symbols-2` 5.3.0이 추가됨). 그다음 확인 순서와 이날 결과:
+  - `npm.cmd test` 163개 통과
+  - `npm.cmd run test:documents` 통과(DOCX·HWPX 서식·그림·XML HWP)
+  - `npm.cmd run test:reader` 통과(약 100~107초 걸림; 전체 제한 180초)
+  - `npm.cmd run test:pdf` 통과(재배치 보기 포함)
+  - `npm.cmd run android:sync` 통과. 뒤에 생기는 줄바꿈만 다른 변경은 `git checkout -- android/app/capacitor.build.gradle android/capacitor.settings.gradle web/vendor/`로 되돌린다.
+  - Android 빌드: `android` 폴더에서 `gradlew.bat assembleDebug`(SDK 경로는 `ANDROID_HOME` 또는 `android/local.properties`, 커밋 안 함).
+- 에뮬레이터 확인(adb.exe가 막힌 PC): AVD를 `emulator -avd <이름> -no-window -no-audio -no-snapshot-save -no-boot-anim`으로 띄우고 `python scripts/install_app_adb.py --tcp [--no-launch]`(첫 부팅은 `MINS_BOOT_TIMEOUT=400`). 이날은 API 36 `Pixel_7`에서 HWP·HWPX 서식, 기호, 그림, DOCX, PDF 재배치를 확인. 실기기는 아직 확인 전.
+- 개인 시험 문서는 저장소에 없다: `test/*.hwp`, `test/*.hwpx`, `test/*.docx`, `test/*.pdf`, `test/sample/`, `test/*.apk`는 `.gitignore` 대상(예: `test/트러스트기획_화주 중심 무역 증빙 관리 서비스.hwpx`, `test/PolarisOffice.apk`). 다른 PC에서는 각자 가진 파일로 확인한다. 자동 시험은 `scripts/sample-*.cjs`가 만드는 시험 파일만 쓴다.
+- 배포 파일: 현재 버전 0.1.11. 휴대폰에서 M7·M8·HWPX 그림을 보려면 `npm.cmd run android:apk`로 0.1.12를 새로 만든다(버전이 자동으로 올라감).
+- 알려진 문제: `test:reader` 중 가끔(2026-11-02 6번 중 1번) epub.js 콘솔 오류 `Cannot read properties of undefined (reading 'bounds')`가 공유 Markdown → EPUB 다시 열기 직후 나서 마지막 "콘솔 오류 없음" 검사가 실패할 수 있다. 2026-09-28에도 같은 오류가 기록됨(아래). 원인 미확정.
+- 남은 일과 순서는 [NEXT_TASKS.md](NEXT_TASKS.md) 첫 항목, 단계별 근거는 [WORK_LOG.md](WORK_LOG.md) 끝부분, 전체 로드맵(M1~M9 표)은 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5.1.
+
+## 이전 검증 (2026-10-17)
 
 - 시작 시 `git fetch` 후 로컬 `master`와 `origin/master`가 `39cef44`로 일치했다.
 - `npm.cmd test`: 119개 통과.
