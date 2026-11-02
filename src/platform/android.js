@@ -7,6 +7,7 @@ import { errorText, initI18n, setText, t } from "../../web/i18n.js";
 const Documents = registerPlugin("ReaderDocuments");
 // PDF.js legacy build copied by scripts/build-mobile.js, for older Android WebViews.
 globalThis.MINS_PDFJS_BASE = "/vendor/pdfjs/";
+globalThis.MINS_DOCX_PREVIEW_URL = "/vendor/docx-preview/docx-preview.min.js";
 globalThis.MINS_MAMMOTH_URL = "/vendor/mammoth/mammoth.browser.min.js";
 globalThis.MINS_PAKO_URL = "/vendor/pako/pako_inflate.min.js";
 globalThis.MINS_DOC_FONT_URL = "/vendor/fonts";

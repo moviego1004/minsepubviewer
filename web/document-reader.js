@@ -23,20 +23,24 @@ body { margin: 0; color: var(--doc-fg); background: var(--doc-page); }
 body.is-flow { max-width: 46em; margin: 0 auto; padding: 32px 28px 64px; background: var(--doc-bg);
   font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
   font-size: 17px; line-height: 1.7; word-break: keep-all; overflow-wrap: anywhere; min-height: 100vh; box-sizing: border-box; }
-body.is-flow table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
-body.is-flow td, body.is-flow th { border: 1px solid color-mix(in srgb, currentColor 45%, transparent); padding: 4px 8px; vertical-align: top; }
-body.is-flow td p { margin: 0.2em 0; }
+body.is-flow:where(:not(.is-docx)) table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
+body.is-flow:where(:not(.is-docx)) :is(td, th) { border: 1px solid color-mix(in srgb, currentColor 45%, transparent); padding: 4px 8px; vertical-align: top; }
+body.is-flow:where(:not(.is-docx)) td p { margin: 0.2em 0; }
 body.is-flow img { max-width: 100%; height: auto; }
 body.is-flow a { color: inherit; }
 body.is-flow .hwp-box { margin: 0.8em 0; padding: 0.4em 0.8em; border: 1px dashed color-mix(in srgb, currentColor 35%, transparent); }
 body.is-flow .hwp-note-ref { font-size: 0.7em; }
 body.is-flow .hwp-notes { margin-top: 2em; padding-top: 0.6em; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.85em; }
 body.is-flow .hwp-notes p { margin: 0.2em 0; }
+/* DOCX (docx-preview) draws its own tables. The phone drops the page margins; the desktop shows
+   each page as a sheet. */
+body.is-flow section.docx { padding: 0 !important; min-height: 0 !important; overflow: visible; }
+body.is-layout section.docx { margin: 0 auto 6mm; background: #fff; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25); }
 /* HWP pages (.hpa) paint their white sheet with a negative z-index, so the body stays transparent. */
 body.is-layout { padding: 12px 0 48px; background: transparent; }
 body.is-layout .hpa { margin: 0 auto 6mm !important; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25) !important; }
 body.is-layout.theme-dark { filter: invert(0.9) hue-rotate(180deg); }
-/* Documents with their own colours (styled HWP) are drawn light and inverted for the dark theme. */
+/* Documents with their own colours (styled HWP, DOCX) are drawn light and inverted for the dark theme. */
 body.is-flow.has-own-colors.theme-dark { background: #fffdf8; color: #202327; filter: invert(0.9) hue-rotate(180deg); }
 mark.mins-doc-mark { color: inherit; border-radius: 2px; }
 mark.mins-doc-mark.is-yellow { background: rgba(248, 217, 74, 0.55); }
@@ -78,9 +82,12 @@ export function buildDocumentHtml({ html, layout = false, lang = "ko" }) {
       if (/^on/i.test(name) || (/^(href|src|xlink:href)$/i.test(name) && /^\s*javascript:/i.test(value))) element.removeAttribute(name);
     }
   }
+  const docx = Boolean(parsed.querySelector(".docx-styled"));
+  const bodyClasses = [layout ? "is-layout" : "is-flow", ...(docx ? ["is-docx"] : []),
+    ...(docx || parsed.querySelector(".hwp-styled") ? ["has-own-colors"] : [])];
   return `<!doctype html><html lang="${escapeAttribute(lang)}"><head><meta charset="utf-8">`
     + `<style>${bundledFontCss()}</style><style>${styles.join("\n")}</style><style>${BASE_CSS}</style></head>`
-    + `<body class="${layout ? "is-layout" : "is-flow"}${parsed.querySelector(".hwp-styled") ? " has-own-colors" : ""}">${parsed.body.innerHTML}</body></html>`;
+    + `<body class="${bodyClasses.join(" ")}">${parsed.body.innerHTML}</body></html>`;
 }
 
 export class DocumentReader {

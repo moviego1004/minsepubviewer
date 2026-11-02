@@ -223,3 +223,17 @@
 - 변경 파일: `scripts/install_app_adb.py`, `scripts/build-mobile.js`, `doc/ANDROID.md`, `doc/DEVELOPMENT_PLAN.md`, `doc/NEXT_TASKS.md`, `doc/HANDOFF.md`, 이 기록.
 - 검증: `npm.cmd test` 150개 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공(버전 번호 그대로). 에뮬레이터 결과는 위와 같음.
 - 미검증: 실제 휴대폰(USB `--usb` 경로 포함), WebView 83 화면 배치 문제의 원인.
+
+## M5 DOCX 서식 보기 (2026-11-02)
+
+- 사용자 요청: 지금까지 변경을 커밋하고(`34972e9`) 계획을 이어서 진행, 테스트 통과 시 커밋·푸시.
+- 변경:
+  - `package.json`·`package-lock.json`: `docx-preview` 0.4.1(Apache-2.0, 2026-09-21 배포, 75KB, JSZip 전역 사용) 고정, PC 패키지 파일 목록 추가.
+  - `web/document-convert.js`: 스크립트 로더 공통화(`loadGlobal`), DOCX는 docx-preview(`useBase64URL`, PC는 쪽 나눔·머리말/꼬리말, 휴대폰은 `ignoreWidth/Height`), 글꼴 값에 대체 목록 추가, Symbol/Wingdings 사설 영역 글머리표 → 유니코드, 실패 시 mammoth.
+  - `src/core/hwpFonts.js`: `withFontFallback`(CSS 글꼴 값 + 한글 글꼴 기준 대체 목록), `test/core/hwpFonts.test.js`.
+  - `web/document-reader.js`: `is-docx` 본문 클래스(기본 표 테두리 규칙 미적용), 휴대폰 쪽 여백 제거·PC 쪽 종이 표시, 다크 테마 반전 대상에 DOCX 포함.
+  - `scripts/build-mobile.js`·`src/platform/android.js`: `vendor/docx-preview/` 복사·URL. 스모크 두 개는 `h1` 대신 첫 문단으로 제목 확인.
+- 결정 이유: 폴라리스처럼 원본 서식에 가깝게 보이되 휴대폰은 읽기 쉬운 재배치를 유지. 기존 형광펜은 문자 위치 기준이라 변환기 교체로 한 번 어긋날 수 있음(0.1.x 단계라 감수).
+- 검증(이번 실행): `npm.cmd test` 151개 통과, `node --check web/app.js` 통과, `npm.cmd run android:sync` 통과, `gradlew assembleDebug` 성공. Electron에서 python-docx로 만든 서식 DOCX(빨간 바탕체, 맑은 고딕 굵게, 가운데 정렬, 표 테두리, 글머리표)를 휴대폰/PC 모드로 그려 화면 확인. API 36 에뮬레이터에 `scripts/install_app_adb.py --tcp`로 설치, VIEW로 열어 같은 서식과 나눔명조 표시 확인(처음엔 글머리표가 안 보여 유니코드 대체 추가 후 재확인).
+- `npm.cmd run test:documents`: DOCX 열기·형광펜·책갈피·검색 통과, 위치 복원 대기(이번엔 스크롤 732)에서 시간 초과 — 변경 전과 같은 단계의 기존 문제. `npm.cmd run test:reader`: 기존과 같은 EPUB 단계에서 시간 초과.
+- 미검증: 실기기, 큰 실제 DOCX(그림·각주·섹션 여러 개)의 속도와 모양, WebView 83.

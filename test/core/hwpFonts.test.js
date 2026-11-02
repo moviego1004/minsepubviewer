@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyFont, fontCss } from "../../src/core/hwpFonts.js";
+import { classifyFont, fontCss, withFontFallback } from "../../src/core/hwpFonts.js";
 
 test("Hangul and Latin font names are sorted into serif, sans, mono and symbol kinds", () => {
   for (const name of ["함초롬바탕", "HCR Batang", "한컴바탕", "Haansoft Batang", "휴먼명조", "한양신명조", "HY신명조",
@@ -38,4 +38,12 @@ test("Font CSS keeps the document's names first and ends with the bundled Nanum 
   // Control characters and quotes in stored names cannot break out of the CSS string.
   assert.equal(fontCss(['함초롬"돋움\u0000'], undefined).family.startsWith('"함초롬돋움", "Nanum Gothic"'), true);
   assert.equal(fontCss([undefined, ""]).family.startsWith('"Nanum Gothic"'), true);
+});
+
+test("DOCX font-family values keep their faces and gain the stack of their Hangul face", () => {
+  assert.equal(withFontFallback("'Times New Roman', 바탕"),
+    `'Times New Roman', 바탕, "Nanum Myeongjo", "Noto Serif KR", "Noto Serif CJK KR", serif`);
+  assert.match(withFontFallback("Calibri, '맑은 고딕'"), /^Calibri, '맑은 고딕', "Nanum Gothic", .*sans-serif$/);
+  assert.match(withFontFallback("var(--docx-minorHAnsi-font)"), /^var\(--docx-minorHAnsi-font\), "Nanum Gothic"/);
+  assert.match(withFontFallback("Georgia"), /"Nanum Myeongjo"/);
 });

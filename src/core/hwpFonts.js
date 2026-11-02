@@ -40,6 +40,19 @@ export function classifyFont(name) {
 export function fontCss(names) {
   const unique = [...new Set(names.map(cleanName).filter(Boolean))];
   const { kind, heavy } = classifyFont(unique[0]);
-  const stack = kind === "serif" ? SERIF_STACK : kind === "mono" ? MONO_STACK : SANS_STACK;
-  return { family: [...unique.map((name) => `"${name}"`), stack].join(", "), heavy };
+  return { family: [...unique.map((name) => `"${name}"`), stackFor(kind)].join(", "), heavy };
+}
+
+function stackFor(kind) {
+  return kind === "serif" ? SERIF_STACK : kind === "mono" ? MONO_STACK : SANS_STACK;
+}
+
+// A CSS font-family value written by another converter (DOCX) with the same fallback stack
+// appended. The kind follows the first Hangul face, or the first face when none is Hangul, since
+// DOCX lists the Latin face first. Theme variables (var(...)) are kept as they are.
+export function withFontFallback(value) {
+  const names = String(value || "").split(",").map((part) => part.trim()).filter(Boolean);
+  const plain = names.filter((name) => !/^var\(/i.test(name)).map((name) => name.replace(/^["']|["']$/g, ""));
+  const lead = plain.find((name) => /\p{Script=Hangul}/u.test(name)) || plain[0];
+  return [...names, stackFor(classifyFont(lead).kind)].join(", ");
 }

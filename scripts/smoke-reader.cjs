@@ -38,6 +38,7 @@ app.whenReady().then(async () => {
     if (!localStorage.getItem("minsepubviewer.language")) localStorage.setItem("minsepubviewer.language", "ko");
     // PDF.js comes from the mobile build output, as on Android (run npm run build:mobile first).
     window.MINS_PDFJS_BASE = '/dist/mobile/vendor/pdfjs/';
+    window.MINS_DOCX_PREVIEW_URL = '/dist/mobile/vendor/docx-preview/docx-preview.min.js';
     window.MINS_MAMMOTH_URL = '/dist/mobile/vendor/mammoth/mammoth.browser.min.js';
     window.MINS_PAKO_URL = '/dist/mobile/vendor/pako/pako_inflate.min.js';
     window.MINS_DOC_FONT_URL = '/dist/mobile/vendor/fonts';
@@ -369,7 +370,7 @@ app.whenReady().then(async () => {
   await waitFor("document.querySelector('#mobilePageLabel').textContent === '3 / 3'");
   await run("document.querySelector('#paginatedModeButton').click()");
   await run("window.__nextOpenKind = 'docx'; document.querySelector('#mobileOpenFile').click()");
-  await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('h1')?.textContent === 'DOCX 검사 문서' && /^1 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
+  await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('h1, p')?.textContent === 'DOCX 검사 문서' && /^1 \\/ \\d+$/.test(document.querySelector('#mobilePageLabel').textContent)");
   // Tap paging applies in page mode; earlier steps may have left continuous scrolling on.
   await run("document.querySelector('#paginatedModeButton').click()");
   const docBox = await run("(() => { const r = document.querySelector('#docFrame').getBoundingClientRect(); return { x: r.left + r.width / 2, top: r.top + r.height * 0.15, bottom: r.top + r.height * 0.85 }; })()");

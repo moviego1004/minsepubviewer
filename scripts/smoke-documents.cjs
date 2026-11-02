@@ -69,7 +69,7 @@ app.whenReady().then(async () => {
 
   await open("sample.docx");
   await opened("DOCX 검사 문서");
-  assert.ok(await run(frame("doc.querySelector('h1')?.textContent === 'DOCX 검사 문서' && doc.querySelectorAll('table td').length === 2")), "DOCX heading and table are converted");
+  assert.ok(await run(frame("doc.querySelector('h1, p')?.textContent === 'DOCX 검사 문서' && doc.querySelectorAll('table td').length === 2 && doc.querySelector('.docx-styled section.docx')")), "DOCX heading and table are converted");
   assert.equal(await run(frame("doc.querySelectorAll('script').length")), 0);
   console.log("DOCX opened");
 

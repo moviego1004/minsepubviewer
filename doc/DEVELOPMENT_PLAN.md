@@ -29,7 +29,7 @@
 | EPUB | 원본 그대로 읽기, 글꼴·여백 조절, 쪽/연속 보기 | ✅ | ✅ 📱 |
 | PDF | PDF.js 기능 범위(쪽/연속, 확대·맞춤, 회전, 두 쪽, 검색, 목차, 링크, 텍스트 선택) | ✅ | ✅ 📱 |
 | Markdown·TXT | 읽기·편집·새 문서·내보내기 | ✅ | ✅ 📱 |
-| DOCX | 읽기 전용(텍스트·표·제목) | ✅ | ✅ |
+| DOCX | 읽기 전용(글꼴·색·문단·표 서식, PC는 쪽 모양) | ✅ | ✅ |
 | HWPX, XML 형식 HWP(HWPML) | 읽기 전용(텍스트·표) | ✅ | ✅ |
 | HWP 5.0(바이너리) | 읽기 전용 | ✅ 쪽 모양 재현 | ✅ 📱 텍스트·표·각주(쪽 모양 아님) |
 | 구형 DOC, 스캔 PDF OCR, PDF 양식 저장·편집 | — | ⛔ | ⛔ |
@@ -93,7 +93,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 | EPUB | epub.js. Android는 앱 사본을 압축 해제한 폴더를 URL로 읽음(큰 책도 메모리 절약) | EPUB CFI |
 | PDF | PDF.js 6.3.289(PDFViewer·검색·링크). Android는 legacy 빌드, 앱 사본을 URL로 읽음 | `pdf:page=..&zoom=..`, 형광펜은 PDF 좌표 사각형 |
 | Markdown | Toast UI Editor(보기·편집) | 스크롤 비율 |
-| DOCX | mammoth 1.13.0 → HTML | 문서 스크롤 비율, 형광펜은 텍스트 문자 위치 |
+| DOCX | docx-preview 0.4.1 → HTML(PC 쪽 모양, 휴대폰 화면 폭 재배치), 실패 시 mammoth 1.13.0 | 문서 스크롤 비율, 형광펜은 텍스트 문자 위치 |
 | HWPX·HWPML | 자체 XML 변환기 `src/core/hwpXml.js` | 위와 같음 |
 | HWP 5.0 (PC) | `@ohah/hwpjs` 네이티브 모듈을 Electron 메인 프로세스에서 실행 → 쪽 배치 HTML | 위와 같음 |
 | HWP 5.0 (Android) | 자체 해석기 `src/core/hwpBinary.js`(OLE 복합 파일 → 레코드 → 본문·표·글상자·각주), 압축 해제는 pako | 위와 같음 |
@@ -189,7 +189,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
        | M2 | **무료 한글 글꼴 동봉**: 나눔고딕·나눔명조(OFL, `@fontsource/*` 5.3.0) 한국어 단일 부분 글꼴 WOFF2, 보통·굵게 4개(1.84MB, 한글 11,172자 전부). 변환 문서 보기 iframe에 `@font-face`로 넣어 기기와 상관없이 같은 글꼴로 보이게 함 | ✅ 2026-11-02 (PC Chromium·API 36 에뮬레이터에서 확인, 실기기 ⏳) |
        | M3 | **Android 열기 목록**: 폴라리스가 쓰는 HWP MIME 별칭 중 빠진 `application/hangul` 추가 | ✅ 2026-11-02 |
        | M4 | **내용으로 형식 판별**: 확장자와 내용이 다른 변환 문서(예: `.hwp`인데 실제로는 HWPX ZIP, `.docx`인데 HWPX)를 첫 바이트와 ZIP 목록으로 판별(`src/core/documentSniff.js`) | ✅ 2026-11-02 |
-       | M5 | **DOCX 서식 보기**: mammoth는 서식이 대부분 사라짐. `docx-preview`(Apache-2.0)로 글꼴·색·표·쪽 모양을 살리는 보기를 시험하고, 휴대폰 기본은 재배치 유지. 크기·라이선스·WebView 호환 확인 후 결정 | ⬜ 다음 |
+       | M5 | **DOCX 서식 보기**: mammoth는 서식이 대부분 사라짐. `docx-preview`(Apache-2.0)로 글꼴·색·표·쪽 모양을 살리는 보기를 시험하고, 휴대폰 기본은 재배치 유지. 크기·라이선스·WebView 호환 확인 후 결정 → **적용**(75KB, Apache-2.0): PC는 쪽 모양, 휴대폰은 쪽 크기·머리말 없이 화면 폭 재배치, 글꼴은 M1 대체 목록 추가, Symbol 글머리표는 유니코드로, 실패 시 mammoth. PC Chromium·API 36 에뮬레이터 확인, 실기기 ⏳ | ✅ |
        | M6 | **PDF 재배치 보기**: PDF.js `getTextContent()` 위치로 줄·문단을 묶어 화면 폭 HTML로 다시 흘림(글자 PDF만, 표·다단 한계). 보기 메뉴 전환 | ⬜ |
        | M7 | **HWP 기호(PUA) 대응**: 한글 전용 기호 코드 → 유니코드 변환표. 공개 자료 조사 후 확인된 것만 적용(추측 금지) | ⬜ 조사 필요 |
        | M8 | **HWPX·XML HWP 서식**: `hwpXml.js`에도 글꼴·글자·문단 모양 적용(M1·M2 재사용) | ⬜ |

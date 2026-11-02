@@ -29,7 +29,10 @@ for (const name of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
   await cp(`node_modules/pdfjs-dist/${name}`, resolve(pdfjs, name), { recursive: true });
 }
 await copyFile("node_modules/pdfjs-dist/LICENSE", resolve(pdfjs, "LICENSE"));
-// DOCX converter, loaded only when a DOCX file is opened.
+// DOCX converters, loaded only when a DOCX file is opened: docx-preview (styled), mammoth (fallback).
+await mkdir(resolve(output, "vendor/docx-preview"), { recursive: true });
+await copyFile("node_modules/docx-preview/dist/docx-preview.min.js", resolve(output, "vendor/docx-preview/docx-preview.min.js"));
+await copyFile("node_modules/docx-preview/LICENSE", resolve(output, "vendor/docx-preview/LICENSE"));
 await mkdir(resolve(output, "vendor/mammoth"), { recursive: true });
 await copyFile("node_modules/mammoth/mammoth.browser.min.js", resolve(output, "vendor/mammoth/mammoth.browser.min.js"));
 await copyFile("node_modules/mammoth/LICENSE", resolve(output, "vendor/mammoth/LICENSE"));

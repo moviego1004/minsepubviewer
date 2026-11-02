@@ -1,9 +1,10 @@
 // Converts office and Hangul documents to HTML for DocumentReader.
-// DOCX: mammoth (loaded on first use). HWPX and XML HWP (HWPML): own converter.
+// DOCX: docx-preview, mammoth as fallback (loaded on first use). HWPX and XML HWP (HWPML): own converter.
 // Binary HWP 5.0: platform.convertHwp where available (the desktop app converts it with page layout
 // in the main process), otherwise the built-in text-and-table reader (the phone app).
 import { sniffDocumentFormat } from "../src/core/documentSniff.js";
 import { convertHwpBinary, isOleBytes } from "../src/core/hwpBinary.js";
+import { withFontFallback } from "../src/core/hwpFonts.js";
 import {
   convertHwpmlDocument,
   convertOwpmlSection,
@@ -12,38 +13,34 @@ import {
   sortOwpmlSectionPaths
 } from "../src/core/hwpXml.js";
 
+const DEFAULT_DOCX_PREVIEW_URL = "/node_modules/docx-preview/dist/docx-preview.min.js";
 const DEFAULT_MAMMOTH_URL = "/node_modules/mammoth/mammoth.browser.min.js";
 const DEFAULT_PAKO_URL = "/node_modules/pako/dist/pako_inflate.min.js";
-let mammothPromise = null;
-let pakoPromise = null;
+const scriptPromises = new Map();
 
-function loadMammoth() {
-  if (globalThis.mammoth) return Promise.resolve(globalThis.mammoth);
-  mammothPromise ||= new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = globalThis.MINS_MAMMOTH_URL || DEFAULT_MAMMOTH_URL;
-    script.onload = () => (globalThis.mammoth ? resolve(globalThis.mammoth) : reject(new Error("document.converterLoadFailed")));
-    script.onerror = () => reject(new Error("document.converterLoadFailed"));
-    document.head.append(script);
-  });
-  mammothPromise.catch(() => { mammothPromise = null; });
-  return mammothPromise;
+// Loads a converter script on first use and resolves with the global it defines.
+function loadGlobal(url, read) {
+  if (read()) return Promise.resolve(read());
+  if (!scriptPromises.has(url)) {
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = url;
+      script.onload = () => (read() ? resolve(read()) : reject(new Error("document.converterLoadFailed")));
+      script.onerror = () => reject(new Error("document.converterLoadFailed"));
+      document.head.append(script);
+    });
+    promise.catch(() => scriptPromises.delete(url));
+    scriptPromises.set(url, promise);
+  }
+  return scriptPromises.get(url);
 }
 
-// pako's inflate (loaded on first use). HWP sections end with a CRC and the original size after the
-// compressed data; the browser's DecompressionStream rejects that as junk ("Failed to fetch").
-function loadPako() {
-  if (globalThis.pako?.inflateRaw) return Promise.resolve(globalThis.pako);
-  pakoPromise ||= new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = globalThis.MINS_PAKO_URL || DEFAULT_PAKO_URL;
-    script.onload = () => (globalThis.pako?.inflateRaw ? resolve(globalThis.pako) : reject(new Error("document.converterLoadFailed")));
-    script.onerror = () => reject(new Error("document.converterLoadFailed"));
-    document.head.append(script);
-  });
-  pakoPromise.catch(() => { pakoPromise = null; });
-  return pakoPromise;
-}
+// docx-preview needs the JSZip global the app already loads.
+const loadDocxPreview = () => loadGlobal(globalThis.MINS_DOCX_PREVIEW_URL || DEFAULT_DOCX_PREVIEW_URL, () => globalThis.docx?.renderAsync && globalThis.JSZip && globalThis.docx);
+const loadMammoth = () => loadGlobal(globalThis.MINS_MAMMOTH_URL || DEFAULT_MAMMOTH_URL, () => globalThis.mammoth);
+// pako's inflate. HWP sections end with a CRC and the original size after the compressed data;
+// the browser's DecompressionStream rejects that as junk ("Failed to fetch").
+const loadPako = () => loadGlobal(globalThis.MINS_PAKO_URL || DEFAULT_PAKO_URL, () => globalThis.pako?.inflateRaw && globalThis.pako);
 
 export function getDocumentFormat(name) {
   const lower = String(name || "").toLowerCase();
@@ -68,10 +65,52 @@ function parseXml(text, errorKey) {
   return parsed;
 }
 
-async function convertDocx(bytes) {
-  const mammoth = await loadMammoth();
-  const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });
-  return { html: result.value, layout: false };
+// DOCX keeps its fonts, colours, paragraph and table styles through docx-preview. Pages are kept on
+// the desktop; the phone reflows them to the screen width without page sizes, headers and footers.
+// mammoth (plain structure) is the fallback when docx-preview fails.
+async function convertDocx(bytes, platform) {
+  const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  try {
+    return await renderDocxPreview(data, !platform?.isMobile);
+  } catch {
+    const mammoth = await loadMammoth();
+    const result = await mammoth.convertToHtml({ arrayBuffer: data });
+    return { html: result.value, layout: false };
+  }
+}
+
+// Word bullets are Symbol/Wingdings private-use characters that phones have no font for.
+const SYMBOL_BULLETS = { f0b7: "\u2022", f0a7: "\u25aa", f0d8: "\u27a2", f0fc: "\u2713", f076: "\u2756", f06e: "\u25a0", f0a8: "\u25a1", f071: "\u25a1" };
+
+function unicodeBullets(css) {
+  return css.replace(/content:\s*("[^"]*"|'[^']*')/g, (match, value) => match.replace(value,
+    value.replace(/[\uf000-\uf0ff]|\x5c(f0[0-9a-f]{2})\s?/gi, (char, escape) =>
+      SYMBOL_BULLETS[escape?.toLowerCase() || char.charCodeAt(0).toString(16)] || "\u2022")));
+}
+
+async function renderDocxPreview(data, layout) {
+  const docx = await loadDocxPreview();
+  const body = document.createElement("div");
+  const styles = document.createElement("div");
+  await docx.renderAsync(data, body, styles, {
+    className: "docx",
+    inWrapper: false,
+    ignoreWidth: !layout,
+    ignoreHeight: !layout,
+    breakPages: layout,
+    renderHeaders: layout,
+    renderFooters: layout,
+    useBase64URL: true
+  });
+  if (!body.querySelector("section.docx")) throw new Error("document.invalidDocx");
+  for (const element of body.querySelectorAll("[style*='font-family']")) {
+    element.style.fontFamily = withFontFallback(element.style.fontFamily);
+  }
+  const css = [...styles.querySelectorAll("style")].map((node) => unicodeBullets(node.textContent).replace(
+    /(@font-face\s*\{[^}]*\})|font-family:\s*([^;}]+)/g,
+    (match, fontFace, value) => fontFace || `font-family: ${withFontFallback(value)}`
+  ));
+  return { html: `<style>${css.join("\n")}</style><div class="docx-styled">${body.innerHTML}</div>`, layout };
 }
 
 async function convertHwpx(bytes) {
@@ -108,7 +147,7 @@ async function convertHwp(bytes, fileLike, platform) {
 export async function convertDocument(fileLike, bytes, platform) {
   const sniffed = sniffDocumentFormat(bytes);
   const format = ["docx", "hwpx", "hwp"].includes(sniffed) ? sniffed : getDocumentFormat(fileLike?.name);
-  if (format === "docx") return { format, ...await convertDocx(bytes) };
+  if (format === "docx") return { format, ...await convertDocx(bytes, platform) };
   if (format === "hwpx") return { format, ...await convertHwpx(bytes) };
   if (format === "hwp") return { format, ...await convertHwp(bytes, fileLike, platform) };
   throw new Error("document.unsupported");
