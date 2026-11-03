@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.util.AtomicFile;
 import androidx.activity.result.ActivityResult;
@@ -14,7 +15,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,6 +49,11 @@ public class ReaderDocumentsPlugin extends Plugin {
     private static final long PDF_LIMIT = 512L * 1024 * 1024;
     private static final long DOCUMENT_LIMIT = 64L * 1024 * 1024;
     private static final long MARKDOWN_LIMIT = 16L * 1024 * 1024;
+    private static final long SYNC_LIMIT = 64L * 1024 * 1024;
+    private static final int READ_WRITE = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+    // Where each app copy came from: { copy file name: { uri, modified (the original's last change
+    // as its provider reports it, -1 if unknown), copyModified (the copy's file time then) } }.
+    private static final String SOURCES = "reader-sources.json";
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private volatile boolean pickerActive = false;
 
@@ -161,6 +169,51 @@ public class ReaderDocumentsPlugin extends Plugin {
         return id.toString();
     }
 
+    private long sourceModified(Uri uri) {
+        try (Cursor cursor = getContext().getContentResolver().query(uri, new String[] { DocumentsContract.Document.COLUMN_LAST_MODIFIED }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst() && !cursor.isNull(0)) return cursor.getLong(0);
+        } catch (Exception ignored) {
+            // Providers without the column, or a grant that has lapsed.
+        }
+        return -1;
+    }
+
+    private void rememberSource(File copy, Uri uri) throws Exception {
+        JSONObject data = readJson(SOURCES);
+        JSONObject entry = new JSONObject();
+        entry.put("uri", uri.toString());
+        entry.put("modified", sourceModified(uri));
+        entry.put("copyModified", copy.lastModified());
+        data.put(copy.getName(), entry);
+        writeJson(SOURCES, data);
+    }
+
+    // Saves a Markdown copy back to the file it came from, when the app may still write there.
+    // Returns "saved", "none" (no original known), "changed" (the original changed elsewhere since it
+    // was read; not overwritten) or "failed" (no write access).
+    private String writeOriginal(File copy, byte[] bytes) {
+        try {
+            JSONObject data = readJson(SOURCES);
+            JSONObject source = data.optJSONObject(copy.getName());
+            if (source == null) return "none";
+            Uri uri = Uri.parse(source.getString("uri"));
+            long known = source.optLong("modified", -1);
+            long now = sourceModified(uri);
+            if (known > 0 && now > known) return "changed";
+            try (OutputStream output = getContext().getContentResolver().openOutputStream(uri, "wt")) {
+                if (output == null) return "failed";
+                output.write(bytes);
+            }
+            source.put("modified", sourceModified(uri));
+            source.put("copyModified", copy.lastModified());
+            data.put(copy.getName(), source);
+            writeJson(SOURCES, data);
+            return "saved";
+        } catch (Exception error) {
+            return "failed";
+        }
+    }
+
     private File managedFile(String path) throws IOException {
         return DocumentPaths.resolve(documentsDir(), path);
     }
@@ -199,8 +252,18 @@ public class ReaderDocumentsPlugin extends Plugin {
         // Stable within this installation, even when two documents have the same name.
         String extension = kind.equals("markdown") ? ".md" : kind.equals("document") ? name.substring(name.lastIndexOf('.')).toLowerCase(Locale.ROOT) : "." + kind;
         File destination = new File(documentsDir(), uriId(uri) + extension);
-        // Re-selecting an imported document opens the saved app copy, preserving edits.
-        if (!destination.exists()) {
+        // Re-selecting an imported document opens the saved app copy, preserving edits. When the
+        // original (a cloud file, say) changed since and the copy has no edits of its own, it is copied
+        // again.
+        JSONObject source = readJson(SOURCES).optJSONObject(destination.getName());
+        boolean refresh = false;
+        if (destination.exists() && source != null) {
+            long known = source.optLong("modified", -1);
+            long now = sourceModified(uri);
+            refresh = known > 0 && now > known && destination.lastModified() == source.optLong("copyModified", -2);
+        }
+        boolean copied = !destination.exists() || refresh;
+        if (copied) {
             AtomicFile target = new AtomicFile(destination);
             FileOutputStream output = null;
             try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
@@ -223,6 +286,7 @@ public class ReaderDocumentsPlugin extends Plugin {
                 throw error;
             }
         }
+        if (copied || source == null) rememberSource(destination, uri);
         JSObject result = descriptor(destination, name, kind);
         remember(result);
         return result;
@@ -241,7 +305,7 @@ public class ReaderDocumentsPlugin extends Plugin {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         // Providers often label .md and .epub as octet-stream. Validate the name after selection.
         intent.setType("*/*");
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.addFlags(READ_WRITE | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startPicker(call, intent, "filePicked");
     }
 
@@ -253,7 +317,15 @@ public class ReaderDocumentsPlugin extends Plugin {
             call.resolve(new JSObject().put("cancelled", true)); return;
         }
         Uri uri = result.getData().getData();
-        work(call, () -> call.resolve(importDocument(uri, call.getString("kind"))));
+        int granted = result.getData().getFlags() & READ_WRITE;
+        work(call, () -> {
+            // Markdown keeps its grant so saving can reach the original again after a restart.
+            if (granted != 0 && displayName(uri).toLowerCase(Locale.ROOT).matches(".*\\.(md|markdown|txt)$")) {
+                try { getContext().getContentResolver().takePersistableUriPermission(uri, granted); }
+                catch (SecurityException ignored) { /* The copy is still saved; the original is not. */ }
+            }
+            call.resolve(importDocument(uri, call.getString("kind")));
+        });
     }
 
     @PluginMethod
@@ -335,6 +407,7 @@ public class ReaderDocumentsPlugin extends Plugin {
         writeBytes(new AtomicFile(target), bytes);
         JSObject entry = descriptor(target, markdownName(call.getString("suggestedName")), "markdown");
         remember(entry);
+        entry.put("original", newCopy || path.isEmpty() ? "none" : writeOriginal(target, bytes));
         return entry;
     }
 
@@ -378,6 +451,72 @@ public class ReaderDocumentsPlugin extends Plugin {
             }
             if ("saveMarkdown".equals(call.getMethodName())) call.resolve(saveCopy(call, true));
             else call.resolve(new JSObject().put("saved", true));
+        });
+    }
+
+    // Sync file for reading records, in a folder the user picks (often a cloud folder). The app keeps
+    // a persistable read and write grant to it.
+    @PluginMethod
+    public void chooseSyncFile(PluginCall call) {
+        boolean create = Boolean.TRUE.equals(call.getBoolean("create", false));
+        Intent intent = new Intent(create ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(create ? "application/json" : "*/*");
+        if (create) intent.putExtra(Intent.EXTRA_TITLE, call.getString("fileName", "MinsReader-sync.json"));
+        intent.addFlags(READ_WRITE | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startPicker(call, intent, "syncFileChosen");
+    }
+
+    @ActivityCallback
+    private void syncFileChosen(PluginCall call, ActivityResult result) {
+        pickerActive = false;
+        if (call == null) return;
+        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) {
+            call.resolve(new JSObject().put("cancelled", true)); return;
+        }
+        Uri uri = result.getData().getData();
+        work(call, () -> {
+            try { getContext().getContentResolver().takePersistableUriPermission(uri, READ_WRITE); }
+            catch (SecurityException error) { throw new IOException("native.syncNotWritable"); }
+            call.resolve(new JSObject().put("uri", uri.toString()).put("name", displayName(uri)));
+        });
+    }
+
+    @PluginMethod
+    public void readSyncFile(PluginCall call) {
+        work(call, () -> {
+            Uri uri = Uri.parse(call.getString("uri", ""));
+            try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
+                if (input == null) throw new IOException("native.readFailed");
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                byte[] buffer = new byte[64 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    if (output.size() + count > SYNC_LIMIT) throw new IOException("native.syncTooLarge");
+                    output.write(buffer, 0, count);
+                }
+                call.resolve(new JSObject().put("text", new String(output.toByteArray(), StandardCharsets.UTF_8)));
+            } catch (FileNotFoundException missing) {
+                call.resolve(new JSObject().put("missing", true));
+            } catch (SecurityException denied) {
+                throw new IOException("native.syncNoAccess");
+            }
+        });
+    }
+
+    @PluginMethod
+    public void writeSyncFile(PluginCall call) {
+        work(call, () -> {
+            byte[] bytes = call.getString("text", "").getBytes(StandardCharsets.UTF_8);
+            if (bytes.length > SYNC_LIMIT) throw new IOException("native.syncTooLarge");
+            Uri uri = Uri.parse(call.getString("uri", ""));
+            try (OutputStream output = getContext().getContentResolver().openOutputStream(uri, "wt")) {
+                if (output == null) throw new IOException("native.saveFailed");
+                output.write(bytes);
+            } catch (SecurityException denied) {
+                throw new IOException("native.syncNoAccess");
+            }
+            call.resolve();
         });
     }
 

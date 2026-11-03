@@ -285,6 +285,15 @@
               </div>
               <input id="importRecordsInput" type="file" accept=".json,application/json" hidden>
               <p id="recordsStatus" class="records-hint" role="status"></p>
+              <h3 data-i18n="sync.heading"></h3>
+              <p class="records-hint" data-i18n="sync.hint"></p>
+              <p id="syncStatus" class="records-hint" role="status"></p>
+              <div class="records-actions">
+                <button id="syncCreateButton" class="secondary-button" type="button" data-i18n="sync.create"></button>
+                <button id="syncChooseButton" class="secondary-button" type="button" data-i18n="sync.choose"></button>
+                <button id="syncNowButton" class="secondary-button" type="button" data-i18n="sync.now" hidden></button>
+                <button id="syncStopButton" class="secondary-button" type="button" data-i18n="sync.stop" hidden></button>
+              </div>
             </section>
           </aside>
         </section>

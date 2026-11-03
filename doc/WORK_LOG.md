@@ -333,3 +333,19 @@
 - 검증(이번 실행): `npm.cmd test` 179개 통과. `test:documents`·`test:pdf` 통과. `test:reader`는 첫 실행에 DOCX 두 손가락 확대 단계 시간 초과(이번 변경과 무관한 단계), 이어서 기록 가져오기 단계 실패(새 책 주석 개수 미집계 → 수정) 후 통과. 실제 HWP 2,326개 일괄 변환: HWP 5.0 235개 모두 성공, 2,091개는 HWP 3.0(수정 전과 같은 결과). Electron 렌더러에서 BMP 재압축 측정. 실제 앱(Electron 개발 실행)으로 Markdown 상대 경로 그림 2개 표시, 없는 파일·웹 주소는 그대로 확인. `android:sync`·`assembleDebug` 성공(10.7MB). `build:pc-dir` 설치본으로 정관 HWP 열기 → 프로필 폴더 `logs/app.log`에 기록 확인.
 - Google Play 검토: 코드 변경 없이 [PLAY_STORE_REVIEW.md](PLAY_STORE_REVIEW.md) 작성. 확인한 사실: targetSdk 36, 권한 INTERNET뿐, 네이티브 라이브러리 없음, 런처 아이콘은 Capacitor 기본, 오픈소스 고지·HWP 공개 문서 출처 문구 없음, 디버그 서명 APK만 있음, `allowBackup=true`.
 - 미검증: 실기기 전부, 휴대폰에서 기록 가져오기 파일 선택, 휴대폰 BMP 재압축 속도·메모리, 문단 테두리가 있는 실제 문서, 개인 계정 여부(Play 비공개 테스트 조건).
+
+## 기록 자동 동기화 + 휴대폰 Markdown 원본 저장 (2026-11-03)
+
+- 사용자 요청: 클라우드 동기화가 되는지 질문 → 현재는 열기만 되고 동기화·원본 저장은 안 된다고 답하고 3단계 제안 → "1, 2번 먼저 진행하고 커밋, 푸시해줘".
+- 변경:
+  - `src/core/libraryTransfer.js`: 삭제 기록(`deleted`: 주석 id → 삭제 시각, 180일 보관, `normalizeDeleted`·`recordDeleted`), 병합 시 삭제가 나중이면 양쪽 사본에서 제거, 새 책의 주석도 삭제 기록 적용.
+  - `web/app.js`: 동기화(`syncRecords`, `scheduleRecordsSync`, `chooseSyncFile`, `stopSync`, `renderSyncStatus`, `syncState`), 공통 병합 적용 `applyMergedRecords`(가져오기와 공유), 삭제 지점 4곳에 삭제 기록, 저장 시 동기화 예약, PC 창 닫기 전 동기화, 휴대폰 백그라운드 전환 시 동기화, Markdown 저장 결과 `original` 안내(실패·충돌은 알림 창).
+  - `electron/main.cjs`·`preload.cjs`: `records:choose-sync-file`·`records:read-sync`·`records:write-sync`(.json 절대 경로만, 64MB, 임시 파일 → rename).
+  - `src/platform/android.js`, `ReaderDocumentsPlugin.java`: `chooseSyncFile`·`readSyncFile`·`writeSyncFile`, `reader-sources.json`(사본 → 원본 URI·수정 시각), `pickFile` 읽기·쓰기·영구 권한, Markdown 영구 권한, `writeOriginal`(원본이 그사이 바뀌면 `changed`), 다시 열 때 원본이 더 새로우면 다시 가져오기.
+  - `web/index.html`·`src/locales/*`: 자동 동기화 화면과 문구, `native.sync*` 오류, `markdown.savedToOriginal` 등.
+  - 시험: `test/core/libraryTransfer.test.js`(삭제 유지·만료 2개 추가), `scripts/smoke-reader.cjs`(모의 동기화 파일: 만들기 → 다른 기기 변경 병합·삭제 반영).
+- 결정 이유: Google 로그인·서버 없이 사용자가 고른 클라우드 폴더의 파일 하나로 동기화 → 개인정보처리방침 "수집 없음" 유지, Play 심사 부담 없음. 원본 덮어쓰기는 다른 곳의 변경을 잃지 않도록 수정 시각을 비교해 보수적으로.
+- 검증(이번 실행): `npm.cmd test` 181개 통과, `test:documents`·`test:pdf` 통과, `test:reader` 통과(첫 실행 1회는 알려진 epub.js `bounds` 콘솔 오류로 마지막 검사 실패, 재실행 2회 통과), `android:sync`·`assembleDebug`·`testDebugUnitTest` 성공. PC: 실제 메인 프로세스를 임시 프로필로 띄워 동기화 파일 쓰기 → 파일 수정 → 병합 확인, 임시 파일 남지 않음. 에뮬레이터(API 36 Pixel_7, WebView 원격 디버깅으로 조작): 동기화 파일 만들기(다운로드 폴더) → 다른 기기처럼 파일 수정 → 앱 강제 종료·재실행 뒤 시작 동기화로 병합(영구 권한 유지), Markdown을 파일 선택으로 열어 수정·저장 → 원본 반영(`saved`), 원본을 밖에서 바꾼 뒤 저장 → 덮어쓰지 않음(`changed`). 시험 파일은 삭제.
+- 발견: 에뮬레이터 부팅 직후(부하 높음) 파일 선택 중 앱 프로세스가 시스템에 의해 종료되어 선택 결과를 잃음 — 메모리가 부족한 휴대폰에서도 생길 수 있는 Android 동작(Capacitor 복원 처리 미구현, 기존부터). 스크립트로 편집기 DOM에 넣은 글자는 변경 이벤트가 안 나서 시험에서는 읽기 모드 전환으로 변경을 감지시킴(실사용 입력과 무관).
+- 참고: 2026-11-03 앞선 확인에서 Electron 개발 실행(`electron .`)을 사용자 프로필 그대로 써서, 이 PC 앱의 최근 파일 목록에 시험용 Markdown(삭제됨)과 HWP 몇 개가 들어갔을 수 있음. 동기화 확인부터는 임시 프로필 사용.
+- 미검증: 실기기, Google Drive·OneDrive 앱 같은 실제 클라우드 제공자의 영구 권한과 쓰기, 두 기기 동시 동기화.

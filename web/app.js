@@ -14,7 +14,7 @@ import {
   createEpubContentSample,
   summarizeEpubContent
 } from "../src/core/epubDiagnostics.js";
-import { createRecordsTransfer, mergeRecords, parseRecordsTransfer } from "../src/core/libraryTransfer.js";
+import { createRecordsTransfer, mergeRecords, normalizeDeleted, parseRecordsTransfer, recordDeleted } from "../src/core/libraryTransfer.js";
 import {
   getBookRecord,
   parseLibraryStateWithRecovery,
@@ -82,6 +82,8 @@ const STORAGE_KEY = "minsepubviewer.library";
 const STORAGE_BACKUP_KEY = "minsepubviewer.library.backup";
 const UI_STORAGE_KEY = "minsepubviewer.ui";
 const MARKDOWN_ANNOTATIONS_KEY = "minsepubviewer.markdown-annotations";
+// Records sync (see "Sync file" below); ready once its controls are wired after start-up.
+const syncState = { ready: false, running: null, timer: null, snapshot: "" };
 
 initI18n(storage);
 let mobileSessionTimer = null;
@@ -288,6 +290,7 @@ function saveLibrary(library) {
 
   storage.setItem(STORAGE_BACKUP_KEY, serialized);
   storage.setItem(STORAGE_KEY, serialized);
+  scheduleRecordsSync();
 }
 
 function loadUiState() {
@@ -473,6 +476,11 @@ const elements = {
   importRecordsButton: document.querySelector("#importRecordsButton"),
   importRecordsInput: document.querySelector("#importRecordsInput"),
   recordsStatus: document.querySelector("#recordsStatus"),
+  syncStatus: document.querySelector("#syncStatus"),
+  syncChooseButton: document.querySelector("#syncChooseButton"),
+  syncCreateButton: document.querySelector("#syncCreateButton"),
+  syncNowButton: document.querySelector("#syncNowButton"),
+  syncStopButton: document.querySelector("#syncStopButton"),
   annotationList: document.querySelector("#annotationList")
 };
 
@@ -1737,6 +1745,7 @@ function renderMarkdownHighlights(highlights) {
     remove.addEventListener("click", () => {
       const annotations = getCurrentMarkdownAnnotations();
       saveCurrentMarkdownAnnotations({ ...annotations, highlights: annotations.highlights.filter((entry) => entry.id !== highlight.id) });
+      rememberDeletedAnnotations([highlight.id]);
       showMarkdownViewMode();
       render();
     });
@@ -2046,6 +2055,7 @@ function openSearchPanel() {
 }
 
 function removeAnnotation(annotation) {
+  rememberDeletedAnnotations([annotation.id]);
   if (annotation.type === "highlight") {
     state.book = {
       ...state.book,
@@ -2190,6 +2200,7 @@ function saveCurrentMarkdownAnnotations(annotations) {
   if (!key) return;
   state.markdownAnnotations = updateMarkdownDocumentAnnotations(state.markdownAnnotations, key, annotations);
   storage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
+  scheduleRecordsSync();
 }
 
 function moveMarkdownAnnotations(previousKey, nextKey) {
@@ -3723,6 +3734,7 @@ async function saveMarkdown(saveAs = false) {
   }
 
   const previousAnnotationKey = getMarkdownAnnotationKey();
+  let savedNotice = "";
   state.markdown.saving = true;
   renderMarkdownChrome();
 
@@ -3758,6 +3770,12 @@ async function saveMarkdown(saveAs = false) {
 
     state.markdown.name = result.name;
     state.markdown.path = result.path;
+    // The phone saves its copy and, when it may, the file it was opened from (a cloud file, say).
+    if (result.original === "saved") savedNotice = t("markdown.savedToOriginal");
+    else if (result.original === "changed") savedNotice = t("markdown.originalChanged");
+    else if (result.original === "failed") savedNotice = t("markdown.originalNotWritable");
+    // The phone shows no status line, and the user should know the original was left as it was.
+    if (["changed", "failed"].includes(result.original)) window.alert(savedNotice);
     if (platform.isMobile) storage.setItem("minsepubviewer.last-document", result.path);
     state.markdown.savedContent = content;
     state.markdown.dirty = false;
@@ -3775,7 +3793,7 @@ async function saveMarkdown(saveAs = false) {
     return false;
   } finally {
     state.markdown.saving = false;
-    renderMarkdownChrome();
+    renderMarkdownChrome(savedNotice);
     renderDocumentTabs();
   }
 }
@@ -3787,7 +3805,7 @@ function closeMarkdown() {
 // Reading records to and from another device (src/core/libraryTransfer.js).
 async function exportRecords() {
   if (state.book.bookId && ![DOC_LOADING_ID, PDF_LOADING_ID, "sample-book"].includes(state.book.bookId)) persistBook();
-  const transfer = createRecordsTransfer({ library: state.library, markdownAnnotations: state.markdownAnnotations });
+  const transfer = createRecordsTransfer({ library: state.library, markdownAnnotations: state.markdownAnnotations, deleted: loadDeletedAnnotations() });
   const saved = await downloadTextFile({
     content: JSON.stringify(transfer),
     fileName: `MinsReader-records-${transfer.exportedAt.slice(0, 10)}.json`,
@@ -3802,18 +3820,144 @@ async function importRecords(file) {
   if (!file) return;
   const incoming = parseRecordsTransfer(await file.text());
   if (!window.confirm(t("records.importConfirm", { count: incoming.library.books.length }))) return;
-  const { library, markdownAnnotations, summary } = mergeRecords({ library: state.library, markdownAnnotations: state.markdownAnnotations }, incoming);
-  state.library = library;
-  saveLibrary(state.library);
-  state.markdownAnnotations = markdownAnnotations;
-  storage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
-  // The open book takes the merged annotations, or its next save would drop them.
-  const current = getBookRecord(state.library, state.book.bookId);
-  if (current) state.book = { ...state.book, ...current, filePath: state.book.filePath, lastLocation: state.book.lastLocation };
+  const { summary } = applyMergedRecords(incoming);
   elements.recordsStatus.textContent = t("records.imported", summary);
   logClient("records.imported", summary);
+}
+
+function currentRecords() {
+  if (state.book.bookId && ![DOC_LOADING_ID, PDF_LOADING_ID, "sample-book"].includes(state.book.bookId)) persistBook();
+  return { library: state.library, markdownAnnotations: state.markdownAnnotations, deleted: loadDeletedAnnotations() };
+}
+
+// Merges other records into this device's and saves them. The open book takes the merged
+// annotations (its next save would drop them otherwise) but keeps its place on the page.
+function applyMergedRecords(incoming) {
+  const merged = mergeRecords(currentRecords(), incoming);
+  state.library = merged.library;
+  saveLibrary(state.library);
+  state.markdownAnnotations = merged.markdownAnnotations;
+  storage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
+  saveDeletedAnnotations(merged.deleted);
+  const current = getBookRecord(state.library, state.book.bookId);
+  if (current) {
+    const removed = ["highlights", "notes", "bookmarks"].some((list) => (state.book[list] || []).length > current[list].length);
+    state.book = { ...state.book, ...current, filePath: state.book.filePath, lastLocation: state.book.lastLocation };
+    if (removed && state.rendition) {
+      state.rendition.annotations.remove?.(undefined, "highlight");
+      applyStoredAnnotations();
+    }
+  }
   state.docReader?.refreshHighlights?.();
+  state.pdf?.refreshHighlights?.();
   render();
+  return merged;
+}
+
+// Ids of annotations deleted here (src/core/libraryTransfer.js), so syncing does not bring them back.
+const DELETED_ANNOTATIONS_KEY = "minsepubviewer.deleted-annotations";
+
+function loadDeletedAnnotations() {
+  try {
+    return normalizeDeleted(JSON.parse(storage.getItem(DELETED_ANNOTATIONS_KEY) || "{}"));
+  } catch {
+    return {};
+  }
+}
+
+function saveDeletedAnnotations(deleted) {
+  storage.setItem(DELETED_ANNOTATIONS_KEY, JSON.stringify(normalizeDeleted(deleted)));
+}
+
+function rememberDeletedAnnotations(ids) {
+  saveDeletedAnnotations(recordDeleted(loadDeletedAnnotations(), ids));
+  scheduleRecordsSync();
+}
+
+// --- Sync file ----------------------------------------------------------------------------------
+// A records file in a folder the user picks, typically one a cloud service keeps in sync between
+// the desktop and the phone. Each sync reads it, merges it with this device's records and writes
+// the result back: when the app starts, a little after records change, when it goes to the
+// background or closes, and on request.
+const SYNC_TARGET_KEY = "minsepubviewer.sync-target";
+const SYNC_DELAY_MS = 20000;
+
+function loadSyncTarget() {
+  try {
+    const target = JSON.parse(storage.getItem(SYNC_TARGET_KEY) || "null");
+    return target?.ref ? target : null;
+  } catch {
+    return null;
+  }
+}
+
+function recordsSnapshot() {
+  return `${serializeLibraryState(state.library)}|${JSON.stringify(state.markdownAnnotations)}|${storage.getItem(DELETED_ANNOTATIONS_KEY) || ""}`;
+}
+
+function scheduleRecordsSync() {
+  if (!syncState.ready || !loadSyncTarget() || !platform.writeSyncFile) return;
+  clearTimeout(syncState.timer);
+  syncState.timer = setTimeout(() => void syncRecords({ onlyIfChanged: true }), SYNC_DELAY_MS);
+}
+
+async function syncRecords({ manual = false, onlyIfChanged = false } = {}) {
+  const target = loadSyncTarget();
+  if (!target || !platform.readSyncFile) return false;
+  if (syncState.running) return syncState.running;
+  clearTimeout(syncState.timer);
+  syncState.running = (async () => {
+    try {
+      if (onlyIfChanged) currentRecords();
+      if (onlyIfChanged && recordsSnapshot() === syncState.snapshot) return true;
+      renderSyncStatus(t("sync.running"));
+      const remote = await platform.readSyncFile(target.ref);
+      let summary = null;
+      if (!remote?.missing && remote?.text?.trim()) summary = applyMergedRecords(parseRecordsTransfer(remote.text)).summary;
+      const transfer = createRecordsTransfer(currentRecords());
+      await platform.writeSyncFile(target.ref, JSON.stringify(transfer));
+      syncState.snapshot = recordsSnapshot();
+      const when = new Date();
+      storage.setItem(SYNC_TARGET_KEY, JSON.stringify({ ...target, lastSync: when.toISOString() }));
+      renderSyncStatus();
+      logClient("records.synced", { manual, ...(summary || {}) });
+      return true;
+    } catch (error) {
+      logClient("records.sync.failed", { manual, error: formatError(error) });
+      renderSyncStatus(t("sync.failed", { detail: errorText(error) }));
+      return false;
+    } finally {
+      syncState.running = null;
+    }
+  })();
+  return syncState.running;
+}
+
+async function chooseSyncFile(create) {
+  if (!platform.chooseSyncFile) return;
+  const chosen = await platform.chooseSyncFile({ create });
+  if (!chosen) return;
+  storage.setItem(SYNC_TARGET_KEY, JSON.stringify({ ref: chosen.ref, name: chosen.name }));
+  syncState.snapshot = "";
+  await syncRecords({ manual: true });
+}
+
+function stopSync() {
+  clearTimeout(syncState.timer);
+  storage.removeItem(SYNC_TARGET_KEY);
+  renderSyncStatus();
+}
+
+function renderSyncStatus(message = "") {
+  const target = loadSyncTarget();
+  const supported = Boolean(platform.chooseSyncFile);
+  elements.syncChooseButton.hidden = !supported;
+  elements.syncCreateButton.hidden = !supported;
+  elements.syncNowButton.hidden = !target;
+  elements.syncStopButton.hidden = !target;
+  const last = target?.lastSync ? new Date(target.lastSync).toLocaleString(getLocale()) : "";
+  elements.syncStatus.textContent = message
+    || (!supported ? t("sync.unsupported") : target ? t("sync.target", { name: target.name, last: last || t("sync.never") }) : t("sync.off"));
 }
 
 async function exportAnnotations() {
@@ -4576,6 +4720,7 @@ elements.bookmarkButton.addEventListener("click", () => {
     const bookmarks = exists
       ? annotations.bookmarks.filter((bookmark) => bookmark.line !== line)
       : [...annotations.bookmarks, createMarkdownBookmark(line)];
+    if (exists) rememberDeletedAnnotations(annotations.bookmarks.filter((bookmark) => bookmark.line === line).map((bookmark) => bookmark.id));
     saveCurrentMarkdownAnnotations({ ...annotations, bookmarks });
     render();
     return;
@@ -4590,6 +4735,7 @@ elements.bookmarkButton.addEventListener("click", () => {
   const exists = state.book.bookmarks.some(sameLocation);
 
   if (exists) {
+    rememberDeletedAnnotations(state.book.bookmarks.filter(sameLocation).map((bookmark) => bookmark.id));
     state.book = {
       ...state.book,
       bookmarks: state.book.bookmarks.filter((bookmark) => !sameLocation(bookmark))
@@ -4662,6 +4808,18 @@ elements.underlineSelectionButton.addEventListener("click", () => {
 elements.noteButton.addEventListener("click", () => {
   addCurrentNote();
 });
+elements.syncChooseButton.addEventListener("click", () => {
+  void chooseSyncFile(false).catch((error) => renderSyncStatus(t("sync.failed", { detail: errorText(error) })));
+});
+elements.syncCreateButton.addEventListener("click", () => {
+  void chooseSyncFile(true).catch((error) => renderSyncStatus(t("sync.failed", { detail: errorText(error) })));
+});
+elements.syncNowButton.addEventListener("click", () => void syncRecords({ manual: true }));
+elements.syncStopButton.addEventListener("click", stopSync);
+renderSyncStatus();
+syncState.ready = true;
+// Sync once at start, after the library has loaded.
+setTimeout(() => void syncRecords(), 1500);
 elements.exportRecordsButton.addEventListener("click", () => {
   void exportRecords().catch((error) => window.alert(t("error.export", { detail: errorText(error) })));
 });
@@ -4821,6 +4979,8 @@ platform?.onWindowCloseRequested?.(() => {
       }
     }
 
+    // The last changes reach the sync file before the window goes (at most a few seconds).
+    await Promise.race([syncRecords({ onlyIfChanged: true }), new Promise((resolve) => setTimeout(resolve, 4000))]);
     windowCloseApproved = true;
     platform.completeWindowClose(true);
   })().catch((error) => {
@@ -4898,6 +5058,7 @@ if (platform.isMobile) {
   const saveBeforeBackground = async () => {
     saveMobileSession();
     await platform.flush();
+    await syncRecords({ onlyIfChanged: true });
   };
   platform.onBackground(saveBeforeBackground);
   document.addEventListener("visibilitychange", () => {

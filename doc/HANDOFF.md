@@ -79,6 +79,7 @@ npm.cmd run android:install
 - 에뮬레이터 조작 시 주의: Git Bash에서 `/data/...` 같은 기기 경로 인자는 `MSYS_NO_PATHCONV=1`로 경로 변환을 꺼야 한다.
 - 후속(같은 날): PC 앱도 `web/hwp-wasm.js`로 HWP를 변환(네이티브 `@ohah/hwpjs`는 개발 의존성, 설치본에서 빠짐). WASM 래퍼가 변환 전에 쪽을 넘어가는 문단을 나눔(`native/hwp-wasm/src/split.rs`) → 출력이 네이티브와 일부 문서에서 달라지는 것이 정상. 비교는 `node scripts/compare-hwp-wasm.cjs <파일...>`("DIFFERENT"는 쪽 나눔 수정 때문일 수 있으니 쪽 수로 판단).
 - 엑셀·PPT는 사용자 결정으로 제외(2026-11-03).
+- 같은 날 마지막 추가: 기록 자동 동기화(보기 설정 → 자동 동기화, 클라우드 폴더의 동기화 파일), 휴대폰 Markdown 원본 저장. 에뮬레이터 확인은 WebView 원격 디버깅으로 함: `adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>` 후 `http://127.0.0.1:9333/json`의 웹소켓으로 `Runtime.evaluate`(디버그 빌드에서만). 이 PC에서 `adb push`는 에뮬레이터를 죽이기도 해서 파일 전송은 `scripts/install_app_adb.py`와 같은 adb-shell 방식을 씀.
 - 같은 날 추가: 설치본 로그 위치(프로필 폴더), 휴대폰 재배치 HWP의 그림·번호·글머리표·머리말·꼬리말·장평·문단 테두리, BMP→PNG 재압축, 검색 개선, Markdown 상대 경로 그림(PC 읽기 모드), 기록 옮기기(보기 설정). 시험 생성기 `createSampleHwp`에 `picture`, `lists`, `spanning`, `controls` 선택. Google Play 검토는 [PLAY_STORE_REVIEW.md](PLAY_STORE_REVIEW.md).
 - 이날 마지막 결과: `npm.cmd test` 179개, `test:documents`·`test:reader`·`test:pdf` 통과(`test:reader`는 한 번 DOCX 두 손가락 확대 단계에서 시간 초과 후 재실행 2번 통과 — 간헐), `android:sync`·`assembleDebug` 성공(10.7MB), `build:pc-dir` 설치본 폴더에서 HWP 열기와 프로필 폴더 로그 확인.
 - 다음 후보: 실기기 확인용 0.1.13 빌드, 조절 문자가 있는 문단의 쪽 넘김, 알려진 epub.js `bounds` 오류.

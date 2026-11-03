@@ -158,7 +158,9 @@ Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/rele
 - 다른 앱으로 열기/공유 MIME: EPUB, PDF(`application/pdf`, `application/x-pdf`), DOCX, HWP(`application/x-hwp`, `application/hwp`, `application/haansofthwp`, `application/hangul`(2026-11-02, 폴라리스 오피스 목록 참고), `application/vnd.hancom.hwp`, `application/vnd.hancom.hwpml`), HWPX(`application/hwp+zip`, `application/x-hwpx`, `application/vnd.hancom.hwpx`, `application/haansofthwpx`), Markdown·TXT, 그리고 메신저가 쓰는 `application/octet-stream`·ZIP(파일 이름으로 형식 확인).
   바이너리 HWP 5.0 원본 쪽 보기(2026-11-03, ☰ 메뉴 "HWP 원본 쪽 보기", 기본 끔): hwpjs 해석기를 WebAssembly로 빌드한 `web/vendor/hwp/hwp_core.wasm`(약 700KB, PC 앱도 같은 파일 사용, 쪽을 넘어가는 문단 나누기 포함, 가져오기 없음 → SharedArrayBuffer·교차 출처 격리 불필요)을 `scripts/build-mobile.js`가 `dist/mobile/vendor/hwp/`로 복사하고 `MINS_HWP_WASM_URL`로 읽는다. API 36 에뮬레이터(WebView 133)에서 로컬 서버의 `.wasm` 제공과 쪽 표시 확인. 다시 빌드하려면 Rust(rustup)와 git이 있는 PC에서 `npm.cmd run build:hwp-wasm`.
   재배치 보기(2026-11-03 보강): 그림(PNG·JPEG·GIF·BMP·WebP, BMP는 WebView에서 PNG로 다시 압축), 번호·글머리표·개요 번호, 머리말·꼬리말(구역 앞뒤 한 번), 장평, 문단 테두리.
-  기록 옮기기(2026-11-03): 보기 설정 → 기록 내보내기(`exportText`로 저장)/가져오기(`<input type=file>`, Capacitor 파일 선택). 실기기 미확인. Google Play 준비 사항은 [PLAY_STORE_REVIEW.md](PLAY_STORE_REVIEW.md).
+  기록 옮기기(2026-11-03): 보기 설정 → 기록 내보내기(`exportText`로 저장)/가져오기(`<input type=file>`, Capacitor 파일 선택). 실기기 미확인.
+  기록 자동 동기화(2026-11-03): 플러그인 `chooseSyncFile`(만들기 `ACTION_CREATE_DOCUMENT` / 선택 `ACTION_OPEN_DOCUMENT`, `takePersistableUriPermission` 읽기·쓰기), `readSyncFile`, `writeSyncFile`(64MB 이하). API 36 에뮬레이터에서 다운로드 폴더에 만들기 → 다른 기기 변경 병합 → 앱 강제 종료·재실행 뒤 시작 동기화 성공(영구 권한 유지) 확인.
+  Markdown 원본 저장(2026-11-03): `pickFile`이 읽기·쓰기·영구 권한을 요청하고 Markdown이면 영구 권한을 받아 둠. `saveMarkdown` 결과의 `original`: `saved`/`changed`(원본이 그사이 바뀜, 덮어쓰지 않음)/`failed`/`none`. 출처는 `files/reader-sources.json`. 에뮬레이터에서 원본 저장(`saved`)과 외부 변경 뒤 보호(`changed`) 확인. Google Play 준비 사항은 [PLAY_STORE_REVIEW.md](PLAY_STORE_REVIEW.md).
   바이너리 HWP 5.0은 자체 모듈(`src/core/hwpBinary.js`)로 본문·표·글상자·각주를 읽고, 2026-11-01부터 DocInfo의 글꼴·크기·색·문단 정렬/여백·표 테두리/배경을 화면 폭에 맞춰 적용합니다(쪽 배치·그림·자동 번호 제외, 압축 해제는 pako `inflateRaw`(`dist/mobile/vendor/pako/`). WebView의 `DecompressionStream`은 한글이 압축 본문 뒤에 붙이는 CRC·크기 8바이트 때문에 "Failed to fetch"로 실패해 0.1.9에서 교체).
   암호·배포용 HWP는 안내 문구만 보입니다.
 - 화면 터치(2026-10-18): 위쪽 1/3 탭은 이전, 아래쪽 1/3 탭은 다음(연속 스크롤·확대한 PDF에서는 한 화면씩 스크롤 후 쪽 이동). 가운데 한 번 탭은 아무 동작도 하지 않아 선택·형광펜에 쓰고, 가운데를 **두 번** 탭하면 전체 화면을 켜고 끕니다(처음 3번은 안내 문구). 밀기(스와이프) 쪽 넘김은 내용이 스스로 스크롤되지 않을 때. PDF 쪽 보기에서 쪽이 화면보다 크면 쪽 안을 스크롤하고, 쪽 끝(처음)에 닿은 뒤 한 번 더 밀면 다음(이전) 쪽으로 넘어갑니다(2026-10-18). 연속 보기는 스크롤로 문서 전체를 이동합니다.
@@ -186,10 +188,10 @@ Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/rele
 
 - 시스템 파일 선택기(SAF)로 EPUB 또는 MD/Markdown/TXT 파일 하나를 선택합니다.
 - 선택한 파일을 앱 내부 보관함으로 복사합니다. 외부 파일 전체 접근 권한은 요청하지 않습니다.
-- 같은 URI를 다시 선택하면 기존 앱 사본을 엽니다. 외부에서 원본을 바꿔도 자동으로 가져오지는 않습니다.
+- 같은 URI를 다시 선택하면 기존 앱 사본을 엽니다. 2026-11-03부터는 원본이 더 새롭고 사본에 자체 수정이 없으면 다시 가져옵니다.
 - 이름이 같은 서로 다른 URI의 문서는 별개로 보관합니다.
 - 최근 파일 목록은 최대 50개이며, 목록에서 밀려난 사본을 자동 삭제하지 않습니다.
-- **사본 저장**은 앱 내부 Markdown 파일만 변경합니다. 외부 원본을 덮어쓰지 않습니다.
+- **사본 저장**은 앱 내부 Markdown 파일을 저장하고, 파일 선택으로 연 문서는 원본에도 저장합니다(2026-11-03부터. 원본이 다른 곳에서 바뀌었거나 쓸 권한이 없으면 사본만 저장하고 알림).
 - **파일로 내보내기**는 Android 저장 창을 열어 외부에 파일을 만듭니다. 취소·실패 시 저장 완료로 처리하지 않습니다.
 - EPUB 주석과 EPUB→MD 내보내기도 Android 저장 창을 이용합니다.
 - 가져오기 제한은 EPUB 512MB, Markdown 16MB입니다. 내보내기는 UTF-8 기준 16MB까지입니다.

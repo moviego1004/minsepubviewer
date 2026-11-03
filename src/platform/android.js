@@ -112,6 +112,12 @@ ${errorText({ message: event.detail })}` : event.error);
       const result = await Documents.exportText(payload);
       return !result.cancelled;
     },
+    chooseSyncFile: async ({ create = false } = {}) => {
+      const result = await Documents.chooseSyncFile({ create });
+      return result.cancelled ? null : { ref: result.uri, name: result.name };
+    },
+    readSyncFile: (ref) => Documents.readSyncFile({ uri: ref }),
+    writeSyncFile: (ref, text) => Documents.writeSyncFile({ uri: ref, text }),
     openImageWindow,
     onBackground: (callback) => App.addListener("appStateChange", ({ isActive }) => {
       if (!isActive) void Promise.resolve(callback()).catch(console.error);

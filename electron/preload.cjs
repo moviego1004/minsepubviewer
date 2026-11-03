@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld("minseDesktop", {
   openFileInNewWindow: (filePath) => ipcRenderer.invoke("window:open-file", filePath),
   saveMarkdownFile: (payload) => ipcRenderer.invoke("markdown:save", payload),
   readMarkdownImage: (payload) => ipcRenderer.invoke("markdown:read-image", payload),
+  chooseSyncFile: async ({ create = false } = {}) => {
+    const result = await ipcRenderer.invoke("records:choose-sync-file", { create });
+    return result ? { ref: result.path, name: result.name } : null;
+  },
+  readSyncFile: (ref) => ipcRenderer.invoke("records:read-sync", { path: ref }),
+  writeSyncFile: (ref, text) => ipcRenderer.invoke("records:write-sync", { path: ref, text }),
   confirmSaveChanges: (payload) => ipcRenderer.invoke("document:confirm-save", payload),
   completeWindowClose: (shouldClose) => ipcRenderer.send("window:close-complete", Boolean(shouldClose)),
   openImageWindow: (payload) => ipcRenderer.invoke("image:open", payload),

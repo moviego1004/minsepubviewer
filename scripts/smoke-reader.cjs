@@ -83,6 +83,10 @@ app.whenReady().then(async () => {
       onBackButton(callback) { window.__back = callback; },
       saveMarkdownFile: async ({content}) => ({ name: document.name, path: document.path }),
       exportTextFile: async ({ content, fileName }) => { window.__exported = { content, fileName }; return true; },
+      // Sync file in memory: window.__syncText is the "cloud" copy another device also writes.
+      chooseSyncFile: async () => ({ ref: 'content://cloud/sync.json', name: 'sync.json' }),
+      readSyncFile: async () => (window.__syncText ? { text: window.__syncText } : { missing: true }),
+      writeSyncFile: async (ref, text) => { window.__syncText = text; },
       exit: async () => {},
     };
   `);
@@ -426,12 +430,24 @@ app.whenReady().then(async () => {
     input.dispatchEvent(new Event('change'));
   })()`);
   await waitFor("/새 책 1권, 갱신 0권, 주석 1개/.test(document.querySelector('#recordsStatus').textContent) && JSON.parse(localStorage.getItem('minsepubviewer.library')).books.some((book) => book.bookId === 'other-device-book' && book.filePath === '')");
+  // Sync file: created here, then another device adds a book and deletes the imported highlight.
+  await run("document.querySelector('#syncCreateButton').click()");
+  await waitFor("window.__syncText && JSON.parse(window.__syncText).library.books.some((book) => book.bookId === 'other-device-book') && !document.querySelector('#syncNowButton').hidden && /sync\\.json/.test(document.querySelector('#syncStatus').textContent)");
+  await run(`(() => {
+    const data = JSON.parse(window.__syncText);
+    data.library.books.push({ bookId: 'synced-book', title: '동기화 책', lastLocation: 'pdf:page=9', updatedAt: new Date().toISOString() });
+    data.library.books.find((book) => book.bookId === 'other-device-book').highlights = [];
+    data.deleted = { ...data.deleted, far: new Date().toISOString() };
+    window.__syncText = JSON.stringify(data);
+    document.querySelector('#syncNowButton').click();
+  })()`);
+  await waitFor("(() => { const books = JSON.parse(localStorage.getItem('minsepubviewer.library')).books; const other = books.find((book) => book.bookId === 'other-device-book'); return books.some((book) => book.bookId === 'synced-book') && other && other.highlights.length === 0 && JSON.parse(window.__syncText).library.books.some((book) => book.bookId === 'synced-book'); })()");
   await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#mobileOpenFile').textContent === 'Open file' && document.querySelector('#bookmarksTab').textContent === 'Bookmarks' && document.querySelector('#mobilePrevButton').textContent === 'Prev'");
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, scroll/swipe paging in EPUB (continuous), PDF (page and continuous) and DOCX, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 (reflowed, original pages fitted to the width, fallback) and HWPX on the phone, reading records export/import, and Korean/English UI switch (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, scroll/swipe paging in EPUB (continuous), PDF (page and continuous) and DOCX, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 (reflowed, original pages fitted to the width, fallback) and HWPX on the phone, reading records export/import and sync file, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);

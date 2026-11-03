@@ -698,6 +698,44 @@ ipcMain.handle("markdown:read-image", async (_event, payload = {}) => {
   }
 });
 
+// Sync file for reading records (src/core/libraryTransfer.js), usually in a folder a cloud client
+// keeps in sync (Google Drive, OneDrive). Writes go to a temporary file first, then replace it.
+const syncFileMaxBytes = 64 * 1024 * 1024;
+const isSyncFilePath = (filePath) => typeof filePath === "string" && path.isAbsolute(filePath) && /\.json$/i.test(filePath);
+
+ipcMain.handle("records:choose-sync-file", async (event, payload = {}) => {
+  await i18nReady;
+  const window = BrowserWindow.fromWebContents(event.sender) || undefined;
+  const filters = [{ name: "JSON", extensions: ["json"] }];
+  if (payload.create) {
+    const result = await dialog.showSaveDialog(window, { title: t("dialog.chooseSyncFile"), defaultPath: "MinsReader-sync.json", filters });
+    return result.canceled || !result.filePath ? null : { path: result.filePath, name: path.basename(result.filePath) };
+  }
+  const result = await dialog.showOpenDialog(window, { title: t("dialog.chooseSyncFile"), properties: ["openFile"], filters });
+  return result.canceled || !result.filePaths.length ? null : { path: result.filePaths[0], name: path.basename(result.filePaths[0]) };
+});
+
+ipcMain.handle("records:read-sync", async (_event, payload = {}) => {
+  if (!isSyncFilePath(payload.path)) throw new Error("native.syncNoAccess");
+  try {
+    const info = await fsSync.promises.stat(payload.path);
+    if (info.size > syncFileMaxBytes) throw new Error("native.syncTooLarge");
+    return { text: await readFile(payload.path, "utf8") };
+  } catch (error) {
+    if (error?.code === "ENOENT") return { missing: true };
+    throw error;
+  }
+});
+
+ipcMain.handle("records:write-sync", async (_event, payload = {}) => {
+  if (!isSyncFilePath(payload.path) || typeof payload.text !== "string") throw new Error("native.syncNoAccess");
+  if (Buffer.byteLength(payload.text, "utf8") > syncFileMaxBytes) throw new Error("native.syncTooLarge");
+  const temporary = `${payload.path}.${process.pid}.tmp`;
+  await writeFile(temporary, payload.text, "utf8");
+  await fsSync.promises.rename(temporary, payload.path);
+  return true;
+});
+
 ipcMain.handle("markdown:save", async (_event, payload = {}) => {
   const content = typeof payload.content === "string" ? payload.content : "";
   const saveAs = Boolean(payload.saveAs);
