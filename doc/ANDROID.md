@@ -89,6 +89,8 @@ npm.cmd run release:aab          # 버전 +1 → build/MinsReader_ver<버전>.aa
 - 결과 확인: 스크립트가 `jarsigner -verify`로 서명을 검사한 뒤 복사한다. 서명자 확인은 `keytool -printcert -jarfile build/MinsReader_ver<버전>.aab`(CN=Mins Consulting, SHA-256 06:C5:78:D4:…:97:13).
 - Play Console에서는 Play App Signing(앱 서명 키는 Google 보관)을 쓰고 이 키를 업로드 키로 쓴다. 업로드 키를 잃으면 Play Console에서 재설정 요청을 할 수 있다.
 - release 서명 앱은 디버그 APK와 서명이 달라 서로 업데이트로 설치되지 않는다(스토어 설치본으로 바꾸려면 디버그 앱을 지우고 설치, 그 전에 기록 내보내기).
+- 패키지 이름(2026-11-03): `com.minsapps.reader`(`android/app/build.gradle`의 namespace·applicationId, `capacitor.config.json` `appId`, `strings.xml`, Java 소스 `android/app/src/{main,test}/java/com/minsapps/reader/`, `scripts/install-android.js`·`install_app_adb.py`). 첫 Play 업로드 뒤에는 바꿀 수 없다. 0.1.17 이하 APK/AAB는 옛 패키지 `com.mins.epubviewer`라 새 앱과 따로 설치된다(기록은 내보내기/가져오기로 옮김). PC 설치 프로그램 ID는 `com.mins.epubviewer` 그대로.
+- 등록 문서: `doc/store/play-listing.md`, `privacy-policy.md`, `open-source-notices.md`.
 
 ## 케이블 없이 APK 파일로 설치
 
@@ -155,7 +157,7 @@ Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/rele
 
 ### 앱 이름, PDF, 다국어 (0.2 작업, 2026-10-17)
 
-- 앱 표시 이름을 **Mins Reader**로 바꿨습니다. `appId`/패키지 이름 `com.mins.epubviewer`는 기존 설치 업데이트를 위해 유지합니다.
+- 앱 표시 이름을 **Mins Reader**로 바꿨습니다. 이때는 `appId`/패키지 이름 `com.mins.epubviewer`를 유지했으나, 2026-11-03 Play 등록을 위해 **`com.minsapps.reader`**로 바꿨습니다(아래 "Play 스토어용 AAB").
 - PDF를 **파일 열기**, 다른 앱으로 열기/공유(`application/pdf`)로 받을 수 있습니다. PDF는 앱 내부 보관함(`reader-documents/*.pdf`, 512MB 이하)에 복사하고,
   웹 화면에는 바이트 대신 `convertFileSrc` URL을 넘겨 PDF.js가 직접 읽습니다.
 - PDF 재배치 보기(2026-11-02): ☰ 메뉴 "PDF 재배치 보기: 켜짐/꺼짐". 글자만 화면 폭으로 다시 흘립니다(그림·표 모양·다단 순서 제외, 스캔 PDF는 안내 문구).

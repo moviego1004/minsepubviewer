@@ -33,5 +33,5 @@ if (!run([...target, "install", "-r", apk])) {
   console.error("앱 설치에 실패했습니다. 기존 앱을 자동 삭제하지 않았습니다.");
   process.exit(1);
 }
-if (!run([...target, "shell", "am", "start", "-n", "com.mins.epubviewer/.MainActivity"])) process.exit(1);
+if (!run([...target, "shell", "am", "start", "-n", "com.minsapps.reader/.MainActivity"])) process.exit(1);
 console.log("Mins Reader를 휴대폰에 설치하고 실행했습니다.");

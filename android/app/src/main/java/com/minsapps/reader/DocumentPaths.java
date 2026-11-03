@@ -1,4 +1,4 @@
-package com.mins.epubviewer;
+package com.minsapps.reader;
 
 import java.io.File;
 import java.io.IOException;

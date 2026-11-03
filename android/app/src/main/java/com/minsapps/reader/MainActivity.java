@@ -1,4 +1,4 @@
-package com.mins.epubviewer;
+package com.minsapps.reader;
 
 import com.getcapacitor.BridgeActivity;
 import android.os.Bundle;

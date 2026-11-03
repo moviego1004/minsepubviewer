@@ -380,3 +380,14 @@
 - 검증(이번 실행): `node scripts/build-android.js`(assembleDebug) 성공. Pixel_7 에뮬레이터(API 36)에 `scripts/install_app_adb.py`로 설치, 강제 종료 뒤 실행 직후 화면 캡처 → 파란 배경 가운데 책 표시, 3초 뒤 앱 화면 정상. 확인 뒤 에뮬레이터 종료.
 - 미검증: Android 11 이하(API 24–30)에서 `splash.xml`이 보이는 모습(이번 에뮬레이터는 API 36이라 시스템 시작 화면만 확인), 실기기.
 - 이어서 `build_aab.bat`로 `build/MinsReader_ver0.1.16.aab`(versionCode 17) 빌드 성공, AAB 안 `base/res/drawable/splash.xml` 포함·서명자 CN=Mins Consulting 확인.
+
+## 패키지 이름 변경과 Play 등록 문서 (2026-11-03)
+
+- 사용자 요청: 다른 PC에서 `build_aab.bat` 오류 확인 → 스토어용 앱 이름·패키지 이름 질문 → "com.minsapps.reader로 해줘. 그리고 개인정보보호지침, 오픈소스 선언문 같은 등록해야 하는 문서도 같이 만들어줘. 다 되면 커밋, 푸시해줘".
+- 빌드 오류: `build:mobile`의 `copyfile node_modules\docx-preview\dist\docx-preview.min.js` ENOENT. 그 PC의 `node_modules`가 `docx-preview` 추가 전 상태였고, `build_aab.bat`은 `esbuild.cmd`·`cap.cmd`만 확인해 `npm ci`를 건너뜀. `npm.cmd ci` 후 `build_aab.bat` 성공 → 0.1.17(versionCode 18) AAB(옛 패키지, Play에 올리지 않음).
+- 패키지 변경: `android/app/build.gradle` namespace·applicationId, `capacitor.config.json` appId, `strings.xml` package_name·custom_url_scheme, Java 소스 5개를 `com/minsapps/reader/`로 `git mv`하고 package 선언 변경, `scripts/install-android.js`·`scripts/install_app_adb.py`. 저장소·git 기록 어디에도 `com.minsapps`가 없었고 사용자가 새 이름을 정함.
+- 결정: PC는 `installer.nsi` APP_ID가 제거 레지스트리 키(`...\Uninstall\${APP_ID}`)에 쓰여 바꾸면 기존 설치본 업그레이드가 깨지므로 `installer.nsi`·`package.json` `build.appId`는 `com.mins.epubviewer` 유지. 옛 패키지로 설치한 Android 앱은 새 앱과 별개(기록은 내보내기/가져오기).
+- 문서: `doc/store/play-listing.md`(앱 정보·설명·앱 콘텐츠·데이터 보안 답변·남은 일), `doc/store/privacy-policy.md`(한/영, 수집 없음, 기기 안 저장, 사용자 선택 파일·동기화 파일, INTERNET 권한, Android 백업), `doc/store/open-source-notices.md`(`node_modules`의 package.json·LICENSE에서 버전·라이선스·저작권 확인, Toast UI 포함 라이브러리는 `web/vendor/toastui-editor-bundle.js.LEGAL.txt`, PDF.js 표준 글꼴은 `LICENSE_FOXIT`·`LICENSE_LIBERATION`). 외부 전송이 없다는 근거: `web/*.js`의 `fetch`는 로컬 자산(`hwp_core.wasm`)과 PC 내부 경로뿐. 연락처 이메일은 공개 문서라 임의로 넣지 않고 `[연락처 이메일]`로 둠.
+- 관련 문서 갱신: HANDOFF, ANDROID, DEVELOPMENT_PLAN, NEXT_TASKS, PLAY_STORE_REVIEW.
+- 검증(이번 실행): `npm.cmd test` 181개 통과. `android\gradlew.bat testDebugUnitTest` 성공(옮긴 `ReaderFilesTest` 포함). `build_aab.bat` 성공 → `build/MinsReader_ver0.1.18.aab`(8.6MB, versionCode 19), release 병합 매니페스트 `package="com.minsapps.reader"`, FileProvider `com.minsapps.reader.fileprovider` 확인.
+- 미검증: 새 패키지 앱의 실기기·에뮬레이터 실행(MainActivity·플러그인 등록은 상대 이름이라 영향 없을 것으로 봄), Play Console 업로드, 개인정보처리방침 공개 URL.

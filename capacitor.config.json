@@ -1,5 +1,5 @@
 {
-  "appId": "com.mins.epubviewer",
+  "appId": "com.minsapps.reader",
   "appName": "Mins Reader",
   "webDir": "dist/mobile",
   "android": {

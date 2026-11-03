@@ -1,4 +1,4 @@
-package com.mins.epubviewer;
+package com.minsapps.reader;
 
 import android.app.Activity;
 import android.content.Intent;

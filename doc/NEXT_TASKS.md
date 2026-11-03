@@ -4,7 +4,15 @@
 
 전체 요구사항·개발 방안·로드맵은 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5장 "앞으로 할 일"을 기준으로 한다.
 
-## 현재 요청 — 스토어 이미지 + AAB 빌드·버전 자동 올림 (완료, 2026-11-03)
+## 현재 요청 — 패키지 이름 변경 + Play 등록 문서 (완료, 2026-11-03)
+
+- 사용자 요청: 다른 PC에서 `build_aab.bat` 오류 확인 → "스토어에 올리기 위한 앱이름, 패키지 이름 알려줘" → "com.minsapps.reader로 해줘. 그리고 개인정보보호지침, 오픈소스 선언문 같은 등록해야 하는 문서도 같이 만들어줘. 다 되면 커밋, 푸시해줘".
+- 빌드 오류 원인: 그 PC의 `node_modules`에 `docx-preview`가 없었음(`build_aab.bat`은 `esbuild.cmd`·`cap.cmd`만 보고 `npm ci`를 건너뜀). `npm.cmd ci` 후 성공.
+- 완료: Android 패키지 `com.mins.epubviewer` → `com.minsapps.reader`(PC 설치 ID는 유지). 문서 `doc/store/play-listing.md`, `privacy-policy.md`, `open-source-notices.md`. AAB 0.1.18(versionCode 19).
+- 남은 일(사용자): 개인정보처리방침의 `[연락처 이메일]` 채우기, 공개 URL로 게시, 휴대폰 스크린샷 2장 이상, Play Console 앱 만들기(`com.minsapps.reader`)와 0.1.18 AAB 업로드.
+- 남은 일(제안): 앱 안 "앱 정보" 화면(버전, 오픈소스 고지, HWP 출처 문구), `build_aab.bat`이 `package-lock.json`이 바뀌면 `npm ci`를 다시 하도록 개선, 백업 범위 규칙·열기 목록 정리.
+
+## 이전 요청 — 스토어 이미지 + AAB 빌드·버전 자동 올림 (완료, 2026-11-03)
 
 - 사용자 요청: "doc\image 밑에 MinsScan 앱에서 사용한 이미지를 넣어놨어. 이 이미지의 look and feel을 유지하면서 Mins Reader 앱을 앱스토어에 등록하기 위한 이미지 만들어줘" → "aab 빌드하고, 빌드할때 마다 버전 번호 올려주는 스크립트 만들어줘. 다 되면 모두 커밋, 푸시 부탁해."
 - 스토어 이미지 완료: `doc/store/icon-512.png`(32비트 PNG), `icon-1024.png`, `feature-1024x500.png`(그래픽 이미지, 24비트), `feature-2048x1000.png`. 원본은 `doc/store/src/`(HTML + `book.js`), 다시 만들기: `npx electron doc/store/src/render.cjs` 뒤 PIL로 512·1024×500 축소(WORK_LOG 참고). 참고 원본 `doc/image/`(MinsScan).
@@ -249,7 +257,7 @@
 - PDF 기능은 PDF.js(`pdfjs-dist`)가 제공하는 범위까지만 적용한다(렌더링, 페이지/연속 보기, 확대/맞춤, 회전, 텍스트 선택, 검색, 목차, 링크). 스캔본 영역 형광펜, OCR, 양식 저장, PDF 편집은 하지 않는다.
 - 형광펜은 방식 B: 텍스트 레이어 선택 → 앱이 그리고 앱 내부에 저장(원본 PDF 미수정). 기존 색상/메모/책갈피/사이드바/내보내기와 연동한다.
 - 모든 메뉴는 다국어 지원, 최소 한국어/영어.
-- 앱 이름은 "Mins Reader". `appId`(`com.mins.epubviewer`)와 기존 데이터 경로는 유지한다.
+- 앱 이름은 "Mins Reader". `appId`(`com.mins.epubviewer`)와 기존 데이터 경로는 유지한다. (2026-11-03: Android 패키지는 `com.minsapps.reader`로 변경, PC는 유지)
 
 단계:
 0. `npm.cmd run test:reader`의 `bounds` 오류 진단/수정.

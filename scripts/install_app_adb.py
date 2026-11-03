@@ -27,7 +27,7 @@ import sys
 import time
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = 'com.mins.epubviewer'
+PACKAGE = 'com.minsapps.reader'
 ACTIVITY = f'{PACKAGE}/.MainActivity'
 REMOTE_APK = '/data/local/tmp/mins-reader-install.apk'
 DEBUG_OUTPUT = PROJECT_ROOT / 'android/app/build/outputs/apk/debug'

@@ -1,6 +1,6 @@
 # 다른 PC에서 이어서 작업하기
 
-최종 갱신: 2026-11-02 (한국 시간)
+최종 갱신: 2026-11-03 (한국 시간)
 
 ## 먼저 읽을 문서
 
@@ -17,7 +17,8 @@
 
 - 저장소: https://github.com/moviego1004/minsepubviewer.git
 - 이번 인수인계 대상 브랜치: `master`. 정확한 커밋은 `git log -5 --oneline`으로 확인한다.
-- 앱 이름은 **Mins Reader**(이전 Mins EPUB Viewer). `appId` `com.mins.epubviewer`와 PC 기존 사용자 데이터 폴더는 유지한다.
+- 앱 이름은 **Mins Reader**(이전 Mins EPUB Viewer). Android 패키지(applicationId·namespace·Capacitor `appId`·Java 패키지)는 Play 등록을 위해 2026-11-03 **`com.minsapps.reader`**로 바꿨다(사용자 요청). 이전 `com.mins.epubviewer`로 설치한 APK는 다른 앱이 되어 업데이트되지 않고 기록도 옮겨지지 않는다(필요하면 기록 내보내기/가져오기). PC는 설치 프로그램 제거 레지스트리 키와 기존 설치본 업그레이드 때문에 `installer.nsi`·`package.json` `build.appId`의 `com.mins.epubviewer`와 사용자 데이터 폴더를 그대로 둔다.
+- Play 등록 문서(2026-11-03): `doc/store/play-listing.md`(앱 이름·패키지·설명·앱 콘텐츠·데이터 보안 답변), `privacy-policy.md`(한/영), `open-source-notices.md`(라이브러리·글꼴 라이선스, HWP 출처 문구).
 - EPUB, Markdown에 더해 **PDF**(PDF.js 6.3.289)를 읽는다. 툴바의 **파일 열기** 하나로 세 형식을 연다. 메뉴·알림은 **한국어/영어** 지원(보기 설정 → 언어).
 - Electron Windows 앱과 Capacitor Android 앱이 `web/`, `src/core/`를 공유한다. 실제 UI는 순수 JavaScript 기반이며 초기 계획의 React는 현재 구현이 아니다.
 - EPUB/Markdown 열기, 읽기 설정, 위치 복원, 책갈피/주석, Markdown 편집 및 내보내기 코드가 있다.
@@ -32,7 +33,7 @@
 - Android 문서 읽기 경로: EPUB(압축 해제 폴더 URL)·PDF(앱 사본 URL)는 `convertFileSrc`, DOCX·HWP·HWPX·Markdown은 플러그인 `readDocument`(base64). Capacitor 로컬 서버가 `.hwp` 등 모르는 확장자를 제공하지 못해 "Failed to fetch"가 났기 때문(2026-10-18).
 - Android에는 네이티브 문서 가져오기/저장, 다른 앱의 열기/공유 수신, 앱 내부 사본과 상태 저장, 모바일 메뉴/전체 화면/터치 조작이 구현되어 있다.
 - 런처 아이콘(2026-11-03): 스토어 아이콘과 같은 펼친 책. 원본 `doc/store/src/launcher.html`, `npx electron doc/store/src/render.cjs`가 스토어 이미지와 `mipmap-*/ic_launcher{,_round,_foreground}.png`를 함께 만듦. 적응형 배경색 `values/ic_launcher_background.xml` = #1D4ED8. 시작 화면도 교체: Capacitor `splash.png` 11장을 지우고 `drawable/splash.xml`(파란 배경 + 가운데 240dp 책, 늘어나지 않음), Android 12+ 시스템 시작 화면은 `styles.xml`의 `windowSplashScreenBackground` = 같은 파랑 + 런처 아이콘.
-- Play용 AAB(2026-11-03): `build_aab.bat` 또는 `npm.cmd run release:aab` → `build/MinsReader_ver<버전>.aab`(버전 +1, 업로드 키 서명, `jarsigner` 검사). 업로드 키는 사용자의 기존 키(다른 앱과 공용)를 `android/keystore/`(git 무시 폴더)에 둠 — 다른 PC에서 AAB를 만들려면 이 폴더를 복사. 현재 0.1.16(versionCode 17): 2026-11-03 `build_aab.bat`로 빌드한 `build/MinsReader_ver0.1.16.aab`(8.6MB, 새 런처 아이콘·시작 화면 포함, AAB만, APK·PC 설치 파일 없음). 0.1.15는 시작 화면 전, 0.1.14는 아이콘 교체 전. 0.1.13(versionCode 14)은 잠깐 만든 새 키로 서명돼 AAB를 지웠고 번호는 건너뜀. 스토어 이미지는 `doc/store/`.
+- Play용 AAB(2026-11-03): `build_aab.bat` 또는 `npm.cmd run release:aab` → `build/MinsReader_ver<버전>.aab`(버전 +1, 업로드 키 서명, `jarsigner` 검사). 업로드 키는 사용자의 기존 키(다른 앱과 공용)를 `android/keystore/`(git 무시 폴더)에 둠 — 다른 PC에서 AAB를 만들려면 이 폴더를 복사. 현재 0.1.18(versionCode 19): 2026-11-03 `build_aab.bat`로 빌드한 `build/MinsReader_ver0.1.18.aab`(8.6MB, 패키지 `com.minsapps.reader`, AAB만). 0.1.17(versionCode 18)은 같은 날 다른 PC에서 만든 옛 패키지(`com.mins.epubviewer`) AAB라 Play에 올리지 않는다. 0.1.16(versionCode 17)은 새 런처 아이콘·시작 화면이 들어간 옛 패키지 AAB. 0.1.15는 시작 화면 전, 0.1.14는 아이콘 교체 전. 0.1.13(versionCode 14)은 잠깐 만든 새 키로 서명돼 AAB를 지웠고 번호는 건너뜀. 스토어 이미지는 `doc/store/`.
 - 버전과 배포 파일(2026-10-17 사용자 지시): PC와 Android는 한 버전을 쓴다(`package.json` version = Android versionName, versionCode는 빌드마다 +1). 배포 파일을 만들 때마다 마지막 자리를 1씩 올리고 `build/MinsReader_ver<버전>.exe`(PC 설치 파일), `build/MinsReader_ver<버전>.apk`로 저장한다. 모든 빌드 명령이 `scripts/release.cjs`를 거친다: `build.bat`·`npm.cmd run build`·`release`(둘 다), `makeSetup.bat`·`release:pc`, `android:apk`·`release:android`. 다음 번호는 PC 버전·Android 버전·`build/`의 기존 `MinsReader_ver*` 파일 중 가장 높은 것 +1(기존 파일 덮어쓰기 방지). 실패하면 버전을 되돌린다. Electron 폴더 빌드만 필요하면 내부용 `build:pc-dir`. 현재 0.1.12(versionCode 13): 2026-11-02 16:04에 빌드된 `build/MinsReader_ver0.1.12.apk`(10.2MB)·`.exe`. 빌드 시각이 `3443b1a`(15:59) 뒤라 M7 기호, M8 HWPX 서식, HWPX 그림까지 모두 들어 있다. 버전 올림은 2026-11-03에 커밋. 이전 0.1.11(versionCode 12, 13:09)은 M6까지.
 - 화면 영역에 맞춘 반응형 배치와 ResizeObserver 기반 EPUB 재배치가 있다. Android 최소 API 24(7.0), target/compile API 36이다.
 - 기기 모델 자동 분류나 전자잉크 전용 갱신/잔상 제어는 없다. Android 버전만으로 호환성을 보장할 수 없으며 WebView와 실제 기기 검증이 필요하다.

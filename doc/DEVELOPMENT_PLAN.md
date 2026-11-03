@@ -11,7 +11,7 @@
 
 ## 1. 제품 개요
 
-- **이름**: Mins Reader (이전 이름 Mins EPUB Viewer). 내부 식별자 `com.mins.epubviewer`와 기존 사용자 데이터 경로는 유지한다.
+- **이름**: Mins Reader (이전 이름 Mins EPUB Viewer). Android 패키지는 2026-11-03 Play 등록을 위해 `com.minsapps.reader`로 바꿨다. PC 설치 ID `com.mins.epubviewer`와 기존 사용자 데이터 경로는 유지한다.
 - **목표**: EPUB·PDF·Markdown·오피스/한글 문서를 한 앱에서 읽고, 이어 읽기·형광펜·메모·책갈피를 형식과 상관없이 같은 방식으로 쓰는 개인용 범용 뷰어.
 - **대상 플랫폼**: Windows PC(Electron), Android(Capacitor). iOS는 Mac·Apple 개발자 계정이 없어 보류.
 - **원칙**
@@ -243,7 +243,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 | HWP 5.0 Android | 자체 해석기 | 공개 WASM은 공유 메모리·256MB가 필요해 WebView에서 곤란 |
 | HWP 압축 해제 | pako | 브라우저 `DecompressionStream`은 한글의 CRC·크기 꼬리를 거부 |
 | 실행 중 라이브러리 내려받기 | 하지 않음 | 오프라인 사용, 판 불일치, 보안 |
-| 앱 식별자 | `com.mins.epubviewer` 유지 | 기존 설치본 업데이트와 데이터 보존 |
+| 앱 식별자 | Android `com.minsapps.reader`(2026-11-03 변경), PC `com.mins.epubviewer` 유지 | Play 등록용 패키지 / PC 기존 설치본 업데이트와 데이터 보존 |
 | 화면 기술 | 순수 JavaScript(React 미채택) | PC·Android 공유가 단순하고 번들이 작음 |
 
 ## 부록: 초기 계획(2026-08)

@@ -1,4 +1,4 @@
-package com.mins.epubviewer;
+package com.minsapps.reader;
 
 import static org.junit.Assert.*;
 import java.io.*;
