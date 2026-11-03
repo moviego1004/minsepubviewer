@@ -17,6 +17,7 @@ test("the higher of the PC and Android versions is continued", () => {
 test("release files are named MinsReader_ver<version>", () => {
   assert.equal(releaseFileName("0.1.4", "exe"), "MinsReader_ver0.1.4.exe");
   assert.equal(releaseFileName("0.1.4", "apk"), "MinsReader_ver0.1.4.apk");
+  assert.equal(releaseFileName("0.1.4", "aab"), "MinsReader_ver0.1.4.aab");
 });
 
 test("release files in build/ are found newest first and set the floor for the next version", () => {
@@ -26,13 +27,14 @@ test("release files in build/ are found newest first and set the floor for the n
   const { latestReleaseFile, listReleaseFiles, maxVersion } = require("../../scripts/bump-version.cjs");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mins-release-"));
   try {
-    for (const name of ["MinsReader_ver0.1.9.exe", "MinsReader_ver0.1.10.apk", "MinsReader_ver0.1.9.apk", "MinsReader-0.2.0.exe", "app-debug.apk"]) {
+    for (const name of ["MinsReader_ver0.1.9.exe", "MinsReader_ver0.1.10.apk", "MinsReader_ver0.1.9.apk", "MinsReader_ver0.1.11.aab", "MinsReader-0.2.0.exe", "app-debug.apk"]) {
       fs.writeFileSync(path.join(dir, name), "");
     }
-    assert.deepEqual(listReleaseFiles(dir).map((file) => file.name), ["MinsReader_ver0.1.10.apk", "MinsReader_ver0.1.9.exe", "MinsReader_ver0.1.9.apk"]);
+    assert.deepEqual(listReleaseFiles(dir).map((file) => file.name), ["MinsReader_ver0.1.11.aab", "MinsReader_ver0.1.10.apk", "MinsReader_ver0.1.9.exe", "MinsReader_ver0.1.9.apk"]);
     assert.equal(latestReleaseFile("exe", dir).version, "0.1.9");
     assert.equal(latestReleaseFile("apk", dir).version, "0.1.10");
-    assert.equal(maxVersion(["0.1.5", "0.1.4", listReleaseFiles(dir)[0].version]), "0.1.10");
+    assert.equal(latestReleaseFile("aab", dir).version, "0.1.11");
+    assert.equal(maxVersion(["0.1.5", "0.1.4", listReleaseFiles(dir)[0].version]), "0.1.11");
     assert.deepEqual(listReleaseFiles(path.join(dir, "missing")), []);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

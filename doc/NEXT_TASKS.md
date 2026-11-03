@@ -4,7 +4,14 @@
 
 전체 요구사항·개발 방안·로드맵은 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5장 "앞으로 할 일"을 기준으로 한다.
 
-## 현재 요청 — 기록 자동 동기화 + 휴대폰 Markdown 원본 저장 (완료, 실기기 확인 대기, 2026-11-03)
+## 현재 요청 — 스토어 이미지 + AAB 빌드·버전 자동 올림 (완료, 2026-11-03)
+
+- 사용자 요청: "doc\image 밑에 MinsScan 앱에서 사용한 이미지를 넣어놨어. 이 이미지의 look and feel을 유지하면서 Mins Reader 앱을 앱스토어에 등록하기 위한 이미지 만들어줘" → "aab 빌드하고, 빌드할때 마다 버전 번호 올려주는 스크립트 만들어줘. 다 되면 모두 커밋, 푸시 부탁해."
+- 스토어 이미지 완료: `doc/store/icon-512.png`(32비트 PNG), `icon-1024.png`, `feature-1024x500.png`(그래픽 이미지, 24비트), `feature-2048x1000.png`. 원본은 `doc/store/src/`(HTML + `book.js`), 다시 만들기: `npx electron doc/store/src/render.cjs` 뒤 PIL로 512·1024×500 축소(WORK_LOG 참고). 참고 원본 `doc/image/`(MinsScan).
+- AAB 완료: `npm.cmd run release:aab`(= `android:aab`)가 버전 +1 → `android:sync` → `bundleRelease` → `jarsigner -verify` → `build/MinsReader_ver<버전>.aab`. 업로드 키는 저장소 밖 `~/.minsreader/upload-key.jks`·`upload-key.properties`(`npm.cmd run android:upload-key`로 한 번 생성, 다른 PC는 두 파일을 복사). 이번에 0.1.13(versionCode 14) AAB를 만듦.
+- 남은 일(제안): 런처 아이콘을 새 책 아이콘으로 교체(지금 AAB도 Capacitor 기본 아이콘), 스크린샷 2장 이상, 앱 정보·오픈소스 고지 화면, 개인정보처리방침, 백업 범위·열기 목록 정리, Play Console에 Play App Signing으로 첫 업로드.
+
+## 이전 요청 — 기록 자동 동기화 + 휴대폰 Markdown 원본 저장 (완료, 실기기 확인 대기, 2026-11-03)
 
 - 사용자 요청: "1, 2번 먼저 진행하고 커밋, 푸시해줘"(클라우드 질문 뒤 제안한 1 = 기록 동기화 파일, 2 = 휴대폰 Markdown 원본 저장).
 - 1 완료: 보기 설정 → "자동 동기화"에서 동기화 파일 만들기/선택(PC: 저장·열기 대화상자, 휴대폰: 시스템 파일 선택 + 영구 읽기·쓰기 권한). 앱 시작 1.5초 뒤, 기록이 바뀐 뒤 20초, 휴대폰 백그라운드 전환, PC 창 닫기(최대 4초), "지금 동기화"에서 읽기 → `mergeRecords` → 쓰기. 지운 주석은 삭제 기록(`minsepubviewer.deleted-annotations`, 180일)으로 다른 기기 사본 때문에 되살아나지 않음. PC 쓰기는 임시 파일 → 이름 바꾸기.

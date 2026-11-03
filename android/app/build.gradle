@@ -1,5 +1,12 @@
 apply plugin: 'com.android.application'
 
+// Play upload key, kept outside the repository (scripts/create-upload-key.cjs creates it):
+// MINS_UPLOAD_KEY_PROPERTIES or ~/.minsreader/upload-key.properties. Without it release builds are unsigned
+// and scripts/release.cjs refuses to make an AAB.
+def uploadKeyFile = file(System.getenv("MINS_UPLOAD_KEY_PROPERTIES") ?: "${System.getProperty('user.home')}/.minsreader/upload-key.properties")
+def uploadKey = new Properties()
+if (uploadKeyFile.exists()) uploadKeyFile.withInputStream { uploadKey.load(it) }
+
 android {
     namespace = "com.mins.epubviewer"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +14,8 @@ android {
         applicationId "com.mins.epubviewer"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 13
-        versionName "0.1.12"
+        versionCode 14
+        versionName "0.1.13"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +23,20 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (uploadKey.storeFile) {
+            release {
+                def store = new File(uploadKey.storeFile)
+                storeFile store.isAbsolute() ? store : new File(uploadKeyFile.parentFile, uploadKey.storeFile)
+                storePassword uploadKey.storePassword
+                keyAlias uploadKey.keyAlias
+                keyPassword uploadKey.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (uploadKey.storeFile) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

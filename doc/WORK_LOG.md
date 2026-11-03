@@ -349,3 +349,12 @@
 - 발견: 에뮬레이터 부팅 직후(부하 높음) 파일 선택 중 앱 프로세스가 시스템에 의해 종료되어 선택 결과를 잃음 — 메모리가 부족한 휴대폰에서도 생길 수 있는 Android 동작(Capacitor 복원 처리 미구현, 기존부터). 스크립트로 편집기 DOM에 넣은 글자는 변경 이벤트가 안 나서 시험에서는 읽기 모드 전환으로 변경을 감지시킴(실사용 입력과 무관).
 - 참고: 2026-11-03 앞선 확인에서 Electron 개발 실행(`electron .`)을 사용자 프로필 그대로 써서, 이 PC 앱의 최근 파일 목록에 시험용 Markdown(삭제됨)과 HWP 몇 개가 들어갔을 수 있음. 동기화 확인부터는 임시 프로필 사용.
 - 미검증: 실기기, Google Drive·OneDrive 앱 같은 실제 클라우드 제공자의 영구 권한과 쓰기, 두 기기 동시 동기화.
+
+## 스토어 이미지 + Play용 AAB 빌드 (2026-11-03)
+
+- 사용자 요청: MinsScan 이미지(`doc/image/`)의 느낌을 유지한 Mins Reader 스토어 이미지 → "aab 빌드하고, 빌드할때 마다 버전 번호 올려주는 스크립트 만들어줘. 다 되면 모두 커밋, 푸시 부탁해."
+- 스토어 이미지: `doc/store/src/book.js`(펼친 책: 흰 종이, 하늘색 #93C5FD 글줄, 노란 #FBBF24 형광펜 줄과 책갈피, 배경 #1D4ED8 — MinsScan과 같은 Tailwind 색), `icon.html`, `feature.html`(Pretendard 글꼴, 이 PC에 설치됨), `render.cjs`(Electron 화면 밖 창으로 1024 아이콘과 2048×1000 그래픽을 찍음). 512 아이콘(RGBA)과 1024×500 그래픽(RGB)은 Python PIL `resize(LANCZOS)`로 축소. 결과는 `doc/store/*.png`. MinsScan 원본 `doc/image/`도 사용자 요청("모두 커밋")에 따라 함께 커밋.
+- AAB: `scripts/java-env.cjs`(JDK·SDK 찾기와 업로드 키 경로를 `build-android.js`에서 분리), `scripts/build-android.js`(Gradle 작업 인자, 기본 `assembleDebug`), `scripts/create-upload-key.cjs`(keytool, 비밀번호는 무작위로 만들어 환경 변수로 전달, 이미 있으면 거부), `scripts/release.cjs`(`aab` 대상: 키 확인 → 버전 +1 → sync 한 번 → `bundleRelease` → `jarsigner -verify` → `build/MinsReader_ver<버전>.aab`), `scripts/bump-version.cjs`(배포 파일 이름에 `.aab`), `android/app/build.gradle`(키 파일이 있을 때만 release 서명), `package.json`(`release:aab`·`android:aab`·`android:upload-key`), `.gitignore`(`*.jks`·`*.keystore`·`upload-key.properties`), `test/electron/releaseVersion.test.cjs`(aab 이름·번호).
+- 결정 이유: 기존 규칙(모든 빌드가 `release.cjs`를 거치고 빌드마다 버전 +1, versionCode +1)에 AAB를 같은 방식으로 붙임 — Play는 같은 versionCode를 다시 받지 않으므로 빌드마다 올리는 규칙이 그대로 맞음. 키는 AGENTS.md 규칙대로 저장소 밖. 키가 없을 때 버전을 올리기 전에 멈춰 번호가 낭비되지 않게 함.
+- 검증(이번 실행): 업로드 키 생성 성공(`C:/Users/KTNET/.minsreader/`), `npm.cmd run release:aab` 성공 → `build/MinsReader_ver0.1.13.aab`(8.7MB), versionName 0.1.13·versionCode 14로 올라감, `keytool -printcert -jarfile`로 서명자 CN=Mins Reader 확인. `node scripts/build-android.js`(assembleDebug) 성공, 잘못된 작업 이름 거부 확인. `npm.cmd test` 181개 통과, `releaseVersion.test.cjs` 4개 통과.
+- 미검증: Play Console 업로드(사용자가 할 일), AAB에서 만든 APK의 실기기 설치. 이 AAB는 런처 아이콘이 아직 Capacitor 기본 아이콘.

@@ -15,3 +15,8 @@ test/*.docx
 test/*.pdf
 # Third-party APKs used for reverse-engineering reference; never commit.
 test/*.apk
+
+# Signing keys and their passwords; the Play upload key lives in ~/.minsreader/. Never commit.
+*.jks
+*.keystore
+upload-key.properties

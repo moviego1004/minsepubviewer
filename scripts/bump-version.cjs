@@ -1,6 +1,6 @@
 // One app version for the PC and Android builds. Each release build raises the last number
 // by one (0.1.4 -> 0.1.5) and the Android versionCode by one. Release files are written to
-// build/ as MinsReader_ver<version>.exe / .apk; a new build is always numbered above every
+// build/ as MinsReader_ver<version>.exe / .apk / .aab; a new build is always numbered above every
 // release file already there, so a file is never overwritten.
 // Run directly to bump only: node scripts/bump-version.cjs
 const fs = require("node:fs");
@@ -8,7 +8,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const buildDir = path.join(root, "build");
-const RELEASE_FILE = /^MinsReader_ver(\d+\.\d+\.\d+)\.(exe|apk)$/;
+const RELEASE_FILE = /^MinsReader_ver(\d+\.\d+\.\d+)\.(exe|apk|aab)$/;
 const files = {
   package: path.join(root, "package.json"),
   lock: path.join(root, "package-lock.json"),

@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8">
+<style>
+html,body{margin:0;background:#1D4ED8;width:2048px;height:1000px;overflow:hidden;font-family:Pretendard,"Noto Sans KR",sans-serif;color:#fff}
+.tile{position:absolute;left:144px;top:250px;width:176px;height:176px;border-radius:44px;background:rgba(255,255,255,.12)}
+.tile svg{width:176px;height:176px}
+.name{position:absolute;left:362px;top:236px;font-weight:700;font-size:118px;letter-spacing:-1px;line-height:1.5}
+.head{position:absolute;left:144px;top:470px;font-weight:700;font-size:66px;line-height:92px;letter-spacing:-1px}
+.sub{position:absolute;left:144px;top:686px;font-weight:500;font-size:38px;color:#DBEAFE;letter-spacing:-.3px}
+.art{position:absolute;left:0;top:0}
+</style>
+<script src="book.js"></script>
+<div class="tile"><svg viewBox="0 0 1024 1024"><g transform="translate(512 540) scale(1.25) translate(-512 -540)" id="mini"></g></svg></div>
+<div class="name">Mins Reader</div>
+<div class="head">EPUB도 PDF도 한글 문서도<br>앱 하나로 편하게 읽기</div>
+<div class="sub">EPUB · PDF · HWP · Markdown · 형광펜 · 기록 동기화</div>
+<svg class="art" width="2048" height="1000" viewBox="0 0 2048 1000" id="art"></svg>
+<script>
+document.querySelector("#mini").innerHTML = bookMark();
+const chips = ["EPUB", "PDF", "HWP", "MD"].map((label, i) => `
+<g transform="translate(1120 ${270 + i * 124})">
+  <rect width="230" height="96" rx="48" fill="rgba(255,255,255,${0.14 + i * 0.04})"/>
+  <text x="115" y="64" text-anchor="middle" font-family="Pretendard" font-weight="700" font-size="46" fill="#FFFFFF">${label}</text>
+</g>`).join("");
+document.querySelector("#art").innerHTML = `${chips}
+<path d="M1386 502 L1470 502 M1434 462 L1474 502 L1434 542" stroke="#FBBF24" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<g transform="translate(1700 500) scale(0.74) translate(-512 -540)">${bookMark()}</g>`;
+</script>

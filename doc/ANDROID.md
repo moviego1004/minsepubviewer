@@ -77,7 +77,18 @@ npm.cmd run android:apk
 `JAVA_HOME`에 JDK 디렉터리, `ANDROID_HOME`에 Android SDK 디렉터리를 지정하거나,
 Android Studio에서 프로젝트를 열어 `android/local.properties`를 생성합니다.
 첫 Gradle 빌드는 의존성 다운로드를 위한 인터넷 연결이 필요합니다.
-스토어용 서명키와 스토어 등록은 별도 단계입니다.
+## Play 스토어용 AAB (2026-11-03)
+
+```powershell
+npm.cmd run android:upload-key   # 처음 한 번: 업로드 키 생성(이미 있으면 거부)
+npm.cmd run release:aab          # 버전 +1 → build/MinsReader_ver<버전>.aab
+```
+
+- 업로드 키는 저장소 밖에 둔다: `%USERPROFILE%/.minsreader/upload-key.jks`(PKCS12, 별칭 `upload`, RSA 2048, 유효 10000일)와 `upload-key.properties`(비밀번호 포함). 다른 경로는 `MINS_UPLOAD_KEY_PROPERTIES`로 지정. 두 파일을 백업하고, 다른 PC에서 AAB를 만들 때는 같은 두 파일을 복사한다(새로 만들면 Play가 다른 키로 거부).
+- `android/app/build.gradle`이 이 파일이 있을 때만 release 서명 설정을 만든다. 파일이 없으면 `release:aab`가 버전을 올리기 전에 멈춘다.
+- 결과 확인: 스크립트가 `jarsigner -verify`로 서명을 검사한 뒤 복사한다. 서명자 확인은 `keytool -printcert -jarfile build/MinsReader_ver<버전>.aab`(CN=Mins Reader).
+- Play Console에서는 Play App Signing(앱 서명 키는 Google 보관)을 쓰고 이 키를 업로드 키로 쓴다. 업로드 키를 잃으면 Play Console에서 재설정 요청을 할 수 있다.
+- release 서명 앱은 디버그 APK와 서명이 달라 서로 업데이트로 설치되지 않는다(스토어 설치본으로 바꾸려면 디버그 앱을 지우고 설치, 그 전에 기록 내보내기).
 
 ## 케이블 없이 APK 파일로 설치
 
@@ -138,7 +149,7 @@ python scripts\install_app_adb.py --apk build\MinsReader_ver0.1.11.apk
 
 이 APK는 개인 기기 테스트용 디버그 서명을 사용합니다. Play 스토어 등록에는 별도 배포 서명이 필요합니다.
 
-Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/release.cjs`를 거칩니다: `build.bat`·`npm.cmd run build`·`npm.cmd run release`(PC+APK), `makeSetup.bat`·`release:pc`(PC만), `android:apk`·`release:android`(APK만). 빌드마다 버전 +1, 결과는 `build/MinsReader_ver<버전>.exe/.apk`이며 `build/`에 있는 기존 배포 파일보다 항상 높은 번호를 씁니다.
+Windows 실행은 `npm.cmd run desktop`입니다. 빌드는 모두 `scripts/release.cjs`를 거칩니다: `build.bat`·`npm.cmd run build`·`npm.cmd run release`(PC+APK), `makeSetup.bat`·`release:pc`(PC만), `android:apk`·`release:android`(APK만), `release:aab`·`android:aab`(Play용 AAB). 빌드마다 버전 +1, 결과는 `build/MinsReader_ver<버전>.exe/.apk/.aab`이며 `build/`에 있는 기존 배포 파일보다 항상 높은 번호를 씁니다.
 
 ## 파일과 저장 정책
 
