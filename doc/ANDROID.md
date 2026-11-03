@@ -81,7 +81,7 @@ Android Studio에서 프로젝트를 열어 `android/local.properties`를 생성
 
 ```powershell
 npm.cmd run android:upload-key   # 키가 없는 PC에서만: 새 업로드 키 생성(이미 있으면 거부). 보통은 기존 키를 복사
-npm.cmd run release:aab          # 버전 +1 → build/MinsReader_ver<버전>.aab
+npm.cmd run release:aab          # 버전 +1 → build/MinsReader_ver<버전>.aab (탐색기에서는 build_aab.bat 실행)
 ```
 
 - 업로드 키: 사용자의 기존 업로드 키(다른 앱과 공용, CN=Mins Consulting, 별칭 `upload`)를 `android/keystore/upload.jks`·`upload.properties`(storeFile·storePassword·keyAlias·keyPassword, storeFile은 이 파일 기준 상대 경로)에 둔다. `android/keystore/` 폴더 전체가 `.gitignore`에 있어 커밋되지 않는다. 다른 경로는 `MINS_UPLOAD_KEY_PROPERTIES`로 지정. 다른 PC에서 AAB를 만들 때는 이 폴더를 복사한다(새 키를 만들면 Play가 다른 키라 거부).

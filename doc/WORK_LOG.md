@@ -365,3 +365,18 @@
 - 변경: 키 기본 위치를 `~/.minsreader/upload-key.properties`에서 `android/keystore/upload.properties`로(`android/app/build.gradle`, `scripts/java-env.cjs`, `scripts/create-upload-key.cjs`). `.gitignore`에 `android/keystore/` 추가 — 기존 무시 규칙(`*.jks`, `*.keystore`)은 `upload.properties`(비밀번호)를 막지 못해 그대로 두면 커밋될 수 있었음. 앞서 만든 새 키(`~/.minsreader/`)와 그 키로 서명한 `build/MinsReader_ver0.1.13.aab`는 쓰지 않으므로 삭제(Play에 올린 적 없음).
 - 검증(이번 실행): `git check-ignore`로 `android/keystore/` 무시 확인, `npm.cmd run release:aab` 성공 → `build/MinsReader_ver0.1.14.aab`(versionCode 15), `keytool -printcert -jarfile` 서명자 CN=Mins Consulting, O=Mins Consulting, C=KR(SHA-256 06:C5:78:D4:59:29:B4:D3:…:97:13). 비밀번호 값은 읽지 않음(항목 이름과 storeFile·keyAlias만 확인).
 - 미검증: Play Console 업로드.
+
+## 런처 아이콘 교체 + build_aab.bat (2026-11-03)
+
+- 사용자 요청: "런처 아이콘도 새 책 아이콘으로 바꿔줘", 작업 중 "build_aab.bat 파일 만들어서 aab 빌드 할 수 있게 해줘".
+- 변경: `doc/store/src/launcher.html`(kind=foreground: 투명 배경, 책 0.68배로 적응형 안전 영역 안 / legacy: 둥근 사각형 / round: 원), `doc/store/src/render.cjs`(스토어 이미지 + 5개 밀도 × 3종 런처 PNG를 한 번에, Electron `resize quality:best`로 축소 — 이제 PIL 축소 불필요, 단 스토어 아이콘 32비트 변환만 PIL), `android/app/src/main/res/mipmap-*/ic_launcher*.png`, `values/ic_launcher_background.xml`(#FFFFFF → #1D4ED8), `build_aab.bat`(build.bat 형식: npm 확인 → 업로드 키 확인 → 필요하면 `npm ci` → `node scripts/release.cjs aab`).
+- 검증(이번 실행): 원형 마스크·둥근 사각형·원형·48px 미리보기로 모양 확인. PowerShell에서 `build_aab.bat` 실행 성공 → `build/MinsReader_ver0.1.15.aab`(versionCode 16), AAB 안 `base/res/mipmap-xxxhdpi-v4/ic_launcher_round.png`가 새 아이콘임을 확인, 서명자 CN=Mins Consulting.
+- 미검증: 실기기 런처 표시(제조사 런처 마스크 모양), Git Bash에서 `cmd //c build_aab.bat`는 경로 문제로 실행 안 됨(탐색기 더블클릭·PowerShell·cmd에서는 정상).
+
+## 시작 화면 교체 (2026-11-03)
+
+- 사용자 요청: "시작화면도 바꿔줘. 커밋, 푸시해줘" (앞의 런처 아이콘·`build_aab.bat` 변경과 함께 커밋).
+- 변경: `android/app/src/main/res/drawable*/splash.png` 11장 삭제(Capacitor 기본 그림, 화면 비율대로 늘어남) → `drawable/splash.xml` layer-list(`@color/ic_launcher_background` + 가운데 240dp `@mipmap/ic_launcher_foreground`). 빈 `drawable-land-*`·`drawable-port-*` 폴더도 사라짐. `values/styles.xml`의 `AppTheme.NoActionBarLaunch`에 `windowSplashScreenBackground`(Android 12+ 시스템 시작 화면 배경).
+- 검증(이번 실행): `node scripts/build-android.js`(assembleDebug) 성공. Pixel_7 에뮬레이터(API 36)에 `scripts/install_app_adb.py`로 설치, 강제 종료 뒤 실행 직후 화면 캡처 → 파란 배경 가운데 책 표시, 3초 뒤 앱 화면 정상. 확인 뒤 에뮬레이터 종료.
+- 미검증: Android 11 이하(API 24–30)에서 `splash.xml`이 보이는 모습(이번 에뮬레이터는 API 36이라 시스템 시작 화면만 확인), 실기기.
+- 이어서 `build_aab.bat`로 `build/MinsReader_ver0.1.16.aab`(versionCode 17) 빌드 성공, AAB 안 `base/res/drawable/splash.xml` 포함·서명자 CN=Mins Consulting 확인.

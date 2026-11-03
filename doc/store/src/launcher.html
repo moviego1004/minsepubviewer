@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8">
+<!-- Android launcher icon masters (1024×1024): ?kind=foreground (adaptive, transparent; the book stays
+     inside the 66/108 safe circle), legacy (rounded square, API 24–25), round (circle). -->
+<style>html,body{margin:0;background:transparent}svg{display:block}</style>
+<script src="book.js"></script>
+<body><script>
+const kind = new URLSearchParams(location.search).get("kind");
+const shape = {
+  foreground: "",
+  legacy: '<rect x="40" y="40" width="944" height="944" rx="200" fill="#1D4ED8"/>',
+  round: '<circle cx="512" cy="512" r="472" fill="#1D4ED8"/>'
+}[kind];
+const scale = { foreground: 0.68, legacy: 0.98, round: 0.9 }[kind];
+document.body.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+${shape}<g transform="translate(512 512) scale(${scale}) translate(-512 -540)">${bookMark()}</g></svg>`;
+</script></body>

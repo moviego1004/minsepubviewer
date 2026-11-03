@@ -23,7 +23,7 @@
    - 업로드 키를 만들고 Play App Signing을 쓴다. 키는 Git 밖에 보관한다(AGENTS.md 규칙).
    - `scripts/release.cjs`에 AAB 빌드를 추가한다.
    - 기존 디버그 설치본과는 서명이 달라서 업데이트로 설치되지 않는다. 테스트 사용자에게 미리 알린다.
-2. **앱 아이콘.** (2026-11-03: 스토어 아이콘·그래픽 이미지는 `doc/store/`에 만듦. 런처 아이콘 교체와 스크린샷은 남음) 런처 아이콘이 Capacitor 기본 아이콘(파란 X)이다. 스토어용 512×512 아이콘, 1024×500 그래픽 이미지, 휴대폰 스크린샷(2장 이상)도 필요하다.
+2. **앱 아이콘.** (2026-11-03: 스토어 아이콘·그래픽 이미지는 `doc/store/`에 만듦. 런처 아이콘도 교체함. 스크린샷은 남음) 런처 아이콘이 Capacitor 기본 아이콘(파란 X)이다. 스토어용 512×512 아이콘, 1024×500 그래픽 이미지, 휴대폰 스크린샷(2장 이상)도 필요하다.
 3. **오픈소스 고지 화면.** 앱에 넣은 라이브러리와 글꼴의 라이선스를 앱 안에서 볼 수 있어야 한다. 대상:
    - PDF.js(Apache-2.0), docx-preview(Apache-2.0), epub.js(BSD), mammoth(BSD), JSZip, pako(MIT), Toast UI Editor(MIT)
    - hwpjs hwp-core(MIT), 나눔고딕·나눔명조·Noto Sans Symbols 2(OFL), PDF.js 표준 글꼴(Foxit·Liberation)
