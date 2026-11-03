@@ -1,6 +1,7 @@
-// One-time: creates the Play upload key outside the repository.
-//   ~/.minsreader/upload-key.jks         (PKCS12 key store, alias "upload")
-//   ~/.minsreader/upload-key.properties  (store path, alias, generated password)
+// One-time: creates a Play upload key in the git-ignored android/keystore/ folder.
+//   android/keystore/upload.jks         (PKCS12 key store, alias "upload")
+//   android/keystore/upload.properties  (store path, alias, generated password)
+// Not needed when an existing upload key is copied there (the same key can serve several apps).
 // Usage: npm.cmd run android:upload-key
 // Refuses to run when the properties file already exists, so a key is never replaced by accident.
 // Back up both files. With Play App Signing a lost upload key can be reset through Play Console,
@@ -13,7 +14,7 @@ const { javaEnv, javaTool, uploadKeyPropertiesPath } = require("./java-env.cjs")
 
 const propertiesFile = uploadKeyPropertiesPath();
 const dir = path.dirname(propertiesFile);
-const storeFile = path.join(dir, "upload-key.jks");
+const storeFile = path.join(dir, "upload.jks");
 if (fs.existsSync(propertiesFile) || fs.existsSync(storeFile)) {
   console.error(`업로드 키가 이미 있습니다: ${fs.existsSync(propertiesFile) ? propertiesFile : storeFile}\n덮어쓰지 않습니다.`);
   process.exit(1);
@@ -33,8 +34,8 @@ if (result.error || result.status !== 0) {
   process.exit(1);
 }
 fs.writeFileSync(propertiesFile, [
-  "# Mins Reader Play upload key. Never commit; back up together with upload-key.jks.",
-  "storeFile=upload-key.jks",
+  "# Play upload key. Never commit; back up together with upload.jks.",
+  "storeFile=upload.jks",
   `storePassword=${password}`,
   "keyAlias=upload",
   `keyPassword=${password}`,

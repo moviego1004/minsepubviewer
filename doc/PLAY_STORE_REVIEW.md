@@ -19,7 +19,7 @@
 
 ## 반드시 할 일 (등록 전)
 
-1. **배포 서명과 AAB.** (2026-11-03 완료: `npm.cmd run release:aab`, 키는 `~/.minsreader/`, doc/ANDROID.md "Play 스토어용 AAB") 지금 APK는 디버그 서명이고, Play는 AAB(`bundleRelease`)를 요구한다.
+1. **배포 서명과 AAB.** (2026-11-03 완료: `npm.cmd run release:aab`, 키는 `android/keystore/`(git 무시), doc/ANDROID.md "Play 스토어용 AAB") 지금 APK는 디버그 서명이고, Play는 AAB(`bundleRelease`)를 요구한다.
    - 업로드 키를 만들고 Play App Signing을 쓴다. 키는 Git 밖에 보관한다(AGENTS.md 규칙).
    - `scripts/release.cjs`에 AAB 빌드를 추가한다.
    - 기존 디버그 설치본과는 서명이 달라서 업데이트로 설치되지 않는다. 테스트 사용자에게 미리 알린다.

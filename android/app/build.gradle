@@ -1,9 +1,9 @@
 apply plugin: 'com.android.application'
 
-// Play upload key, kept outside the repository (scripts/create-upload-key.cjs creates it):
-// MINS_UPLOAD_KEY_PROPERTIES or ~/.minsreader/upload-key.properties. Without it release builds are unsigned
-// and scripts/release.cjs refuses to make an AAB.
-def uploadKeyFile = file(System.getenv("MINS_UPLOAD_KEY_PROPERTIES") ?: "${System.getProperty('user.home')}/.minsreader/upload-key.properties")
+// Play upload key: android/keystore/upload.properties (git-ignored folder, never committed) or the file named by
+// MINS_UPLOAD_KEY_PROPERTIES. storeFile is relative to that file. Without it release builds are unsigned and
+// scripts/release.cjs refuses to make an AAB.
+def uploadKeyFile = System.getenv("MINS_UPLOAD_KEY_PROPERTIES") ? file(System.getenv("MINS_UPLOAD_KEY_PROPERTIES")) : rootProject.file("keystore/upload.properties")
 def uploadKey = new Properties()
 if (uploadKeyFile.exists()) uploadKeyFile.withInputStream { uploadKey.load(it) }
 
@@ -14,8 +14,8 @@ android {
         applicationId "com.mins.epubviewer"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 14
-        versionName "0.1.13"
+        versionCode 15
+        versionName "0.1.14"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

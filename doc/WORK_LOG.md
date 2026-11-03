@@ -358,3 +358,10 @@
 - 결정 이유: 기존 규칙(모든 빌드가 `release.cjs`를 거치고 빌드마다 버전 +1, versionCode +1)에 AAB를 같은 방식으로 붙임 — Play는 같은 versionCode를 다시 받지 않으므로 빌드마다 올리는 규칙이 그대로 맞음. 키는 AGENTS.md 규칙대로 저장소 밖. 키가 없을 때 버전을 올리기 전에 멈춰 번호가 낭비되지 않게 함.
 - 검증(이번 실행): 업로드 키 생성 성공(`C:/Users/KTNET/.minsreader/`), `npm.cmd run release:aab` 성공 → `build/MinsReader_ver0.1.13.aab`(8.7MB), versionName 0.1.13·versionCode 14로 올라감, `keytool -printcert -jarfile`로 서명자 CN=Mins Reader 확인. `node scripts/build-android.js`(assembleDebug) 성공, 잘못된 작업 이름 거부 확인. `npm.cmd test` 181개 통과, `releaseVersion.test.cjs` 4개 통과.
 - 미검증: Play Console 업로드(사용자가 할 일), AAB에서 만든 APK의 실기기 설치. 이 AAB는 런처 아이콘이 아직 Capacitor 기본 아이콘.
+
+## 업로드 키를 기존 키로 교체 (2026-11-03)
+
+- 사용자 요청: 다른 앱에서 쓰던 서명키를 써도 되는지 질문 → 업로드 키는 여러 앱에 써도 된다고 답함 → 사용자가 기존 키를 `android/keystore/`에 넣음(`upload.jks`, `upload.properties`, `dev-debug.keystore`).
+- 변경: 키 기본 위치를 `~/.minsreader/upload-key.properties`에서 `android/keystore/upload.properties`로(`android/app/build.gradle`, `scripts/java-env.cjs`, `scripts/create-upload-key.cjs`). `.gitignore`에 `android/keystore/` 추가 — 기존 무시 규칙(`*.jks`, `*.keystore`)은 `upload.properties`(비밀번호)를 막지 못해 그대로 두면 커밋될 수 있었음. 앞서 만든 새 키(`~/.minsreader/`)와 그 키로 서명한 `build/MinsReader_ver0.1.13.aab`는 쓰지 않으므로 삭제(Play에 올린 적 없음).
+- 검증(이번 실행): `git check-ignore`로 `android/keystore/` 무시 확인, `npm.cmd run release:aab` 성공 → `build/MinsReader_ver0.1.14.aab`(versionCode 15), `keytool -printcert -jarfile` 서명자 CN=Mins Consulting, O=Mins Consulting, C=KR(SHA-256 06:C5:78:D4:59:29:B4:D3:…:97:13). 비밀번호 값은 읽지 않음(항목 이름과 storeFile·keyAlias만 확인).
+- 미검증: Play Console 업로드.

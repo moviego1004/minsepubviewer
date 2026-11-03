@@ -2,7 +2,6 @@
 // release.cjs). Returns an environment with JAVA_HOME/ANDROID_HOME set and the JDK first on PATH.
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
 function javaEnv(base = process.env) {
   const env = { ...base };
@@ -26,11 +25,10 @@ function javaTool(env, name) {
   return fromHome && fs.existsSync(fromHome) ? fromHome : name;
 }
 
-// The Play upload key lives outside the repository: ~/.minsreader/upload-key.properties
-// (or the file named by MINS_UPLOAD_KEY_PROPERTIES), next to upload-key.jks.
-// android/app/build.gradle reads the same file.
+// The Play upload key: android/keystore/upload.properties next to upload.jks (the folder is git-ignored),
+// or the file named by MINS_UPLOAD_KEY_PROPERTIES. android/app/build.gradle reads the same file.
 function uploadKeyPropertiesPath(env = process.env) {
-  return env.MINS_UPLOAD_KEY_PROPERTIES || path.join(os.homedir(), ".minsreader", "upload-key.properties");
+  return env.MINS_UPLOAD_KEY_PROPERTIES || path.resolve(__dirname, "..", "android", "keystore", "upload.properties");
 }
 
 module.exports = { javaEnv, javaTool, uploadKeyPropertiesPath };

@@ -8,7 +8,7 @@
 
 - 사용자 요청: "doc\image 밑에 MinsScan 앱에서 사용한 이미지를 넣어놨어. 이 이미지의 look and feel을 유지하면서 Mins Reader 앱을 앱스토어에 등록하기 위한 이미지 만들어줘" → "aab 빌드하고, 빌드할때 마다 버전 번호 올려주는 스크립트 만들어줘. 다 되면 모두 커밋, 푸시 부탁해."
 - 스토어 이미지 완료: `doc/store/icon-512.png`(32비트 PNG), `icon-1024.png`, `feature-1024x500.png`(그래픽 이미지, 24비트), `feature-2048x1000.png`. 원본은 `doc/store/src/`(HTML + `book.js`), 다시 만들기: `npx electron doc/store/src/render.cjs` 뒤 PIL로 512·1024×500 축소(WORK_LOG 참고). 참고 원본 `doc/image/`(MinsScan).
-- AAB 완료: `npm.cmd run release:aab`(= `android:aab`)가 버전 +1 → `android:sync` → `bundleRelease` → `jarsigner -verify` → `build/MinsReader_ver<버전>.aab`. 업로드 키는 저장소 밖 `~/.minsreader/upload-key.jks`·`upload-key.properties`(`npm.cmd run android:upload-key`로 한 번 생성, 다른 PC는 두 파일을 복사). 이번에 0.1.13(versionCode 14) AAB를 만듦.
+- AAB 완료: `npm.cmd run release:aab`(= `android:aab`)가 버전 +1 → `android:sync` → `bundleRelease` → `jarsigner -verify` → `build/MinsReader_ver<버전>.aab`. 업로드 키는 사용자의 기존 키를 `android/keystore/upload.jks`·`upload.properties`(git 무시 폴더)에 둠(다른 PC는 폴더 복사). 최종 결과 0.1.14(versionCode 15) AAB.
 - 남은 일(제안): 런처 아이콘을 새 책 아이콘으로 교체(지금 AAB도 Capacitor 기본 아이콘), 스크린샷 2장 이상, 앱 정보·오픈소스 고지 화면, 개인정보처리방침, 백업 범위·열기 목록 정리, Play Console에 Play App Signing으로 첫 업로드.
 
 ## 이전 요청 — 기록 자동 동기화 + 휴대폰 Markdown 원본 저장 (완료, 실기기 확인 대기, 2026-11-03)

@@ -80,13 +80,13 @@ Android Studio에서 프로젝트를 열어 `android/local.properties`를 생성
 ## Play 스토어용 AAB (2026-11-03)
 
 ```powershell
-npm.cmd run android:upload-key   # 처음 한 번: 업로드 키 생성(이미 있으면 거부)
+npm.cmd run android:upload-key   # 키가 없는 PC에서만: 새 업로드 키 생성(이미 있으면 거부). 보통은 기존 키를 복사
 npm.cmd run release:aab          # 버전 +1 → build/MinsReader_ver<버전>.aab
 ```
 
-- 업로드 키는 저장소 밖에 둔다: `%USERPROFILE%/.minsreader/upload-key.jks`(PKCS12, 별칭 `upload`, RSA 2048, 유효 10000일)와 `upload-key.properties`(비밀번호 포함). 다른 경로는 `MINS_UPLOAD_KEY_PROPERTIES`로 지정. 두 파일을 백업하고, 다른 PC에서 AAB를 만들 때는 같은 두 파일을 복사한다(새로 만들면 Play가 다른 키로 거부).
+- 업로드 키: 사용자의 기존 업로드 키(다른 앱과 공용, CN=Mins Consulting, 별칭 `upload`)를 `android/keystore/upload.jks`·`upload.properties`(storeFile·storePassword·keyAlias·keyPassword, storeFile은 이 파일 기준 상대 경로)에 둔다. `android/keystore/` 폴더 전체가 `.gitignore`에 있어 커밋되지 않는다. 다른 경로는 `MINS_UPLOAD_KEY_PROPERTIES`로 지정. 다른 PC에서 AAB를 만들 때는 이 폴더를 복사한다(새 키를 만들면 Play가 다른 키라 거부).
 - `android/app/build.gradle`이 이 파일이 있을 때만 release 서명 설정을 만든다. 파일이 없으면 `release:aab`가 버전을 올리기 전에 멈춘다.
-- 결과 확인: 스크립트가 `jarsigner -verify`로 서명을 검사한 뒤 복사한다. 서명자 확인은 `keytool -printcert -jarfile build/MinsReader_ver<버전>.aab`(CN=Mins Reader).
+- 결과 확인: 스크립트가 `jarsigner -verify`로 서명을 검사한 뒤 복사한다. 서명자 확인은 `keytool -printcert -jarfile build/MinsReader_ver<버전>.aab`(CN=Mins Consulting, SHA-256 06:C5:78:D4:…:97:13).
 - Play Console에서는 Play App Signing(앱 서명 키는 Google 보관)을 쓰고 이 키를 업로드 키로 쓴다. 업로드 키를 잃으면 Play Console에서 재설정 요청을 할 수 있다.
 - release 서명 앱은 디버그 APK와 서명이 달라 서로 업데이트로 설치되지 않는다(스토어 설치본으로 바꾸려면 디버그 앱을 지우고 설치, 그 전에 기록 내보내기).
 
