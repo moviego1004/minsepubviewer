@@ -46,7 +46,7 @@ Android 기기에서 Google 백업이 켜져 있으면 운영체제가 앱 데�
 
 ## 9. 문의
 
-개인정보 관련 문의: [연락처 이메일]
+개인정보 관련 문의: moviego1004@gmail.com
 
 ---
 
@@ -64,4 +64,4 @@ Mins Reader (package `com.minsapps.reader`) does not collect any personal data.
 - **Sharing.** No personal data is shared with third parties or transferred abroad.
 - **Children.** The app collects no personal data from anyone, including children.
 - **Changes.** Updates to this policy will be posted on this page with a new effective date.
-- **Contact:** [contact email]
+- **Contact:** moviego1004@gmail.com

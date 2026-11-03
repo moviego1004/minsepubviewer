@@ -13,7 +13,9 @@ const files = {
   package: path.join(root, "package.json"),
   lock: path.join(root, "package-lock.json"),
   installer: path.join(root, "installer.nsi"),
-  gradle: path.join(root, "android", "app", "build.gradle")
+  gradle: path.join(root, "android", "app", "build.gradle"),
+  // Shown in the app's About dialog.
+  appVersion: path.join(root, "src", "core", "appVersion.js")
 };
 
 function parseVersion(version) {
@@ -97,6 +99,9 @@ function bumpVersion({ releaseDir = buildDir } = {}) {
   fs.writeFileSync(files.gradle, originals.gradle
     .replace(/versionCode\s+\d+/, `versionCode ${versionCode}`)
     .replace(/versionName\s+"[^"]+"/, `versionName "${version}"`), "utf8");
+  if (originals.appVersion) {
+    fs.writeFileSync(files.appVersion, originals.appVersion.replace(/APP_VERSION = "[^"]+"/, `APP_VERSION = "${version}"`), "utf8");
+  }
 
   return {
     version,

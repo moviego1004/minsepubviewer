@@ -191,6 +191,15 @@ app.whenReady().then(async () => {
   assert.equal(await run("document.body.classList.contains('sidebar-collapsed')"), true);
   await fs.mkdir(path.join(root, "build"), { recursive: true });
   await fs.writeFile(path.join(root, "build/mobile-smoke.png"), (await win.webContents.capturePage()).toPNG());
+  // About dialog from the ☰ menu: version, HWP notice and the open-source licenses.
+  await run("document.querySelector('#mobileMenu').click(); [...document.querySelectorAll('.mobile-menu button')].find(b => b.textContent === '앱 정보 및 오픈소스 라이선스').click()");
+  await waitFor("document.querySelector('.about-dialog')?.open && document.querySelectorAll('.about-licenses details').length > 10");
+  assert.equal(await run("document.querySelector('.mobile-menu').open"), false);
+  assert.match(await run("document.querySelector('.about-dialog').textContent"), /버전 \d+\.\d+\.\d+.*한\/글 문서 파일\(\.hwp\) 공개 문서.*PDF\.js.*Apache-2\.0/s);
+  await run("document.querySelector('.about-licenses details').open = true; document.querySelector('.about-licenses').scrollIntoView(); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  await fs.writeFile(path.join(root, "build/about-smoke.png"), (await win.webContents.capturePage()).toPNG());
+  await run("document.querySelector('.about-header button').click()");
+  assert.equal(await run("document.querySelector('.about-dialog').open"), false);
   await run("document.querySelector('#newMarkdownButton').click()");
   await waitFor("document.querySelectorAll('.document-tab').length === 2");
   await run("window.__background()");

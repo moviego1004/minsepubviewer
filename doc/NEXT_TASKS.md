@@ -4,13 +4,19 @@
 
 전체 요구사항·개발 방안·로드맵은 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) 5장 "앞으로 할 일"을 기준으로 한다.
 
-## 현재 요청 — 패키지 이름 변경 + Play 등록 문서 (완료, 2026-11-03)
+## 현재 요청 — 앱 정보 화면에 오픈소스 고지 (완료, 2026-11-03)
+
+- 사용자 요청: "앱 정보 화면에 오픈소스 고지 넣어줘" (앞서 Play Console 내부 테스트에 0.1.18 업로드 중).
+- 완료: `web/about.js` 앱 정보 창(보기 설정 맨 아래 버튼, 휴대폰 ☰ 메뉴), 버전·개인정보·HWP 출처·라이선스 전문. `scripts/build-notices.cjs` → `src/core/openSourceNotices.js`, `src/core/appVersion.js`(빌드마다 갱신).
+- 남은 일: 실기기·에뮬레이터에서 창 확인(이번에는 Electron 휴대폰 모의 화면만 확인), 다음 AAB(0.1.19)에 포함되어 Play에 올라감.
+
+## 이전 요청 — 패키지 이름 변경 + Play 등록 문서 (완료, 2026-11-03)
 
 - 사용자 요청: 다른 PC에서 `build_aab.bat` 오류 확인 → "스토어에 올리기 위한 앱이름, 패키지 이름 알려줘" → "com.minsapps.reader로 해줘. 그리고 개인정보보호지침, 오픈소스 선언문 같은 등록해야 하는 문서도 같이 만들어줘. 다 되면 커밋, 푸시해줘".
 - 빌드 오류 원인: 그 PC의 `node_modules`에 `docx-preview`가 없었음(`build_aab.bat`은 `esbuild.cmd`·`cap.cmd`만 보고 `npm ci`를 건너뜀). `npm.cmd ci` 후 성공.
 - 완료: Android 패키지 `com.mins.epubviewer` → `com.minsapps.reader`(PC 설치 ID는 유지). 문서 `doc/store/play-listing.md`, `privacy-policy.md`, `open-source-notices.md`. AAB 0.1.18(versionCode 19).
 - 남은 일(사용자): 개인정보처리방침의 `[연락처 이메일]` 채우기, 공개 URL로 게시, 휴대폰 스크린샷 2장 이상, Play Console 앱 만들기(`com.minsapps.reader`)와 0.1.18 AAB 업로드.
-- 남은 일(제안): 앱 안 "앱 정보" 화면(버전, 오픈소스 고지, HWP 출처 문구), `build_aab.bat`이 `package-lock.json`이 바뀌면 `npm ci`를 다시 하도록 개선, 백업 범위 규칙·열기 목록 정리.
+- 남은 일(제안): (앱 정보 화면은 같은 날 완료) `build_aab.bat`이 `package-lock.json`이 바뀌면 `npm ci`를 다시 하도록 개선, 백업 범위 규칙·열기 목록 정리.
 
 ## 이전 요청 — 스토어 이미지 + AAB 빌드·버전 자동 올림 (완료, 2026-11-03)
 

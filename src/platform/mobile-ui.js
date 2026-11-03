@@ -97,6 +97,7 @@ export function installMobileUI({ storage, platform, resize, openFile, tabs, act
     if (document.body.classList.contains('markdown-mode')) {
       for (const [label, id] of [['mobile.editDocument', 'markdownEditButton'], ['mobile.readMode', 'markdownViewButton'], ['markdown.saveCopy', 'saveMarkdownButton'], ['markdown.exportFile', 'saveMarkdownAsButton']]) dialog.append(button(label, () => click(id)));
     } else if (!document.getElementById('exportMarkdownButton').disabled) dialog.append(button('mobile.exportMarkdown', () => click('exportMarkdownButton')));
+    dialog.append(button('about.open', () => click('aboutButton')));
     dialog.showModal();
   }
   function documents() {

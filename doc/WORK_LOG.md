@@ -391,3 +391,10 @@
 - 관련 문서 갱신: HANDOFF, ANDROID, DEVELOPMENT_PLAN, NEXT_TASKS, PLAY_STORE_REVIEW.
 - 검증(이번 실행): `npm.cmd test` 181개 통과. `android\gradlew.bat testDebugUnitTest` 성공(옮긴 `ReaderFilesTest` 포함). `build_aab.bat` 성공 → `build/MinsReader_ver0.1.18.aab`(8.6MB, versionCode 19), release 병합 매니페스트 `package="com.minsapps.reader"`, FileProvider `com.minsapps.reader.fileprovider` 확인.
 - 미검증: 새 패키지 앱의 실기기·에뮬레이터 실행(MainActivity·플러그인 등록은 상대 이름이라 영향 없을 것으로 봄), Play Console 업로드, 개인정보처리방침 공개 URL.
+## 앱 정보 창과 오픈소스 고지 (2026-11-03)
+
+- 사용자 요청: "앱 정보 화면에 오픈소스 고지 넣어줘". 앱에는 앱 정보 화면이 없었으므로 새로 만듦.
+- 변경: `web/about.js`(`<dialog class="about-dialog">`: 이름·버전, 개인정보 안내, HWP 공개 문서 출처·상표 문구, 라이브러리별 `<details>`에 버전·라이선스·저작권·전문), `web/index.html` 보기 설정 맨 아래 "앱 정보" 구역과 `#aboutButton`, `web/app.js` 연결, `src/platform/mobile-ui.js` ☰ 메뉴 항목, `src/locales/{ko,en}.js` `about.*`, `web/styles.css`. `scripts/build-notices.cjs`(npm `notices`)가 `node_modules`·`web/vendor/hwp`의 LICENSE 파일에서 `src/core/openSourceNotices.js`(19개, 약 100KB)를 만듦. JSZip은 MIT 부분만, LICENSE가 없는 TOAST UI Editor·fromcodepoint는 MIT 전문을 저작권 줄로 채움, Toast UI 번들 안의 DOMPurify 2.3.3·tslib·fromcodepoint 포함. 고지 데이터는 창을 열 때 동적 import(PC에서 시작 시 읽지 않음, 휴대폰은 esbuild가 한 묶음에 넣음). `src/core/appVersion.js`는 `scripts/bump-version.cjs`가 빌드마다 바꾸고 실패 시 되돌림.
+- 테스트: `test/core/openSourceNotices.test.js`(설치 버전 일치, 전문 존재, `dependencies` 누락 없음, 앱 버전 = package.json), `scripts/smoke-reader.cjs`에 ☰ 메뉴 → 앱 정보 창 열기·내용·닫기 단계와 `build/about-smoke.png`.
+- 검증(이번 실행): `npm.cmd test` 185개 통과, `node --check web/app.js`·`web/about.js` 통과, `npm.cmd run test:reader` PASS(스크린샷으로 휴대폰 폭 표시와 라이선스 펼침 확인), `npm.cmd run android:sync` 성공(`dist/mobile/web/mobile.js`에 고지 데이터 포함 확인).
+- 미검증: 실기기·에뮬레이터, PC 설치본(Electron 데스크톱 화면에서 직접 열어 보지는 않음), AAB 재빌드 안 함(다음 빌드 0.1.19에 포함).

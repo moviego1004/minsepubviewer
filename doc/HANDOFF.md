@@ -18,6 +18,7 @@
 - 저장소: https://github.com/moviego1004/minsepubviewer.git
 - 이번 인수인계 대상 브랜치: `master`. 정확한 커밋은 `git log -5 --oneline`으로 확인한다.
 - 앱 이름은 **Mins Reader**(이전 Mins EPUB Viewer). Android 패키지(applicationId·namespace·Capacitor `appId`·Java 패키지)는 Play 등록을 위해 2026-11-03 **`com.minsapps.reader`**로 바꿨다(사용자 요청). 이전 `com.mins.epubviewer`로 설치한 APK는 다른 앱이 되어 업데이트되지 않고 기록도 옮겨지지 않는다(필요하면 기록 내보내기/가져오기). PC는 설치 프로그램 제거 레지스트리 키와 기존 설치본 업그레이드 때문에 `installer.nsi`·`package.json` `build.appId`의 `com.mins.epubviewer`와 사용자 데이터 폴더를 그대로 둔다.
+- 앱 정보 창(2026-11-03, `web/about.js`): 보기 설정 맨 아래 "앱 정보 및 오픈소스 라이선스" 버튼, 휴대폰은 ☰ 메뉴. 버전(`src/core/appVersion.js`, `bump-version.cjs`가 빌드마다 갱신), 개인정보 안내, HWP 출처·상표 문구, 라이브러리·글꼴 라이선스 전문(`src/core/openSourceNotices.js`, `npm.cmd run notices`로 생성, 창을 열 때 동적 import). 라이브러리를 추가·업데이트하면 `scripts/build-notices.cjs` 목록과 함께 다시 생성(테스트가 버전 불일치·`dependencies` 누락을 잡음).
 - Play 등록 문서(2026-11-03): `doc/store/play-listing.md`(앱 이름·패키지·설명·앱 콘텐츠·데이터 보안 답변), `privacy-policy.md`(한/영), `open-source-notices.md`(라이브러리·글꼴 라이선스, HWP 출처 문구).
 - EPUB, Markdown에 더해 **PDF**(PDF.js 6.3.289)를 읽는다. 툴바의 **파일 열기** 하나로 세 형식을 연다. 메뉴·알림은 **한국어/영어** 지원(보기 설정 → 언어).
 - Electron Windows 앱과 Capacitor Android 앱이 `web/`, `src/core/`를 공유한다. 실제 UI는 순수 JavaScript 기반이며 초기 계획의 React는 현재 구현이 아니다.

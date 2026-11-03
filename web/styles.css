@@ -1499,3 +1499,19 @@ body.doc-mode .view-mode-toggle {
 .records-hint { margin: 0 0 8px; font-size: 0.8rem; opacity: 0.75; line-height: 1.45; }
 .records-hint:empty { display: none; }
 .records-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+
+/* About dialog (web/about.js). */
+.about-dialog { width: min(92vw, 640px); max-height: 85dvh; overflow: auto; padding: 16px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); }
+.about-dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+.about-header { display: flex; align-items: center; gap: 12px; }
+.about-header h2 { flex: 1; margin: 0; font-size: 1.2rem; }
+.about-version { margin: 2px 0 12px; color: var(--muted); }
+.about-dialog h3 { margin: 16px 0 6px; font-size: 0.95rem; }
+.about-dialog p { margin: 0 0 8px; font-size: 0.875rem; line-height: 1.5; }
+.about-licenses details { border-top: 1px solid var(--line); padding: 8px 0; }
+.about-licenses summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.about-licenses summary::before { content: "▸"; color: var(--muted); }
+.about-licenses details[open] summary::before { content: "▾"; }
+.about-license-meta { color: var(--muted); font-size: 0.8rem; }
+.about-copyright { margin-top: 6px; color: var(--muted); }
+.about-licenses pre { max-height: 40vh; overflow: auto; margin: 0; padding: 8px; border-radius: 6px; background: var(--surface-muted); font-size: 0.72rem; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }

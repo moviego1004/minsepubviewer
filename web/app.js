@@ -75,6 +75,7 @@ import { PdfReader, readPdfText } from "./pdf-reader.js";
 import { reflowPdfPages } from "../src/core/pdfReflow.js";
 import { formatPdfLocation, isPdfLocation, isPdfRange, parsePdfLocation } from "../src/core/pdfLocation.js";
 import { DocumentReader } from "./document-reader.js";
+import { openAboutDialog } from "./about.js";
 import { convertDocument, getDocumentFormat } from "./document-convert.js";
 import { isDocLocation, isDocRange, parseDocLocation } from "../src/core/textAnchors.js";
 
@@ -4824,6 +4825,9 @@ elements.exportRecordsButton.addEventListener("click", () => {
   void exportRecords().catch((error) => window.alert(t("error.export", { detail: errorText(error) })));
 });
 elements.importRecordsButton.addEventListener("click", () => elements.importRecordsInput.click());
+document.querySelector("#aboutButton").addEventListener("click", () => {
+  void openAboutDialog().catch((error) => window.alert(errorText(error)));
+});
 elements.importRecordsInput.addEventListener("change", () => {
   const [file] = elements.importRecordsInput.files || [];
   elements.importRecordsInput.value = "";

@@ -2,7 +2,7 @@
 
 Mins Reader에는 아래 오픈소스 소프트웨어와 글꼴이 포함되어 있습니다. 각 라이선스 전문은 앱 패키지 안(`vendor/*/LICENSE` 등)과 각 프로젝트 저장소에서 볼 수 있습니다.
 
-기준: 앱 0.1.18, `package.json`/`package-lock.json` (2026-11-03). 라이브러리를 추가하거나 버전을 바꾸면 이 문서도 갱신합니다.
+기준: 앱 0.1.18, `package.json`/`package-lock.json` (2026-11-03). 라이브러리를 추가하거나 버전을 바꾸면 이 문서도 갱신합니다. 앱 안 고지 창의 내용은 `scripts/build-notices.cjs`가 만든 `src/core/openSourceNotices.js`이며, 버전이 어긋나면 `npm.cmd test`가 실패하므로 `npm.cmd run notices`로 다시 만듭니다.
 
 ## HWP 공개 문서
 
