@@ -14,6 +14,7 @@ import {
   createEpubContentSample,
   summarizeEpubContent
 } from "../src/core/epubDiagnostics.js";
+import { createRecordsTransfer, mergeRecords, parseRecordsTransfer } from "../src/core/libraryTransfer.js";
 import {
   getBookRecord,
   parseLibraryStateWithRecovery,
@@ -468,6 +469,10 @@ const elements = {
   noteBody: document.querySelector("#noteBody"),
   noteButton: document.querySelector("#noteButton"),
   exportAnnotationsButton: document.querySelector("#exportAnnotationsButton"),
+  exportRecordsButton: document.querySelector("#exportRecordsButton"),
+  importRecordsButton: document.querySelector("#importRecordsButton"),
+  importRecordsInput: document.querySelector("#importRecordsInput"),
+  recordsStatus: document.querySelector("#recordsStatus"),
   annotationList: document.querySelector("#annotationList")
 };
 
@@ -1917,8 +1922,13 @@ async function searchSection(section, query, indexOffset) {
   }));
 }
 
+// Each search gets a number; an EPUB search that a newer one replaced stops between sections and
+// leaves its results unused.
+let searchSequence = 0;
+
 async function searchBook(query) {
   const normalizedQuery = normalizeSearchQuery(query);
+  const sequence = ++searchSequence;
 
   state.searchQuery = normalizedQuery;
   state.searchResults = [];
@@ -1963,6 +1973,7 @@ async function searchBook(query) {
     let results = [];
 
     for (const section of sections) {
+      if (sequence !== searchSequence) return;
       if (results.length >= 50) {
         break;
       }
@@ -1974,6 +1985,7 @@ async function searchBook(query) {
       const matches = await searchSection(section, normalizedQuery, results.length);
       results = limitSearchResults([...results, ...matches]);
     }
+    if (sequence !== searchSequence) return;
 
     state.searchResults = results;
     state.activeSearchResultIndex = results.length ? 0 : -1;
@@ -1986,6 +1998,7 @@ async function searchBook(query) {
       results: results.length
     });
   } catch (error) {
+    if (sequence !== searchSequence) return;
     state.searchResults = [];
     state.searchStatus = t("search.failed");
     logClient("epub.search.failed", {
@@ -1993,9 +2006,43 @@ async function searchBook(query) {
       error: formatError(error)
     });
   } finally {
-    state.searching = false;
-    renderSearch();
+    if (sequence === searchSequence) {
+      state.searching = false;
+      renderSearch();
+    }
   }
+}
+
+// Search as you type: once typing pauses, in PDFs and converted documents (fast, in memory). EPUB
+// waits for Enter, since it loads every chapter. Enter on the query already searched steps to the
+// next result (Shift+Enter: previous).
+const SEARCH_TYPING_DELAY_MS = 450;
+let searchTypingTimer = null;
+
+function searchWhileTyping(event) {
+  clearTimeout(searchTypingTimer);
+  if (event.isComposing || !(state.pdf || state.docReader)) return;
+  const query = normalizeSearchQuery(elements.searchInput.value);
+  if (!canSearch(query) || query === state.searchQuery) return;
+  searchTypingTimer = setTimeout(() => searchBook(query), SEARCH_TYPING_DELAY_MS);
+}
+
+function submitSearch(backwards = false) {
+  clearTimeout(searchTypingTimer);
+  const query = normalizeSearchQuery(elements.searchInput.value);
+  if (query && query === state.searchQuery && state.searchResults.length && !state.searching) {
+    moveSearchResult(backwards ? "previous" : "next");
+    return;
+  }
+  searchBook(elements.searchInput.value);
+}
+
+// Ctrl+F (Cmd+F) opens the search panel; F3 and Shift+F3 step through the results.
+function openSearchPanel() {
+  setSidebarTab("search");
+  if (state.ui.leftPanelCollapsed) elements.leftPanelToggle.click();
+  elements.searchInput.focus();
+  elements.searchInput.select();
 }
 
 function removeAnnotation(annotation) {
@@ -2261,7 +2308,48 @@ function applyMarkdownHighlights() {
   }
 }
 
+// Pictures with a relative path resolve against the app, not the Markdown file. The desktop app
+// reads them next to the file (platform.readMarkdownImage) and shows them through blob URLs, which
+// are released with the viewer. The phone only has the Markdown file itself.
+let markdownImageUrls = [];
+
+function isRelativeImageSource(src) {
+  return Boolean(src) && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(src) || /^file:/i.test(src || "");
+}
+
+function releaseMarkdownImages() {
+  for (const url of markdownImageUrls) URL.revokeObjectURL(url);
+  markdownImageUrls = [];
+}
+
+async function resolveMarkdownImages() {
+  const viewer = state.markdownViewer;
+  const markdownPath = state.markdown.path;
+  if (!platform.readMarkdownImage || !markdownPath) return;
+  const images = [...elements.markdownViewer.querySelectorAll(".toastui-editor-contents img")]
+    .filter((image) => isRelativeImageSource(image.getAttribute("src")));
+  const loaded = new Map();
+  for (const image of images) {
+    const src = image.getAttribute("src");
+    if (!loaded.has(src)) {
+      loaded.set(src, platform.readMarkdownImage({ markdownPath, src }).then((result) => {
+        if (!result?.bytes) return null;
+        const url = URL.createObjectURL(new Blob([result.bytes], { type: result.type }));
+        markdownImageUrls.push(url);
+        return url;
+      }).catch(() => null));
+    }
+    const url = await loaded.get(src);
+    if (state.markdownViewer !== viewer) return;
+    if (url) {
+      image.dataset.markdownSrc = src;
+      image.src = url;
+    }
+  }
+}
+
 function prepareMarkdownViewer(scrollTop = state.markdownScrollTop) {
+  void resolveMarkdownImages();
   mapMarkdownBlocksToLines();
   applyMarkdownHighlights();
   const scrollRange = Math.max(0, elements.markdownViewer.scrollHeight - elements.markdownViewer.clientHeight);
@@ -2375,6 +2463,7 @@ function destroyMarkdownInstances() {
   state.markdownViewer = null;
   editor?.destroy();
   viewer?.destroy();
+  releaseMarkdownImages();
   elements.markdownEditor.replaceChildren();
   elements.markdownViewer.replaceChildren();
 }
@@ -3597,6 +3686,7 @@ function showMarkdownEditMode() {
   const viewer = state.markdownViewer;
   state.markdownViewer = null;
   viewer?.destroy();
+  releaseMarkdownImages();
   elements.markdownViewer.replaceChildren();
   if (!state.markdownEditor && !state.markdownTextEditor) createMarkdownEditor();
   renderMarkdownChrome();
@@ -3614,6 +3704,7 @@ function showMarkdownViewMode() {
   const previousViewer = state.markdownViewer;
   state.markdownViewer = null;
   previousViewer?.destroy();
+  releaseMarkdownImages();
   elements.markdownViewer.replaceChildren();
   renderMarkdownChrome();
 
@@ -3691,6 +3782,38 @@ async function saveMarkdown(saveAs = false) {
 
 function closeMarkdown() {
   void closeDocumentTab(state.activeTabId);
+}
+
+// Reading records to and from another device (src/core/libraryTransfer.js).
+async function exportRecords() {
+  if (state.book.bookId && ![DOC_LOADING_ID, PDF_LOADING_ID, "sample-book"].includes(state.book.bookId)) persistBook();
+  const transfer = createRecordsTransfer({ library: state.library, markdownAnnotations: state.markdownAnnotations });
+  const saved = await downloadTextFile({
+    content: JSON.stringify(transfer),
+    fileName: `MinsReader-records-${transfer.exportedAt.slice(0, 10)}.json`,
+    type: "application/json"
+  });
+  if (!saved) return;
+  elements.recordsStatus.textContent = t("records.exported", { count: transfer.library.books.length });
+  logClient("records.exported", { books: transfer.library.books.length });
+}
+
+async function importRecords(file) {
+  if (!file) return;
+  const incoming = parseRecordsTransfer(await file.text());
+  if (!window.confirm(t("records.importConfirm", { count: incoming.library.books.length }))) return;
+  const { library, markdownAnnotations, summary } = mergeRecords({ library: state.library, markdownAnnotations: state.markdownAnnotations }, incoming);
+  state.library = library;
+  saveLibrary(state.library);
+  state.markdownAnnotations = markdownAnnotations;
+  storage.setItem(MARKDOWN_ANNOTATIONS_KEY, JSON.stringify(state.markdownAnnotations));
+  // The open book takes the merged annotations, or its next save would drop them.
+  const current = getBookRecord(state.library, state.book.bookId);
+  if (current) state.book = { ...state.book, ...current, filePath: state.book.filePath, lastLocation: state.book.lastLocation };
+  elements.recordsStatus.textContent = t("records.imported", summary);
+  logClient("records.imported", summary);
+  state.docReader?.refreshHighlights?.();
+  render();
 }
 
 async function exportAnnotations() {
@@ -4410,7 +4533,14 @@ elements.markdownViewer.addEventListener("scroll", () => {
 elements.searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
   setSidebarTab("search");
-  searchBook(elements.searchInput.value);
+  submitSearch();
+});
+elements.searchInput.addEventListener("input", searchWhileTyping);
+elements.searchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    submitSearch(true);
+  }
 });
 
 elements.tocTab.addEventListener("click", () => {
@@ -4532,6 +4662,15 @@ elements.underlineSelectionButton.addEventListener("click", () => {
 elements.noteButton.addEventListener("click", () => {
   addCurrentNote();
 });
+elements.exportRecordsButton.addEventListener("click", () => {
+  void exportRecords().catch((error) => window.alert(t("error.export", { detail: errorText(error) })));
+});
+elements.importRecordsButton.addEventListener("click", () => elements.importRecordsInput.click());
+elements.importRecordsInput.addEventListener("change", () => {
+  const [file] = elements.importRecordsInput.files || [];
+  elements.importRecordsInput.value = "";
+  void importRecords(file).catch((error) => window.alert(t("records.importFailed", { detail: errorText(error) })));
+});
 elements.exportAnnotationsButton.addEventListener("click", () => {
   void exportAnnotations().catch((error) => window.alert(t("error.export", { detail: errorText(error) })));
 });
@@ -4611,6 +4750,19 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (state.mode !== "markdown" && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    openSearchPanel();
+    return;
+  }
+
+  if (state.mode !== "markdown" && event.key === "F3") {
+    event.preventDefault();
+    if (state.searchResults.length) moveSearchResult(event.shiftKey ? "previous" : "next");
+    else openSearchPanel();
+    return;
+  }
+
   if (state.mode === "markdown" && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
     saveMarkdown(false);
@@ -4628,6 +4780,9 @@ window.addEventListener("keydown", (event) => {
     }
     return;
   }
+
+  // Arrow keys in a text field move the caret, not the page.
+  if (event.target?.closest?.("input, textarea, select, [contenteditable='true']")) return;
 
   if (event.key === "ArrowRight") {
     goNext();

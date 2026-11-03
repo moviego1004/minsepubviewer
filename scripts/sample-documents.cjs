@@ -128,7 +128,21 @@ function hwpCell(level, col, row, text, colSpan = 1, { width = 0, borderFill = 0
 
 // DocInfo of a styled sample: faces 바탕 (Hangul) and Arial (Latin); character shape 0 is plain
 // 10pt, 1 is 15pt bold red on yellow; paragraph shape 0 is justified, 1 centred with a hanging
-// indent; border fill 1 has solid left/right lines and a grey fill.
+// indent; border fill 1 has solid left/right lines and a grey fill. Paragraph shape 2 is boxed by
+// border fill 1 and joined with the next paragraph of that shape; 3 is numbered "^1." (level 1)
+// and 4 "(^2)" (level 2) by numbering 1 starting at 1; 5 has bullet 1 ("•").
+function numbering(formats) {
+  const levels = Array.from({ length: 7 }, (_, index) => {
+    const format = formats[index] || "";
+    const head = Buffer.alloc(14);
+    head.writeUInt16LE(format.length, 12);
+    return Buffer.concat([head, Buffer.from(format, "utf16le")]);
+  });
+  const start = Buffer.alloc(2);
+  start.writeUInt16LE(1, 0);
+  return Buffer.concat([...levels, start]);
+}
+
 function hwpDocInfo() {
   const mappings = Buffer.alloc(72);
   mappings.writeInt32LE(1, 4);
@@ -157,9 +171,12 @@ function hwpDocInfo() {
     data.writeUInt32LE(shade, 60);
     return data;
   };
-  const paraShape = ({ align, left = 0, indent = 0, bottom = 0, lineSpacing = 160 }) => {
+  const paraShape = ({ align, left = 0, indent = 0, bottom = 0, lineSpacing = 160, heading = 0, level = 0, listId = 0, borderFill = 0, joined = false }) => {
     const data = Buffer.alloc(54);
-    data.writeUInt32LE(align << 2, 0);
+    data.writeUInt32LE(((align << 2) | (heading << 23) | (level << 25) | (joined ? 0x10000000 : 0)) >>> 0, 0);
+    data.writeUInt16LE(listId, 30);
+    data.writeUInt16LE(borderFill, 32);
+    if (borderFill) [34, 36, 38, 40].forEach((offset) => data.writeInt16LE(500, offset));
     data.writeInt32LE(left, 4);
     data.writeInt32LE(indent, 12);
     data.writeInt32LE(bottom, 20);
@@ -173,7 +190,13 @@ function hwpDocInfo() {
     hwpRecord(21, 1, charShape({ size: 1000 })),
     hwpRecord(21, 1, charShape({ size: 1500, props: 2, color: 0x0000ff, shade: 0x00ffff, spacing: -6 })),
     hwpRecord(25, 1, paraShape({ align: 0 })),
-    hwpRecord(25, 1, paraShape({ align: 3, left: 2000, indent: -4000, bottom: 600, lineSpacing: 130 }))
+    hwpRecord(25, 1, paraShape({ align: 3, left: 2000, indent: -4000, bottom: 600, lineSpacing: 130 })),
+    hwpRecord(25, 1, paraShape({ align: 0, borderFill: 1, joined: true })),
+    hwpRecord(25, 1, paraShape({ align: 0, heading: 2, level: 0, listId: 1 })),
+    hwpRecord(25, 1, paraShape({ align: 0, heading: 2, level: 1, listId: 1 })),
+    hwpRecord(25, 1, paraShape({ align: 0, heading: 3, listId: 1 })),
+    hwpRecord(23, 1, numbering(["^1.", "(^2)"])),
+    hwpRecord(24, 1, Buffer.concat([Buffer.alloc(12), Buffer.from("\u2022", "utf16le")]))
   ]);
 }
 
@@ -188,10 +211,38 @@ function hwpCompress(records) {
 // controls: false leaves out the table and the footnote, whose control records are too short for
 // hwpjs's parser (web/hwp-wasm.js); the built-in reader accepts them. spanning: a last paragraph
 // whose second line Hangul put on the next page.
-function createSampleHwp({ paragraphCount = 40, compressed = true, styled = false, controls = true, spanning = false } = {}) {
+// picture: a 4x4 red PNG between paragraphs (a drawing object with SHAPE_COMPONENT_PICTURE, its
+// BinData stream and, in styled samples, the DocInfo BIN_DATA item).
+// lists (styled): numbered paragraphs at two levels, a bullet, two joined boxed paragraphs and a
+// header.
+function createSampleHwp({ paragraphCount = 40, compressed = true, styled = false, controls = true, spanning = false, picture = false, lists = false } = {}) {
   lineTop = 0;
   const records = [...hwpParagraph(0, "HWP 5.0 검사 문서", styled ? { paraShape: 1, runs: [[0, 1], [4, 0]] } : {})];
   for (const text of paragraphs(paragraphCount, "HWP")) records.push(...hwpParagraph(0, text));
+  if (lists) {
+    for (const [text, paraShape] of [["첫 항목", 3], ["세부 항목", 4], ["둘째 세부", 4], ["둘째 항목", 3], ["글머리 항목", 5], ["상자 첫 줄", 2], ["상자 둘째 줄", 2]]) {
+      records.push(...hwpParagraph(0, text, { paraShape }));
+    }
+    const header = Buffer.alloc(24);
+    header.writeUInt32LE(9, 0);
+    records.push(hwpRecord(66, 0, header),
+      hwpRecord(67, 1, Buffer.concat([hwpControlChar(16, "head"), Buffer.from("\r", "utf16le")])),
+      hwpRecord(71, 1, Buffer.concat([hwpControlId("head"), Buffer.alloc(4)])), hwpRecord(72, 2, Buffer.alloc(8)),
+      ...hwpParagraph(2, "머리말 글"));
+  }
+  if (picture) {
+    const header = Buffer.alloc(24);
+    header.writeUInt32LE(9, 0);
+    const object = Buffer.alloc(46);
+    hwpControlId("gso ").copy(object, 0);
+    object.writeUInt32LE(14400, 16);
+    object.writeUInt32LE(14400, 20);
+    const pictureData = Buffer.alloc(80);
+    pictureData.writeUInt16LE(1, 71);
+    records.push(hwpRecord(66, 0, header),
+      hwpRecord(67, 1, Buffer.concat([hwpControlChar(11, "gso "), Buffer.from("\r", "utf16le")])),
+      hwpRecord(71, 1, object), hwpRecord(76, 2, Buffer.alloc(8)), hwpRecord(85, 3, pictureData));
+  }
   if (spanning) {
     const first = "앞 쪽 끝 줄입니다. ";
     records.push(...hwpParagraph(0, `${first}다음 쪽 첫 줄입니다.`, { lines: [0, first.length], newPageLine: 1 }));
@@ -213,7 +264,20 @@ function createSampleHwp({ paragraphCount = 40, compressed = true, styled = fals
   header.writeUInt32LE(compressed ? 1 : 0, 36);
   const file = CFB.utils.cfb_new();
   CFB.utils.cfb_add(file, "FileHeader", header);
-  if (styled) CFB.utils.cfb_add(file, "DocInfo", compressed ? hwpCompress(hwpDocInfo()) : hwpDocInfo());
+  if (styled) {
+    // BIN_DATA: embedded item 1 is stream BIN0001 with the extension "png".
+    const binData = Buffer.alloc(10);
+    binData.writeUInt16LE(1, 0);
+    binData.writeUInt16LE(1, 2);
+    binData.writeUInt16LE(3, 4);
+    binData.write("png", 6, "utf16le");
+    const docInfo = Buffer.concat([hwpDocInfo(), ...(picture ? [hwpRecord(18, 1, binData)] : [])]);
+    CFB.utils.cfb_add(file, "DocInfo", compressed ? hwpCompress(docInfo) : docInfo);
+  }
+  if (picture) {
+    const png = createSamplePng(4, 4, [200, 30, 30]);
+    CFB.utils.cfb_add(file, "BinData/BIN0001.png", compressed ? zlib.deflateRawSync(png) : png);
+  }
   CFB.utils.cfb_add(file, "BodyText/Section0", compressed ? hwpCompress(Buffer.concat(records)) : Buffer.concat(records));
   return freeUnusedFatEntries(Buffer.from(CFB.write(file, { type: "buffer", fileType: "cfb" })));
 }
@@ -233,4 +297,4 @@ function freeUnusedFatEntries(buffer) {
   return buffer;
 }
 
-module.exports = { createSampleDocx, createSampleHwpx, createSampleHwpml, createSampleHwp };
+module.exports = { createSampleDocx, createSampleHwpx, createSampleHwpml, createSampleHwp, createSamplePng };

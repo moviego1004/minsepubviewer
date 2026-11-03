@@ -197,6 +197,7 @@ scripts/        빌드·배포(release.cjs), 모바일 번들, 스모크 시험
 
      - 하지 않기로 한 것: 폴라리스처럼 상용 글꼴(HY, Monotype Arial/Times 등)을 넣는 것(라이선스), 네이티브 렌더링 엔진으로 바꾸는 것, XLSX·PPTX 지원(2026-11-03 사용자 결정으로 제외).
      - 각 단계 검증: `npm.cmd test`, 화면 변경 시 `node --check web/app.js`·`npm.cmd run test:reader`, Android 연결부 변경 시 `npm.cmd run android:sync`. 휴대폰 실기기 확인은 사용자 몫으로 기록.
+   - **2026-11-03 추가 완료**: 휴대폰 재배치 HWP의 그림·번호/글머리표·머리말/꼬리말·장평·문단 테두리, 검색 개선, Markdown 상대 경로 그림(PC 읽기 모드), PC↔휴대폰 기록 옮기기, 설치본 로그 위치. Google Play 등록 준비 항목은 [PLAY_STORE_REVIEW.md](PLAY_STORE_REVIEW.md).
 2. **실기기 확인 대기 항목** ⏳
    - 카카오톡·메일 첨부 열기 목록에 Mins Reader가 나오는지(앱별 MIME). 안 나오면 앱 이름과 형식을 받아 추가한다.
    - 실제 HWPX 사용자 파일

@@ -55,6 +55,52 @@ export function getDocumentFormat(name) {
   return null;
 }
 
+// HWP documents often hold uncompressed BMP screenshots; as PNG they take a few percent of the room
+// in the converted HTML. Returns null where the browser cannot do it.
+async function bmpToPng(bytes) {
+  if (typeof createImageBitmap !== "function") return null;
+  const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/bmp" }));
+  try {
+    let blob;
+    if (typeof OffscreenCanvas === "function") {
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      canvas.getContext("2d").drawImage(bitmap, 0, 0);
+      blob = await canvas.convertToBlob({ type: "image/png" });
+    } else {
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext("2d").drawImage(bitmap, 0, 0);
+      blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    }
+    return blob && blob.size < bytes.byteLength ? new Uint8Array(await blob.arrayBuffer()) : null;
+  } finally {
+    bitmap.close?.();
+  }
+}
+
+// BMP data URLs in page HTML (hwpjs) become PNG the same way.
+async function recodeBmpDataUrls(html) {
+  const pattern = /data:image\/bmp;base64,([A-Za-z0-9+/=]+)/g;
+  const replacements = new Map();
+  for (const [url, data] of String(html).matchAll(pattern)) {
+    if (replacements.has(url)) continue;
+    try {
+      const binary = atob(data);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      const png = await bmpToPng(bytes);
+      if (!png) continue;
+      let text = "";
+      for (let offset = 0; offset < png.length; offset += 0x8000) text += String.fromCharCode(...png.subarray(offset, offset + 0x8000));
+      replacements.set(url, `data:image/png;base64,${btoa(text)}`);
+    } catch {
+      // That picture stays a BMP.
+    }
+  }
+  return replacements.size ? String(html).replace(pattern, (url) => replacements.get(url) || url) : html;
+}
+
 async function inflateRaw(bytes) {
   const pako = await loadPako();
   try {
@@ -177,19 +223,19 @@ async function convertHwp(bytes, fileLike, platform, options) {
   let pagesError = null;
   if (platform?.convertHwp) {
     try {
-      return { html: await platform.convertHwp({ path: fileLike.path || "", bytes: fileLike.path ? null : bytes }), layout: true };
+      return { html: await recodeBmpDataUrls(await platform.convertHwp({ path: fileLike.path || "", bytes: fileLike.path ? null : bytes })), layout: true };
     } catch (error) {
       pagesError = error;
     }
   } else if (options.hwpPages) {
     try {
-      return { html: withPageFontFallback(await convertHwpToPageHtml(bytes)), layout: true, pages: true, pagesAvailable: true };
+      return { html: withPageFontFallback(await recodeBmpDataUrls(await convertHwpToPageHtml(bytes))), layout: true, pages: true, pagesAvailable: true };
     } catch (error) {
       pagesError = error;
     }
   }
   // Documents the page converter rejects are still read by the built-in reader, reflowed.
-  return { html: await convertHwpBinary(bytes, inflateRaw), layout: false, pagesAvailable: !platform?.convertHwp, pagesError };
+  return { html: await convertHwpBinary(bytes, inflateRaw, { recodeImage: bmpToPng }), layout: false, pagesAvailable: !platform?.convertHwp, pagesError };
 }
 
 // The content decides between the converted formats; the file name is the fallback.

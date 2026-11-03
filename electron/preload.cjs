@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("minseDesktop", {
   getRecentFiles: () => ipcRenderer.invoke("recent:list"),
   openFileInNewWindow: (filePath) => ipcRenderer.invoke("window:open-file", filePath),
   saveMarkdownFile: (payload) => ipcRenderer.invoke("markdown:save", payload),
+  readMarkdownImage: (payload) => ipcRenderer.invoke("markdown:read-image", payload),
   confirmSaveChanges: (payload) => ipcRenderer.invoke("document:confirm-save", payload),
   completeWindowClose: (shouldClose) => ipcRenderer.send("window:close-complete", Boolean(shouldClose)),
   openImageWindow: (payload) => ipcRenderer.invoke("image:open", payload),

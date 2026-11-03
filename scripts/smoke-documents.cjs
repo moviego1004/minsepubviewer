@@ -98,7 +98,16 @@ app.whenReady().then(async () => {
   await run("document.querySelector('#searchInput').value = '없는검색어'; document.querySelector('#searchForm').requestSubmit()");
   await waitFor("document.querySelector('#searchStatus').textContent === '결과가 없습니다.'");
   assert.ok(await run(frame("doc.querySelectorAll('mark.is-search').length === 0 && doc.querySelectorAll('mark.is-yellow').length === 1")), "highlights stay after clearing search");
-  console.log("DOCX search works");
+  // Typing searches once it pauses; Enter on the same query and F3 step through the results.
+  await run("const input = document.querySelector('#searchInput'); input.value = '문단 1'; input.dispatchEvent(new InputEvent('input', { bubbles: true }))");
+  await waitFor("/결과 \\d+개/.test(document.querySelector('#searchStatus').textContent) && document.querySelector('#searchInput').value === '문단 1'");
+  const activeMatch = frame("Number(doc.querySelector('mark.is-search.is-active')?.dataset.searchIndex)");
+  assert.equal(await run(activeMatch), 0);
+  await run("document.querySelector('#searchForm').requestSubmit()");
+  await waitFor(`${activeMatch} === 1`);
+  await run("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', shiftKey: true }))");
+  await waitFor(`${activeMatch} === 0`);
+  console.log("DOCX search works (typing, Enter and F3 steps)");
 
   // Jumping to a search result moves the reading position too, so go back to the highlight and wait
   // until that position is the stored one before reopening.

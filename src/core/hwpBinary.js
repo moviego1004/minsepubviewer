@@ -1,7 +1,9 @@
 // Text-and-table reader for binary HWP 5.0 files (an OLE compound file of zlib-compressed record
 // streams). Used where the desktop converter is not available (the phone app). Paragraph text,
-// tables and text boxes are kept with the fonts, sizes, colours, alignment, indents and cell
-// borders/backgrounds of DocInfo; page layout, images and drawings are not rendered.
+// tables, text boxes and pictures (PNG, JPEG, GIF, BMP, WebP) are kept with the fonts, sizes,
+// colours, alignment, indents, paragraph numbers and bullets, paragraph and cell borders and
+// backgrounds of DocInfo; headers and footers are shown once at the start and end of their
+// section. Page layout and drawings are not rendered.
 // inflateRaw(bytes) -> Promise<Uint8Array> is passed in so the browser and tests can each supply one.
 import { fontCss } from "./hwpFonts.js";
 import { symbolFontTable, symbolHtml } from "./hwpSymbols.js";
@@ -10,9 +12,12 @@ const FREE_SECTOR = 0xffffffff;
 const END_OF_CHAIN = 0xfffffffe;
 const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 
+const TAG_BIN_DATA = 18;
 const TAG_FACE_NAME = 19;
 const TAG_BORDER_FILL = 20;
 const TAG_CHAR_SHAPE = 21;
+const TAG_NUMBERING = 23;
+const TAG_BULLET = 24;
 const TAG_PARA_SHAPE = 25;
 const TAG_PARA_HEADER = 66;
 const TAG_PARA_TEXT = 67;
@@ -20,6 +25,7 @@ const TAG_PARA_CHAR_SHAPE = 68;
 const TAG_CTRL_HEADER = 71;
 const TAG_LIST_HEADER = 72;
 const TAG_TABLE = 77;
+const TAG_SHAPE_PICTURE = 85;
 
 // Characters that occupy 8 code units (the control character, 6 units of data, the character again).
 const WIDE_CONTROLS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
@@ -222,7 +228,10 @@ function charShapeCss(data, faces) {
   if (underline === 3) lines.push("overline");
   if ((props >>> 18) & 7) lines.push("line-through");
   if (lines.length) css.push(`text-decoration:${lines.join(" ")}`);
-  const spacing = view.getInt8(21);
+  // Spacing (자간) is a percentage of the character width. The width ratio (장평) has no CSS
+  // counterpart for ordinary fonts; it is approximated by the same amount of spacing, so narrowed
+  // text takes about the room it takes in Hangul.
+  const spacing = view.getInt8(21) + ((data[14] || 100) - 100);
   if (spacing) css.push(`letter-spacing:${Number((spacing / 200).toFixed(3))}em`);
   // Black is left to the reader's theme colour.
   const color = view.getUint32(52, true) & 0xffffff;
@@ -266,10 +275,103 @@ function paraShapeCss(data, borderFills) {
   const spacing = modern ? view.getUint32(50, true) : view.getInt32(24, true);
   if (spacingType === 0 && spacing > 0) css.push(`line-height:${Number((spacing / 100).toFixed(2))}`);
   else if (spacingType === 1 && spacing > 0) css.push(`line-height:${rem(spacing / 100)}`);
-  // Paragraph borders depend on settings this reader does not follow; only a coloured background is kept.
-  const fill = borderFills[view.getUint16(32, true) - 1]?.fill;
-  if (fill && fill !== "#ffffff") css.push(`background-color:${fill}`);
+  const borderFill = borderFills[view.getUint16(32, true) - 1];
+  if (borderFill?.fill && borderFill.fill !== "#ffffff") css.push(`background-color:${borderFill.fill}`);
+  // A border around the paragraph, inside its margins, with its own padding (HWPUNIT16).
+  if (/solid|dashed|dotted|double|inset|outset|groove|ridge/.test(borderFill?.borders || "")) {
+    css.push(borderFill.borders);
+    if (data.length >= 42) {
+      const [left, right, top, bottom] = [34, 36, 38, 40].map((offset) => rem(Math.max(0, view.getInt16(offset, true)) / 100));
+      css.push(`border-padding:${top} ${right} ${bottom} ${left}`);
+    }
+  }
   return css.join(";");
+}
+
+// Paragraphs whose shape joins the borders of the next paragraph with the same shape (bit 28)
+// are drawn as one box.
+function paraShapeJoins(data) {
+  return data.length >= 4 && Boolean(dataView(data).getUint32(0, true) & 0x10000000);
+}
+
+// The heading of a paragraph shape: 1 outline, 2 numbered, 3 bullet (bits 23-24), its level
+// (bits 25-27) and the numbering or bullet id it uses (1-based).
+function paraHeading(data) {
+  if (data.length < 32) return null;
+  const view = dataView(data);
+  const props = view.getUint32(0, true);
+  const type = (props >>> 23) & 3;
+  return type ? { type, level: (props >>> 25) & 7, id: view.getUint16(30, true) } : null;
+}
+
+function readUtf16(view, offset, length) {
+  let text = "";
+  for (let index = 0; index < length && offset + index * 2 + 2 <= view.byteLength; index += 1) text += String.fromCharCode(view.getUint16(offset + index * 2, true));
+  return text;
+}
+
+// NUMBERING: for each of 7 levels a 12-byte head (attributes with the number style in bits 5-8,
+// widths, character shape) and a format such as "^1." or "(^2)", then the start number of the
+// first level and, from HWP 5.0.2.5, a start number for each level.
+function readNumbering(data) {
+  const view = dataView(data);
+  const levels = [];
+  let offset = 0;
+  for (let level = 0; level < 7 && offset + 14 <= data.length; level += 1) {
+    const style = (view.getUint32(offset, true) >>> 5) & 0xf;
+    const length = view.getUint16(offset + 12, true);
+    levels.push({ style, format: readUtf16(view, offset + 14, length) });
+    offset += 14 + length * 2;
+  }
+  const start = (offset + 2 <= data.length ? view.getUint16(offset, true) : 1) || 1;
+  const starts = levels.map((level, index) => {
+    const at = offset + 2 + index * 4;
+    return at + 4 <= data.length ? view.getUint32(at, true) || 1 : index ? 1 : start;
+  });
+  return { levels, starts };
+}
+
+// BULLET: attributes, widths and character shape (12 bytes), then the bullet character.
+function readBullet(data) {
+  return data.length >= 14 ? String.fromCharCode(dataView(data).getUint16(12, true)) : "\u2022";
+}
+
+const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
+const HANGUL_SYLLABLES = "가나다라마바사아자차카타파하";
+const HANGUL_JAMO = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ";
+const CIRCLED_HANGUL = "㉮㉯㉰㉱㉲㉳㉴㉵㉶㉷㉸㉹㉺㉻";
+const CIRCLED_JAMO = "㉠㉡㉢㉣㉤㉥㉦㉧㉨㉩㉪㉫㉬㉭";
+const HANJA_DIGITS = "一二三四五六七八九十";
+
+function roman(number) {
+  let rest = number;
+  let text = "";
+  for (const [value, letters] of [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]]) {
+    while (rest >= value) { text += letters; rest -= value; }
+  }
+  return text;
+}
+
+function cycle(list, number) {
+  return list[(number - 1) % list.length];
+}
+
+// Number styles of the HWP 5.0 numbering format (표 41); unknown styles are Arabic digits.
+export function formatNumber(number, style) {
+  if (number < 1) return String(number);
+  switch (style) {
+    case 1: return number <= CIRCLED.length ? CIRCLED[number - 1] : String(number);
+    case 2: return roman(number);
+    case 3: return roman(number).toLowerCase();
+    case 4: return String.fromCharCode(65 + ((number - 1) % 26));
+    case 5: return String.fromCharCode(97 + ((number - 1) % 26));
+    case 8: case 9: return cycle(HANGUL_SYLLABLES, number);
+    case 10: return cycle(CIRCLED_HANGUL, number);
+    case 11: return cycle(HANGUL_JAMO, number);
+    case 12: return cycle(CIRCLED_JAMO, number);
+    case 13: case 14: return number <= 10 ? HANJA_DIGITS[number - 1] : String(number);
+    default: return String(number);
+  }
 }
 
 export function readDocInfo(bytes) {
@@ -296,13 +398,29 @@ export function readDocInfo(bytes) {
   // Symbol-font characters follow the fonts of their character shape (see hwpSymbols.js).
   const symbolTables = charShapeRecords.map(({ data }) => symbolFontTable(faces.map((list, language) => (
     2 * language + 2 <= data.length ? list[dataView(data).getUint16(2 * language, true)] : ""))));
-  const paraShapes = records.filter((record) => record.tag === TAG_PARA_SHAPE).map((record) => paraShapeCss(record.data, borderFills));
+  const paraShapeRecords = records.filter((record) => record.tag === TAG_PARA_SHAPE);
+  const paraShapes = paraShapeRecords.map((record) => paraShapeCss(record.data, borderFills));
+  const headings = paraShapeRecords.map((record) => paraHeading(record.data));
+  const numberings = records.filter((record) => record.tag === TAG_NUMBERING).map((record) => readNumbering(record.data));
+  const bullets = records.filter((record) => record.tag === TAG_BULLET).map((record) => readBullet(record.data));
+  // border-padding is not CSS: it becomes padding, and joined paragraphs lose the border between them.
+  const paraRules = paraShapes.flatMap((css, id) => {
+    if (!css) return [];
+    const padding = /;border-padding:([^;]+)/.exec(css);
+    const rules = [`.hwp-styled .hp${id}{${css.replace(/;border-padding:[^;]+/, "")}${padding ? `;padding-top:${padding[1].split(" ")[0]};padding-bottom:${padding[1].split(" ")[2]}` : ""}}`];
+    if (padding && paraShapeJoins(paraShapeRecords[id].data)) {
+      rules.push(`.hwp-styled .hp${id}+.hp${id}{border-top:none;margin-top:0;padding-top:0}`,
+        `.hwp-styled .hp${id}:has(+.hp${id}){border-bottom:none;margin-bottom:0;padding-bottom:0}`);
+    }
+    return rules;
+  });
   const rules = [
     // rem in this document: 10pt of the original. 14px keeps common 10-15pt body text readable on
     // a phone without spilling; the reader's zoom scales it further.
     "html{font-size:14px}",
     ...charShapes.map((css, id) => (css ? `.hwp-styled .hc${id}{${css}}` : "")),
-    ...paraShapes.map((css, id) => (css ? `.hwp-styled .hp${id}{${css}}` : "")),
+    ...paraRules,
+    ".hwp-styled .hwp-marker{text-indent:0}",
     ...borderFills.map(({ borders, fill }, index) => `.hwp-styled .hb${index + 1}{${borders}${fill ? `;background-color:${fill}` : ""}}`)
   ];
   return {
@@ -312,6 +430,9 @@ export function readDocInfo(bytes) {
     hasCharShape: (id) => id >= 0 && id < charShapes.length,
     symbolTable: (id) => symbolTables[id] || symbolFontTable(),
     hasParaShape: (id) => id >= 0 && id < paraShapes.length,
+    heading: (id) => headings[id] || null,
+    numbering: (id) => numberings[id - 1] || null,
+    bullet: (id) => bullets[id - 1] ?? null,
     hasBorderFill: (id) => id >= 1 && id <= borderFills.length
   };
 }
@@ -382,28 +503,121 @@ function paragraphTag(paragraph, runs) {
   return `<p${className}${size ? ` style="font-size:${size}"` : ""}>`;
 }
 
+// Counters of numbered and outline paragraphs (numbering id -> 7 levels), for the whole document
+// as in Hangul; a level counts on and the levels below it start again.
+let numberCounters = new Map();
+// The numbering of outline paragraphs in the section being rendered (its section definition).
+let sectionOutline = 0;
+
+function paragraphMarker(paragraph, runs) {
+  const shape = paragraph.data.length >= 10 ? dataView(paragraph.data).getUint16(8, true) : -1;
+  const heading = docStyles?.heading(shape);
+  if (!heading) return "";
+  if (heading.type === 3) {
+    const bullet = docStyles.bullet(heading.id);
+    return bullet ? `${symbolHtml(bullet, docStyles.symbolTable(runs[0]?.id ?? -1))} ` : "";
+  }
+  const id = heading.type === 1 ? sectionOutline : heading.id;
+  const numbering = docStyles.numbering(id);
+  if (!numbering) return "";
+  const counters = numberCounters.get(id) || Array(7).fill(0);
+  numberCounters.set(id, counters);
+  counters[heading.level] = counters[heading.level] ? counters[heading.level] + 1 : numbering.starts[heading.level] ?? 1;
+  counters.fill(0, heading.level + 1);
+  const format = numbering.levels[heading.level]?.format;
+  if (!format) return "";
+  const text = format.replace(/\^(\d)/g, (match, level) => {
+    const index = Number(level) - 1;
+    return formatNumber(counters[index] || numbering.starts[index] || 1, numbering.levels[index]?.style ?? 0);
+  });
+  return text.trim() ? `${escapeHtml(text)} ` : "";
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Whether paragraph text holds characters besides controls and the paragraph end.
+function hasText(record) {
+  if (!record) return false;
+  for (let index = 0; index + 1 < record.data.length; index += 2) {
+    const code = record.data[index] | (record.data[index + 1] << 8);
+    if (code >= 32) return true;
+    if (WIDE_CONTROLS.has(code)) index += 14;
+  }
+  return false;
+}
+
 function renderParagraph(paragraph) {
   const text = paragraph.children.find((child) => child.tag === TAG_PARA_TEXT);
   const controls = paragraph.children.filter((child) => child.tag === TAG_CTRL_HEADER);
   const runs = readCharRuns(paragraph.children.find((child) => child.tag === TAG_PARA_CHAR_SHAPE));
   const open = paragraphTag(paragraph, runs);
+  const controlCount = controls.length;
+  const marker = paragraphMarker(paragraph, runs);
+  const markerHtml = marker ? `<span class="hwp-marker${docStyles?.hasCharShape(runs[0]?.id ?? -1) ? ` hc${runs[0].id}` : ""}">${marker}</span>` : "";
   const content = paragraphText(text, controls, renderControl, runs).split(CONTINUE_PARAGRAPH).join(open);
-  return `${open}${content || "<br>"}</p>`.replace(/<p(?: [^>]*)?><\/p>/g, "");
+  // A paragraph that only held controls shown elsewhere (header, section settings) leaves no blank line.
+  if (!content && !markerHtml && controlCount && !hasText(text)) return "";
+  return `${open}${markerHtml}${content || "<br>"}</p>`.replace(/<p(?: [^>]*)?><\/p>/g, "");
 }
 
 // Footnotes and endnotes of the section being rendered; listed after its text.
 let sectionNotes = [];
+// Headers and footers of the section being rendered, shown before and after its text.
+let sectionHeaders = [];
+let sectionFooters = [];
+// Picture data URLs of the document being rendered, by BinItem id (see readPictures).
+let docPictures = new Map();
+
+function findRecord(node, tag) {
+  for (const child of node.children) {
+    if (child.tag === tag) return child;
+    const found = findRecord(child, tag);
+    if (found) return found;
+  }
+  return null;
+}
+
+// The BinItem id a picture object (SHAPE_COMPONENT_PICTURE) shows: after the border (12 bytes),
+// its corner points (32), crop (16), padding (8), brightness, contrast and effect (3).
+function pictureId(record) {
+  return record && record.data.length >= 73 ? dataView(record.data).getUint16(71, true) : 0;
+}
+
+// A drawing object holding a picture: inline when it is placed like a character (bit 0 of the
+// object attributes), otherwise between paragraphs. Its width (HWPUNIT, 1/100 pt) is kept.
+function renderPicture(control) {
+  const src = docPictures.get(pictureId(findRecord(control, TAG_SHAPE_PICTURE)));
+  if (!src) return "";
+  const view = control.data.length >= 24 ? dataView(control.data) : null;
+  const width = view ? view.getUint32(16, true) : 0;
+  const image = `<img class="hwp-pic" src="${src}" alt=""${width > 0 && width < 0x7fffffff ? ` style="width:${rem(width / 100)}"` : ""}>`;
+  return view && view.getUint32(4, true) & 1 ? image : `</p><div class="hwp-figure">${image}</div>${CONTINUE_PARAGRAPH}`;
+}
 
 function renderControl(control) {
   if (!control) return "";
   const id = controlId(control);
   if (id === "tbl ") return `</p>${renderTable(control)}${CONTINUE_PARAGRAPH}`;
+  // Headers and footers repeat on every page in Hangul; the reflowed view shows each once.
+  if (id === "head" || id === "foot") {
+    const html = renderNestedLists(control);
+    if (html.replace(/<[^>]+>/g, "").trim()) (id === "head" ? sectionHeaders : sectionFooters).push(html);
+    return "";
+  }
+  if (id === "secd" && control.data.length >= 20) {
+    sectionOutline = dataView(control.data).getUint16(18, true);
+    return "";
+  }
   if (id === "fn  " || id === "en  ") {
     sectionNotes.push(renderNestedLists(control));
     return `<sup class="hwp-note-ref">${sectionNotes.length})</sup>`;
   }
-  // Text boxes and other drawing objects: keep the text they hold.
+  // Pictures; text boxes and other drawing objects keep the text they hold.
   if (id === "gso ") {
+    const picture = renderPicture(control);
+    if (picture) return picture;
     const html = renderNestedLists(control);
     return html ? `</p><div class="hwp-box">${html}</div>${CONTINUE_PARAGRAPH}` : "";
   }
@@ -474,14 +688,21 @@ function cellAttributes(cell, tableWidth) {
 
 export function renderSection(bytes) {
   sectionNotes = [];
+  sectionHeaders = [];
+  sectionFooters = [];
+  sectionOutline = 0;
   try {
     const body = renderParagraphs(buildTree(readRecords(bytes)));
     const notes = sectionNotes.length
       ? `<ol class="hwp-notes">${sectionNotes.map((note) => `<li>${note}</li>`).join("")}</ol>`
       : "";
-    return `<section${docStyles ? ' class="hwp-styled"' : ""}>${body}${notes}</section>`;
+    const header = sectionHeaders.length ? `<header class="hwp-page-header">${sectionHeaders.join("")}</header>` : "";
+    const footer = sectionFooters.length ? `<footer class="hwp-page-footer">${sectionFooters.join("")}</footer>` : "";
+    return `<section${docStyles ? ' class="hwp-styled"' : ""}>${header}${body}${notes}${footer}</section>`;
   } finally {
     sectionNotes = [];
+    sectionHeaders = [];
+    sectionFooters = [];
   }
 }
 
@@ -497,7 +718,78 @@ export function readHwpHeader(file) {
   return { compressed: Boolean(flags & 1), encrypted: Boolean(flags & 2), distribution: Boolean(flags & 4) };
 }
 
-export async function convertHwpBinary(bytes, inflateRaw) {
+// BIN_DATA records of DocInfo, in BinItem id order (1-based): the number of the BinData stream
+// (BinData/BIN000A.png) of each embedded item; linked files outside the document are null.
+export function readBinItems(docInfo) {
+  return readRecords(docInfo).filter((record) => record.tag === TAG_BIN_DATA).map(({ data }) => {
+    if (data.length < 4) return null;
+    const type = dataView(data).getUint16(0, true) & 0xf;
+    return type === 1 || type === 2 ? dataView(data).getUint16(2, true) : null;
+  });
+}
+
+const IMAGE_TYPES = [
+  ["image/png", [0x89, 0x50, 0x4e, 0x47]],
+  ["image/jpeg", [0xff, 0xd8, 0xff]],
+  ["image/gif", [0x47, 0x49, 0x46, 0x38]],
+  ["image/bmp", [0x42, 0x4d]]
+];
+
+// The browser draws these; WMF/EMF and other formats are skipped.
+export function imageType(bytes) {
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" && String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP") return "image/webp";
+  return IMAGE_TYPES.find(([, magic]) => magic.every((value, index) => bytes[index] === value))?.[0] || null;
+}
+
+function base64(bytes) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary);
+}
+
+// Data URLs of the pictures the sections show. A BinData stream is deflated unless its item says
+// otherwise; as in hwpjs, a stream that does not inflate is taken as it is. recodeImage(bytes, type)
+// may return smaller bytes in another format (uncompressed BMP screenshots run to tens of MB).
+async function readPictures(file, sectionRecords, binItems, inflateRaw, recodeImage) {
+  const ids = new Set();
+  for (const records of sectionRecords) {
+    for (const record of records) if (record.tag === TAG_SHAPE_PICTURE) ids.add(pictureId(record));
+  }
+  const pictures = new Map();
+  for (const id of ids) {
+    if (!id) continue;
+    const stream = binItems ? binItems[id - 1] : id;
+    if (!stream) continue;
+    const name = `BIN${stream.toString(16).toUpperCase().padStart(4, "0")}`;
+    const path = file.paths.find((entry) => new RegExp(`^BinData/${name}(\\.|$)`, "i").test(entry));
+    const raw = path && file.read(path);
+    if (!raw?.length) continue;
+    let data = raw;
+    if (!imageType(raw)) {
+      try {
+        data = await inflateRaw(raw);
+      } catch {
+        data = raw;
+      }
+    }
+    let type = imageType(data);
+    if (type === "image/bmp" && recodeImage) {
+      try {
+        const recoded = await recodeImage(data, type);
+        if (recoded && imageType(recoded)) {
+          data = recoded;
+          type = imageType(recoded);
+        }
+      } catch {
+        // The BMP is kept.
+      }
+    }
+    if (type) pictures.set(id, `data:${type};base64,${base64(data)}`);
+  }
+  return pictures;
+}
+
+export async function convertHwpBinary(bytes, inflateRaw, { recodeImage = null } = {}) {
   const file = readCompoundFile(bytes);
   const header = readHwpHeader(file);
   if (header.encrypted) throw new Error("document.hwpEncrypted");
@@ -512,21 +804,34 @@ export async function convertHwpBinary(bytes, inflateRaw) {
   };
   // A document whose styles cannot be read is still shown, without them.
   let styles = null;
+  let binItems = null;
   if (file.has("DocInfo")) {
     try {
-      styles = readDocInfo(await read("DocInfo"));
+      const docInfo = await read("DocInfo");
+      binItems = readBinItems(docInfo);
+      styles = readDocInfo(docInfo);
     } catch {
       styles = null;
     }
   }
+  const sectionBytes = [];
+  for (const path of sections) sectionBytes.push(await read(path));
+  let pictures = new Map();
+  try {
+    pictures = await readPictures(file, sectionBytes.map((records) => readRecords(records)), binItems, inflateRaw, recodeImage);
+  } catch {
+    // The text is shown without pictures.
+  }
   const parts = styles ? [`<style>${styles.css}</style>`] : [];
-  for (const path of sections) {
-    const records = await read(path);
+  numberCounters = new Map();
+  for (const records of sectionBytes) {
     docStyles = styles;
+    docPictures = pictures;
     try {
       parts.push(renderSection(records));
     } finally {
       docStyles = null;
+      docPictures = new Map();
     }
   }
   return parts.join("");

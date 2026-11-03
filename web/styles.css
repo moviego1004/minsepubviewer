@@ -1492,3 +1492,10 @@ body.doc-mode #exportMarkdownButton,
 body.doc-mode .view-mode-toggle {
   display: none;
 }
+
+/* Moving reading records between devices (settings panel). */
+.records-transfer { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line, rgba(0, 0, 0, 0.12)); }
+.records-transfer h3 { margin: 0 0 6px; font-size: 0.95rem; }
+.records-hint { margin: 0 0 8px; font-size: 0.8rem; opacity: 0.75; line-height: 1.45; }
+.records-hint:empty { display: none; }
+.records-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }

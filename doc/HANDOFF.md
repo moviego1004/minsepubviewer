@@ -11,6 +11,7 @@
 5. [ANDROID.md](ANDROID.md): Android 구조, 빌드, 설치, 데이터 정책.
 6. [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md): 기능 요구사항, 개발 방안, 완료 내역, 앞으로 할 일(전체 로드맵). 2026-10-18 전면 개편.
 7. [POLARIS_OFFICE_ANALYSIS.md](POLARIS_OFFICE_ANALYSIS.md): 폴라리스 오피스 APK의 HWP 표시·글꼴 전략 분석(2026-11-02), 로드맵 A 참고 자료. 형식별(워드·시트·슬라이드·PDF) 표시 방식은 [POLARIS_OFFICE_FORMATS.md](POLARIS_OFFICE_FORMATS.md).
+8. [PLAY_STORE_REVIEW.md](PLAY_STORE_REVIEW.md): Google Play 등록 적합성 검토와 등록 전 할 일(2026-11-03).
 
 ## 현재 상태
 
@@ -78,6 +79,8 @@ npm.cmd run android:install
 - 에뮬레이터 조작 시 주의: Git Bash에서 `/data/...` 같은 기기 경로 인자는 `MSYS_NO_PATHCONV=1`로 경로 변환을 꺼야 한다.
 - 후속(같은 날): PC 앱도 `web/hwp-wasm.js`로 HWP를 변환(네이티브 `@ohah/hwpjs`는 개발 의존성, 설치본에서 빠짐). WASM 래퍼가 변환 전에 쪽을 넘어가는 문단을 나눔(`native/hwp-wasm/src/split.rs`) → 출력이 네이티브와 일부 문서에서 달라지는 것이 정상. 비교는 `node scripts/compare-hwp-wasm.cjs <파일...>`("DIFFERENT"는 쪽 나눔 수정 때문일 수 있으니 쪽 수로 판단).
 - 엑셀·PPT는 사용자 결정으로 제외(2026-11-03).
+- 같은 날 추가: 설치본 로그 위치(프로필 폴더), 휴대폰 재배치 HWP의 그림·번호·글머리표·머리말·꼬리말·장평·문단 테두리, BMP→PNG 재압축, 검색 개선, Markdown 상대 경로 그림(PC 읽기 모드), 기록 옮기기(보기 설정). 시험 생성기 `createSampleHwp`에 `picture`, `lists`, `spanning`, `controls` 선택. Google Play 검토는 [PLAY_STORE_REVIEW.md](PLAY_STORE_REVIEW.md).
+- 이날 마지막 결과: `npm.cmd test` 179개, `test:documents`·`test:reader`·`test:pdf` 통과(`test:reader`는 한 번 DOCX 두 손가락 확대 단계에서 시간 초과 후 재실행 2번 통과 — 간헐), `android:sync`·`assembleDebug` 성공(10.7MB), `build:pc-dir` 설치본 폴더에서 HWP 열기와 프로필 폴더 로그 확인.
 - 다음 후보: 실기기 확인용 0.1.13 빌드, 조절 문자가 있는 문단의 쪽 넘김, 알려진 epub.js `bounds` 오류.
 
 ## 최신 상태와 재개 절차 (2026-11-02)

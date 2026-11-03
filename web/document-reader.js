@@ -35,6 +35,10 @@ body.is-flow .hwp-figure { margin: 0.6em 0; }
 body.is-flow img.hwp-pic { vertical-align: bottom; }
 body.is-flow .hwp-notes { margin-top: 2em; padding-top: 0.6em; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.85em; }
 body.is-flow .hwp-notes p { margin: 0.2em 0; }
+/* HWP headers and footers, shown once per section in the reflowed view. */
+body.is-flow :is(.hwp-page-header, .hwp-page-footer) { font-size: 0.85em; opacity: 0.75; }
+body.is-flow .hwp-page-header { margin-bottom: 1.2em; padding-bottom: 0.4em; border-bottom: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
+body.is-flow .hwp-page-footer { margin-top: 1.6em; padding-top: 0.4em; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
 /* Hancom circled and boxed letters that Unicode lacks (src/core/hwpSymbols.js). The black box takes
    the text colour as its fill and paints the letter in the page colour. */
 .hwp-sym { display: inline-block; box-sizing: border-box; min-width: 1.2em; margin: 0 0.04em; padding: 0 0.12em; border: 0.08em solid currentColor;

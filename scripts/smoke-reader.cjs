@@ -82,6 +82,7 @@ app.whenReady().then(async () => {
       onBackground(callback) { window.__background = callback; },
       onBackButton(callback) { window.__back = callback; },
       saveMarkdownFile: async ({content}) => ({ name: document.name, path: document.path }),
+      exportTextFile: async ({ content, fileName }) => { window.__exported = { content, fileName }; return true; },
       exit: async () => {},
     };
   `);
@@ -411,12 +412,26 @@ app.whenReady().then(async () => {
   await waitFor(`${docText}?.body.classList.contains('is-flow') && ${docText}.querySelector('p')?.textContent === 'HWP 5.0 검사 문서' && document.querySelector('#hwpPagesButton').getAttribute('aria-pressed') === 'false'`);
   await run("window.__nextOpenKind = 'hwpx'; document.querySelector('#mobileOpenFile').click()");
   await waitFor("document.body.classList.contains('doc-mode') && document.querySelector('#docFrame').contentDocument?.querySelector('p')?.textContent === 'HWPX 검사 문서' && document.querySelector('#docFrame').contentDocument.querySelector('td')?.textContent === 'HWPX 표'");
+  // Reading records out to a file and back in from another device's file.
+  await run("document.querySelector('#exportRecordsButton').click()");
+  await waitFor("window.__exported?.fileName?.startsWith('MinsReader-records-') && JSON.parse(window.__exported.content).library.books.length > 0");
+  await run(`(() => {
+    const data = JSON.parse(window.__exported.content);
+    data.library.books.push({ bookId: 'other-device-book', title: '다른 기기 책', filePath: '/storage/x.epub', lastLocation: 'epubcfi(/6/4)', highlights: [{ id: 'far', range: 'r', quote: 'q' }] });
+    window.confirm = () => true;
+    const input = document.querySelector('#importRecordsInput');
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([JSON.stringify(data)], 'records.json', { type: 'application/json' }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change'));
+  })()`);
+  await waitFor("/새 책 1권, 갱신 0권, 주석 1개/.test(document.querySelector('#recordsStatus').textContent) && JSON.parse(localStorage.getItem('minsepubviewer.library')).books.some((book) => book.bookId === 'other-device-book' && book.filePath === '')");
   await run("const select = document.querySelector('#languageSelect'); select.value = 'en'; select.dispatchEvent(new Event('change'))");
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#mobileOpenFile').textContent === 'Open file' && document.querySelector('#bookmarksTab').textContent === 'Bookmarks' && document.querySelector('#mobilePrevButton').textContent === 'Prev'");
   await Promise.all([new Promise(resolve=>win.webContents.once('did-finish-load',resolve)),win.reload()]);
   await waitFor("document.documentElement.lang === 'en' && document.querySelector('#saveMarkdownButton')?.textContent === 'Save' && document.querySelector('#mobileRecent').textContent === 'Continue'");
   assert.deepEqual(errors, []);
-  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, scroll/swipe paging in EPUB (continuous), PDF (page and continuous) and DOCX, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 (reflowed, original pages fitted to the width, fallback) and HWPX on the phone, and Korean/English UI switch (simulated native bridge).");
+  console.log("PASS: EPUB/MD position and font restore, live pinch zoom (EPUB, MD, PDF, DOCX), fullscreen with double tap (single middle tap kept for selection), PDF tap scrolling when zoomed, scroll/swipe paging in EPUB (continuous), PDF (page and continuous) and DOCX, documents popup icons, full reader height, recent/open documents menus, page gestures, bookmarks, draft recovery, PDF by URL with tap paging and resume, DOCX tap paging, HWP 5.0 (reflowed, original pages fitted to the width, fallback) and HWPX on the phone, reading records export/import, and Korean/English UI switch (simulated native bridge).");
   win.destroy();
 }).catch((error) => {
   console.error(error);

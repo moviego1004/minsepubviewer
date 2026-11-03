@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import zlib from "node:zlib";
 import { createRequire } from "node:module";
 import CFB from "cfb";
-import { convertHwpBinary, isOleBytes, readCompoundFile, readRecords } from "../../src/core/hwpBinary.js";
+import { convertHwpBinary, formatNumber, imageType, isOleBytes, readCompoundFile, readRecords } from "../../src/core/hwpBinary.js";
 
 const require = createRequire(import.meta.url);
 const { createSampleHwp } = require("../../scripts/sample-documents.cjs");
@@ -85,4 +85,52 @@ test("sections ending with Hangul's CRC and size trailer are inflated by pako", 
   assert.equal(trailer.readUInt32LE(4), records.length, "the trailer carries the uncompressed size");
   const html = await convertHwpBinary(bytes, async (raw) => pako.inflateRaw(raw));
   assert.ok(html.includes("HWP 문단 3 — "));
+});
+
+test("pictures become images from their BinData streams, between paragraphs at their width", async () => {
+  for (const styled of [false, true]) {
+    const html = await convertHwpBinary(new Uint8Array(createSampleHwp({ paragraphCount: 1, picture: true, styled })), inflateRaw);
+    assert.match(html, /<\/p><div class="hwp-figure"><img class="hwp-pic" src="data:image\/png;base64,iVBORw0KGgo[^"]*" alt="" style="width:14\.4rem"><\/div>/, `styled: ${styled}`);
+  }
+});
+
+test("only formats the browser draws are kept as pictures", () => {
+  assert.equal(imageType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d])), "image/png");
+  assert.equal(imageType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
+  assert.equal(imageType(new Uint8Array([0x42, 0x4d, 0, 0])), "image/bmp");
+  assert.equal(imageType(new TextEncoder().encode("RIFF\0\0\0\0WEBPVP8 ")), "image/webp");
+  // WMF placeable header
+  assert.equal(imageType(new Uint8Array([0xd7, 0xcd, 0xc6, 0x9a])), null);
+});
+
+test("numbered and bullet paragraphs get their markers, counting per level", async () => {
+  const html = await convertHwpBinary(new Uint8Array(createSampleHwp({ paragraphCount: 0, styled: true, controls: false, lists: true })), inflateRaw);
+  const markers = [...html.matchAll(/<span class="hwp-marker">([^<]*)<\/span>([^<]*)/g)].map(([, marker, text]) => `${marker}${text}`);
+  assert.deepEqual(markers, ["1. 첫 항목", "(1) 세부 항목", "(2) 둘째 세부", "2. 둘째 항목", "• 글머리 항목"]);
+});
+
+test("a header is shown once before the section, without a blank line where it was", async () => {
+  const html = await convertHwpBinary(new Uint8Array(createSampleHwp({ paragraphCount: 0, styled: true, controls: false, lists: true })), inflateRaw);
+  assert.match(html, /<section class="hwp-styled"><header class="hwp-page-header"><p class="hp0">머리말 글<\/p><\/header>/);
+  assert.match(html, /상자 둘째 줄<\/p><\/section>$/);
+});
+
+test("paragraph borders box the paragraph, joined paragraphs share one box", async () => {
+  const html = await convertHwpBinary(new Uint8Array(createSampleHwp({ paragraphCount: 0, styled: true, controls: false, lists: true })), inflateRaw);
+  assert.match(html, /\.hwp-styled \.hp2\{[^}]*border-left:1px solid #000000;[^}]*padding-top:0\.5rem;padding-bottom:0\.5rem\}/);
+  assert.match(html, /\.hwp-styled \.hp2\+\.hp2\{border-top:none;margin-top:0;padding-top:0\}/);
+  assert.match(html, /\.hwp-styled \.hp2:has\(\+\.hp2\)\{border-bottom:none;margin-bottom:0;padding-bottom:0\}/);
+});
+
+test("number styles follow the HWP numbering formats", () => {
+  assert.deepEqual([1, 2, 3, 4].map((n) => formatNumber(n, 0)), ["1", "2", "3", "4"]);
+  assert.equal(formatNumber(3, 1), "③");
+  assert.equal(formatNumber(4, 2), "IV");
+  assert.equal(formatNumber(9, 3), "ix");
+  assert.equal(formatNumber(2, 4), "B");
+  assert.equal(formatNumber(3, 8), "다");
+  assert.equal(formatNumber(15, 8), "가");
+  assert.equal(formatNumber(2, 10), "㉯");
+  assert.equal(formatNumber(4, 11), "ㄹ");
+  assert.equal(formatNumber(3, 13), "三");
 });

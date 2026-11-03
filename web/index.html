@@ -275,6 +275,17 @@
 
               <div id="annotationList" class="annotation-list empty"></div>
             </section>
+
+            <section class="records-transfer">
+              <h3 data-i18n="records.heading"></h3>
+              <p class="records-hint" data-i18n="records.hint"></p>
+              <div class="records-actions">
+                <button id="exportRecordsButton" class="secondary-button" type="button" data-i18n="records.export"></button>
+                <button id="importRecordsButton" class="secondary-button" type="button" data-i18n="records.import"></button>
+              </div>
+              <input id="importRecordsInput" type="file" accept=".json,application/json" hidden>
+              <p id="recordsStatus" class="records-hint" role="status"></p>
+            </section>
           </aside>
         </section>
         </main>

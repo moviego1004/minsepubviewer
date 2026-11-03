@@ -4,7 +4,7 @@ const fsSync = require("node:fs");
 const { appendFile, mkdir, readFile, writeFile } = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
+const { fileURLToPath, pathToFileURL } = require("node:url");
 const { listenWithPortFallback, normalizePort } = require("./local-server.cjs");
 const { findSupportedFilePath, getSupportedFileKind } = require("./open-file.cjs");
 
@@ -73,12 +73,27 @@ async function readRequestBody(request) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+// Log folder: logs/ in the project when run from source; in the profile folder when installed
+// (the app folder is inside the read-only app.asar). The file is rotated at 2 MB, one old copy kept.
+const LOG_ROTATE_BYTES = 2 * 1024 * 1024;
+
+function logDirectory() {
+  return app.isPackaged ? path.join(app.getPath("userData"), "logs") : path.join(root, "logs");
+}
+
 async function writeClientLog(request, response) {
   const body = await readRequestBody(request);
   const line = `${new Date().toISOString()} ${body}\n`;
 
-  await mkdir(path.join(root, "logs"), { recursive: true });
-  await appendFile(path.join(root, "logs", "app.log"), line, "utf8");
+  const folder = logDirectory();
+  const file = path.join(folder, "app.log");
+  await mkdir(folder, { recursive: true });
+  try {
+    if (fsSync.statSync(file).size > LOG_ROTATE_BYTES) fsSync.renameSync(file, `${file}.1`);
+  } catch {
+    // No log yet.
+  }
+  await appendFile(file, line, "utf8");
 
   response.writeHead(204, {
     "Cache-Control": "no-store"
@@ -650,6 +665,37 @@ ipcMain.handle("window:open-file", async (_event, filePath) => {
   rememberRecentFile(filePath);
   await createReaderWindow(filePath);
   return { ok: true };
+});
+
+// Pictures a Markdown file refers to by a relative path (or a file: URL) are read next to that file.
+// Only image files are served, for a Markdown or text file the user opened.
+const MARKDOWN_IMAGE_TYPES = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+  ".bmp": "image/bmp", ".svg": "image/svg+xml", ".avif": "image/avif", ".ico": "image/x-icon"
+};
+const markdownImageMaxBytes = 32 * 1024 * 1024;
+
+ipcMain.handle("markdown:read-image", async (_event, payload = {}) => {
+  const markdownPath = typeof payload.markdownPath === "string" ? payload.markdownPath : "";
+  const source = typeof payload.src === "string" ? payload.src.trim() : "";
+  if (!path.isAbsolute(markdownPath) || !/\.(md|markdown|txt)$/i.test(markdownPath) || !source) return null;
+  let filePath;
+  try {
+    filePath = /^file:/i.test(source)
+      ? fileURLToPath(source)
+      : path.resolve(path.dirname(markdownPath), decodeURIComponent(source.split(/[?#]/)[0]));
+  } catch {
+    return null;
+  }
+  const type = MARKDOWN_IMAGE_TYPES[path.extname(filePath).toLowerCase()];
+  if (!type) return null;
+  try {
+    const info = await fsSync.promises.stat(filePath);
+    if (!info.isFile() || info.size > markdownImageMaxBytes) return null;
+    return { type, bytes: await readFile(filePath) };
+  } catch {
+    return null;
+  }
 });
 
 ipcMain.handle("markdown:save", async (_event, payload = {}) => {
