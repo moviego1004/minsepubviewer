@@ -398,3 +398,23 @@
 - 테스트: `test/core/openSourceNotices.test.js`(설치 버전 일치, 전문 존재, `dependencies` 누락 없음, 앱 버전 = package.json), `scripts/smoke-reader.cjs`에 ☰ 메뉴 → 앱 정보 창 열기·내용·닫기 단계와 `build/about-smoke.png`.
 - 검증(이번 실행): `npm.cmd test` 185개 통과, `node --check web/app.js`·`web/about.js` 통과, `npm.cmd run test:reader` PASS(스크린샷으로 휴대폰 폭 표시와 라이선스 펼침 확인), `npm.cmd run android:sync` 성공(`dist/mobile/web/mobile.js`에 고지 데이터 포함 확인).
 - 미검증: 실기기·에뮬레이터, PC 설치본(Electron 데스크톱 화면에서 직접 열어 보지는 않음), AAB 재빌드 안 함(다음 빌드 0.1.19에 포함).
+
+## 휴대폰 보기 설정 닫기·첫 화면 버전·☰ 메뉴 UI (2026-11-10)
+
+- 사용자 요청: 보기 설정 창에 닫는 버튼이 없음, 문서 없는 첫 화면에 버전 번호 표시, ☰ 메뉴가 전부 텍스트라 UI 개선, 추가 기능 제안(스토어 버전업 준비).
+- 변경: `web/index.html`(`.settings-header`·`#settingsCloseButton`·`#settingsScrim`·`#welcomeVersion`), `web/app.js`(닫기·바깥 탭 연결, 버전 표시), `web/styles.css`, `web/mobile.css`(아래에서 올라오는 시트, 묶음·스위치·선택 버튼, 스크롤해도 남는 제목 줄), `src/platform/mobile-ui.js`(`menuRow`·`switchRow`·`segment`·`section`, 시트 바깥 탭으로 닫기), `src/locales/{ko,en}.js`(`mobile.section*`, 토글 문구에서 `{state}` 제거, 한국어 `새 Markdown 문서`), `scripts/smoke-reader.cjs`.
+- 결정: 닫기 X와 바깥 탭은 Android에서만(PC는 도구 막대 토글 유지). 바깥 탭 층은 투명하게 두어 글꼴을 바꾸는 동안 본문이 그대로 보이게 함. 안드로이드 뒤로 가기로 패널을 닫는 동작은 이미 있었음. 전체 화면 진행 표시 스위치는 메뉴를 닫지 않고 그 자리에서 바뀜. 버전은 앱을 켰을 때 문서가 없는 첫 화면에만 표시(마지막 문서를 닫은 뒤의 안내 화면에는 없음).
+- 시험 참고: 숨은 창에서는 CSS 애니메이션이 진행되지 않아 시험이 `document.getAnimations()`를 직접 끝낸다. `body`에 `theme-dark`만 붙이면 곧 render가 되돌리므로 테마는 `#theme` change 이벤트로 바꾼다.
+- 검증(이번 실행): `npm.cmd test` 185개 통과, `node --check web/app.js`·`src/platform/mobile-ui.js` 통과, `npm.cmd run test:reader` PASS(X 버튼·바깥 탭 실제 터치, 메뉴 묶음·스위치·시트 위치, 어두운 테마 계산 색), `build/mobile-{welcome,settings,menu,menu-dark}-smoke.png` 눈으로 확인, `npm.cmd run android:sync` 성공.
+- 미검증: 실기기·에뮬레이터(Electron 412×860 휴대폰 모의 화면만 확인), AAB 빌드 안 함, 커밋 안 함.
+
+## 앱 이름 변경: 모두리더 (2026-11-10)
+
+- 사용자 요청: 사용자가 잘 찾도록 이름 변경 → 후보 비교 뒤 "모두리더로 바꿔줘". 영어 표기 `Modu Reader`는 영어 화면·기기용으로 작업 중 정함.
+- 변경: `src/locales/{ko,en}.js`, `web/index.html`, `web/about.js`·`web/app.js`·`electron/main.cjs`(고정 문자열 → `t("app.name")`), `android/.../values/strings.xml`(기본 영어)과 새 `values-ko/strings.xml`, `capacitor.config.json`, `doc/store/*`(Play 제목 `모두리더 - PDF·EPUB·HWP 문서 뷰어`, 방침, 고지), 그래픽 이미지 `feature-*.png`, `scripts/smoke-reader.cjs`.
+- 결정: PC `productName`·`installer.nsi`·exe 이름은 프로필 폴더·업그레이드·`release.cjs` 경로 때문에 유지(앱 안 제목은 새 이름). 빌드 파일 `MinsReader_ver*`, 동기화·기록 파일 이름, 업로드 키 CN도 유지. 과거 기록 문서의 옛 이름은 그대로 둠.
+- 그래픽 이미지: `render.cjs`는 아이콘까지 다시 쓰므로 이번에는 feature만 임시 스크립트(같은 방식)로 렌더링. 이 PC에는 Pretendard가 없어 `Noto Sans KR` 또는 시스템 대체 글꼴로 나왔고 결과를 눈으로 확인함.
+- 검증(이번 실행): `npm.cmd test` 185개 통과, `test:reader` PASS(첫 화면·문서 제목 `모두리더`), `android:sync` 성공, `gradlew assembleDebug` 성공, `aapt dump badging`으로 `application-label-ko:'모두리더'`, 기본 `Modu Reader` 확인.
+- 미검증: 실기기 홈 화면 표시, AAB 빌드, PC 설치본. 상표·동일 이름 앱은 웹 검색만 했고 Play 스토어·키프리스 직접 조회 안 함.
+- 에뮬레이터(같은 날): `MinsExercise_API_35`(API 35, 이 PC에 Pixel_7 없음)를 `-no-snapshot-save`로 띄우고 `adb install -r`로 디버그 APK 설치·실행 성공, ☰ 메뉴와 첫 화면 버전 표시를 캡처로 확인(영어 시스템 언어). 나머지 조작은 사용자가 확인 중.
+- 배포 빌드(같은 날, 사용자 요청 "빌드해주고 커밋, 푸시해줘"): `npm.cmd run release:aab` 성공 → `build/MinsReader_ver0.1.19.aab`(8.6MB, versionCode 20). AAB 안 `base/resources.pb`에 `모두리더`·`Modu Reader` 있고 `Mins Reader` 없음, `base/assets/public/web/mobile.js`에 새 메뉴 코드와 0.1.19 포함, `META-INF/UPLOAD.RSA` 서명 확인. 빌드 뒤 `npm.cmd test` 185개 통과. Play Console 업로드와 실기기 확인은 안 함.

@@ -1,8 +1,8 @@
-# Mins Reader 개인정보처리방침
+# 모두리더 개인정보처리방침
 
 시행일: 2026년 11월 3일
 
-Mins Reader(이하 "앱", 패키지 `com.minsapps.reader`)는 이용자의 개인정보를 수집하지 않습니다. 이 방침은 앱이 기기 안에서 어떤 정보를 다루는지 설명합니다.
+모두리더(이하 "앱", 패키지 `com.minsapps.reader`)는 이용자의 개인정보를 수집하지 않습니다. 이 방침은 앱이 기기 안에서 어떤 정보를 다루는지 설명합니다.
 
 ## 1. 수집하는 개인정보
 
@@ -50,11 +50,11 @@ Android 기기에서 Google 백업이 켜져 있으면 운영체제가 앱 데�
 
 ---
 
-# Mins Reader Privacy Policy
+# Modu Reader Privacy Policy
 
 Effective date: November 3, 2026
 
-Mins Reader (package `com.minsapps.reader`) does not collect any personal data.
+Modu Reader (package `com.minsapps.reader`) does not collect any personal data.
 
 - **No collection.** The app has no accounts, ads, analytics, or crash reporting. It sends no data to the developer or to any server.
 - **On-device data only.** Documents you open, copies kept inside the app, reading positions, bookmarks, highlights, notes, and settings are stored only on your device and are deleted when you uninstall the app.

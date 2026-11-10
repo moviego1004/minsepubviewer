@@ -180,6 +180,12 @@ app.whenReady().then(async () => {
   await waitFor("document.querySelectorAll('.document-tab').length === 0");
   await Promise.all([new Promise((resolve) => win.webContents.once("did-finish-load", resolve)), win.reload()]);
   await waitFor("!!window.__back");
+  // With no document open the welcome screen shows the app version.
+  assert.match(await run("document.querySelector('#welcomeVersion').textContent"), /^v\d+\.\d+\.\d+$/);
+  assert.equal(await run("document.title + '/' + document.querySelector('#reader h1').textContent"), "모두리더/모두리더");
+  await run("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  await fs.mkdir(path.join(root, "build"), { recursive: true });
+  await fs.writeFile(path.join(root, "build/mobile-welcome-smoke.png"), (await win.webContents.capturePage()).toPNG());
   await run("document.querySelector('#recentFilesButton').click()");
   await waitFor("document.querySelectorAll('.recent-file-item').length === 2");
   await run("document.querySelectorAll('.recent-file-item')[0].click()");
@@ -256,6 +262,45 @@ app.whenReady().then(async () => {
   await waitFor("!!document.querySelector('#reader iframe')?.contentDocument?.querySelector('h1')");
   await waitFor(`document.querySelector('#mobilePageLabel').textContent === ${JSON.stringify(restoredPageLabel)} && !document.querySelector('#mobilePrevButton').disabled`);
   assert.equal(await run(epubLocation), restoredLocation, "Recent EPUB reopens at its last reading position");
+  // Reading settings panel: X button stays reachable, a tap beside the panel closes it.
+  const settingsOpen = "!document.body.classList.contains('settings-collapsed')";
+  const settingsClose = "(()=>{const r=document.querySelector('#settingsCloseButton').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,visible:r.width>=40&&r.right<=innerWidth};})()";
+  await run("document.querySelector('#rightPanelToggle').click()");
+  assert.equal(await run(settingsOpen), true);
+  await run("document.querySelector('.settings').scrollTop = 400; new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  let closeButton = await run(settingsClose);
+  assert.ok(closeButton.visible, "Settings close button is visible");
+  assert.equal(await run(`document.elementFromPoint(${closeButton.x}, ${closeButton.y}).closest('#settingsCloseButton') !== null`), true, "Close button stays on top after scrolling the panel");
+  await fs.writeFile(path.join(root, "build/mobile-settings-smoke.png"), (await win.webContents.capturePage()).toPNG());
+  await touch(closeButton);
+  await waitFor("document.body.classList.contains('settings-collapsed')");
+  await run("document.querySelector('#rightPanelToggle').click()");
+  assert.equal(await run(settingsOpen), true);
+  await touch({ x: 12, y: middle.y });
+  await waitFor("document.body.classList.contains('settings-collapsed')");
+  // ☰ menu: icon rows in groups, a switch changes in place, the current view mode is marked.
+  // A hidden window does not advance CSS animations, so the sheet's opening animation is finished by hand.
+  await run("document.querySelector('#mobileMenu').click(); document.getAnimations().forEach(animation => animation.finish()); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  assert.equal(await run("(()=>{const r=document.querySelector('.mobile-menu').getBoundingClientRect();return Math.abs(r.bottom-innerHeight)<1;})()"), true, "Menu sheet sits on the bottom edge");
+  assert.deepEqual(await run("[...document.querySelectorAll('.mobile-menu-section h3')].map(el => el.textContent)"), ["보기", "문서", "앱"]);
+  assert.equal(await run("[...document.querySelectorAll('.mobile-menu-row')].every(el => el.querySelector('.mobile-menu-icon svg') && !el.textContent.includes(':'))"), true);
+  assert.equal(await run("document.querySelectorAll('.mobile-menu .mobile-segment button[aria-pressed=\"true\"]').length"), 1);
+  const progressSwitch = "[...document.querySelectorAll('.mobile-menu [role=switch]')].find(el => el.textContent === '전체 화면 진행 표시')";
+  const progressBefore = await run(`${progressSwitch}.getAttribute('aria-checked')`);
+  await fs.writeFile(path.join(root, "build/mobile-menu-smoke.png"), (await win.webContents.capturePage()).toPNG());
+  const setTheme = value => run(`(()=>{const select=document.querySelector('#theme');select.value='${value}';select.dispatchEvent(new Event('change'));return new Promise(resolve=>setTimeout(resolve,400));})()`);
+  const themeBefore = await run("document.querySelector('#theme').value");
+  await setTheme("dark");
+  assert.equal(await run("getComputedStyle(document.querySelector('.mobile-menu')).backgroundColor"), "rgb(31, 35, 39)", "Menu sheet follows the dark theme");
+  await fs.writeFile(path.join(root, "build/mobile-menu-dark-smoke.png"), (await win.webContents.capturePage()).toPNG());
+  await setTheme(themeBefore);
+  await run(`${progressSwitch}.click()`);
+  assert.equal(await run("document.querySelector('.mobile-menu').open"), true, "A switch leaves the menu open");
+  assert.notEqual(await run(`${progressSwitch}.getAttribute('aria-checked')`), progressBefore);
+  assert.equal(await run("localStorage.getItem('minsepubviewer.fullscreen-progress')"), progressBefore === "true" ? "false" : "true");
+  await run(`${progressSwitch}.click()`);
+  await touch({ x: 200, y: 20 });
+  await waitFor("!document.querySelector('.mobile-menu').open");
   // Continuous mode: plain scrolling moves the reading position.
   await run("document.querySelector('#continuousModeButton').click()");
   const epubScroller = "document.querySelector('#reader .epub-container')";

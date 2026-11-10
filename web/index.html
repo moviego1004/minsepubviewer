@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Mins Reader</title>
+    <title>모두리더</title>
     <link rel="stylesheet" href="/web/vendor/toastui-editor-bundle.css">
     <link rel="stylesheet" href="/web/styles.css">
   </head>
@@ -163,6 +163,7 @@
           <article id="reader" class="reader" tabindex="0">
             <div class="sample-image" aria-hidden="true"></div>
             <h1 data-i18n="app.name"></h1>
+            <p id="welcomeVersion" class="welcome-version"></p>
             <p data-i18n="reader.welcome1"></p>
             <p data-i18n="reader.welcome2"></p>
             <blockquote data-i18n="reader.welcome3"></blockquote>
@@ -178,8 +179,14 @@
             </div>
           </section>
 
+          <div id="settingsScrim" class="settings-scrim" aria-hidden="true"></div>
           <aside class="settings">
-            <h2 data-i18n="settings.heading"></h2>
+            <header class="settings-header">
+              <h2 data-i18n="settings.heading"></h2>
+              <button id="settingsCloseButton" class="settings-close" type="button" data-i18n-title="common.close" data-i18n-aria-label="common.close">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </header>
 
             <label>
               <span data-i18n="settings.language"></span>

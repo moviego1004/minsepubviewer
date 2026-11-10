@@ -489,7 +489,7 @@ async function createWindow({ filePaths = [] } = {}) {
     minWidth: mainWindowMinimum.width,
     minHeight: mainWindowMinimum.height,
     show: false,
-    title: "Mins Reader",
+    title: t("app.name"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

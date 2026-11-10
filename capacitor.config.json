@@ -1,6 +1,6 @@
 {
   "appId": "com.minsapps.reader",
-  "appName": "Mins Reader",
+  "appName": "모두리더",
   "webDir": "dist/mobile",
   "android": {
     "allowMixedContent": false

@@ -1,6 +1,7 @@
 import { platform, storage } from "../src/platform/index.js";
 import { installReaderTouch, createMobileNavigation } from "../src/platform/touch-reader.js";
 import { installMobileUI } from "../src/platform/mobile-ui.js";
+import { APP_VERSION } from "../src/core/appVersion.js";
 import { MOBILE_EPUB_MAX_BYTES } from "../src/platform/mobile-files.js";
 import {
   createAnnotationExport,
@@ -326,7 +327,7 @@ const state = {
   library: loadLibrary(),
   book: createBookRecord({
     bookId: "sample-book",
-    title: "Mins Reader",
+    title: t("app.name"),
     settings: DEFAULT_READING_SETTINGS
   }),
   epubBook: null,
@@ -392,6 +393,9 @@ const elements = {
   contentRow: document.querySelector("#contentRow"),
   leftPanelToggle: document.querySelector("#leftPanelToggle"),
   rightPanelToggle: document.querySelector("#rightPanelToggle"),
+  settingsCloseButton: document.querySelector("#settingsCloseButton"),
+  settingsScrim: document.querySelector("#settingsScrim"),
+  welcomeVersion: document.querySelector("#welcomeVersion"),
   selectionToolbar: document.querySelector("#selectionToolbar"),
   yellowSelectionButton: document.querySelector("#yellowSelectionButton"),
   orangeSelectionButton: document.querySelector("#orangeSelectionButton"),
@@ -4704,6 +4708,13 @@ elements.leftPanelToggle.addEventListener("click", () => {
 elements.rightPanelToggle.addEventListener("click", () => {
   togglePanel("right");
 });
+elements.settingsCloseButton.addEventListener("click", () => {
+  togglePanel("right");
+});
+elements.settingsScrim.addEventListener("click", () => {
+  togglePanel("right");
+});
+elements.welcomeVersion.textContent = `v${APP_VERSION}`;
 
 elements.prevButton.addEventListener("click", () => {
   goPrevious();

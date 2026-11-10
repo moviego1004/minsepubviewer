@@ -1071,6 +1071,25 @@ body.settings-collapsed .settings {
   overflow: auto;
 }
 
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* The close control and the tap-outside layer are enabled in mobile.css. */
+.settings-close,
+.settings-scrim {
+  display: none;
+}
+
+.welcome-version {
+  margin-top: -8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .settings label {
   display: grid;
   gap: 8px;

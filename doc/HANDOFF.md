@@ -1,6 +1,6 @@
 # 다른 PC에서 이어서 작업하기
 
-최종 갱신: 2026-11-03 (한국 시간)
+최종 갱신: 2026-11-10 (한국 시간)
 
 ## 먼저 읽을 문서
 
@@ -17,7 +17,7 @@
 
 - 저장소: https://github.com/moviego1004/minsepubviewer.git
 - 이번 인수인계 대상 브랜치: `master`. 정확한 커밋은 `git log -5 --oneline`으로 확인한다.
-- 앱 이름은 **Mins Reader**(이전 Mins EPUB Viewer). Android 패키지(applicationId·namespace·Capacitor `appId`·Java 패키지)는 Play 등록을 위해 2026-11-03 **`com.minsapps.reader`**로 바꿨다(사용자 요청). 이전 `com.mins.epubviewer`로 설치한 APK는 다른 앱이 되어 업데이트되지 않고 기록도 옮겨지지 않는다(필요하면 기록 내보내기/가져오기). PC는 설치 프로그램 제거 레지스트리 키와 기존 설치본 업그레이드 때문에 `installer.nsi`·`package.json` `build.appId`의 `com.mins.epubviewer`와 사용자 데이터 폴더를 그대로 둔다.
+- 앱 이름은 **모두리더**(영어 Modu Reader, 2026-11-10 사용자 결정. 이전 Mins Reader, Mins EPUB Viewer). PC 설치 ID·`productName`·설치 프로그램·exe, 빌드 파일 `MinsReader_ver*`, 기록 파일 `MinsReader-*.json`은 기존 설치와 스크립트 때문에 옛 이름을 유지한다. Android 패키지(applicationId·namespace·Capacitor `appId`·Java 패키지)는 Play 등록을 위해 2026-11-03 **`com.minsapps.reader`**로 바꿨다(사용자 요청). 이전 `com.mins.epubviewer`로 설치한 APK는 다른 앱이 되어 업데이트되지 않고 기록도 옮겨지지 않는다(필요하면 기록 내보내기/가져오기). PC는 설치 프로그램 제거 레지스트리 키와 기존 설치본 업그레이드 때문에 `installer.nsi`·`package.json` `build.appId`의 `com.mins.epubviewer`와 사용자 데이터 폴더를 그대로 둔다.
 - 앱 정보 창(2026-11-03, `web/about.js`): 보기 설정 맨 아래 "앱 정보 및 오픈소스 라이선스" 버튼, 휴대폰은 ☰ 메뉴. 버전(`src/core/appVersion.js`, `bump-version.cjs`가 빌드마다 갱신), 개인정보 안내, HWP 출처·상표 문구, 라이브러리·글꼴 라이선스 전문(`src/core/openSourceNotices.js`, `npm.cmd run notices`로 생성, 창을 열 때 동적 import). 라이브러리를 추가·업데이트하면 `scripts/build-notices.cjs` 목록과 함께 다시 생성(테스트가 버전 불일치·`dependencies` 누락을 잡음).
 - Play 등록 문서(2026-11-03): `doc/store/play-listing.md`(앱 이름·패키지·설명·앱 콘텐츠·데이터 보안 답변), `privacy-policy.md`(한/영), `open-source-notices.md`(라이브러리·글꼴 라이선스, HWP 출처 문구).
 - EPUB, Markdown에 더해 **PDF**(PDF.js 6.3.289)를 읽는다. 툴바의 **파일 열기** 하나로 세 형식을 연다. 메뉴·알림은 **한국어/영어** 지원(보기 설정 → 언어).
@@ -74,6 +74,12 @@ npm.cmd run android:install
 - 기본 디버그 서명키는 PC마다 달라질 수 있다. 다른 PC의 APK로 기존 설치를 업데이트할 때 서명 불일치가 생길 수 있다. 기존 앱을 무조건 삭제하지 말고 중요한 문서를 먼저 내보내고 서명 정책을 확인한다. 키를 Git에 넣지 않는다.
 - 앱 내부 책/주석/읽기 기록과 Codex 채팅은 이 저장소 문서 동기화와 별개다. 앱 데이터의 PC 간 자동 동기화는 구현되지 않았다.
 - 테스트 화면 캡처는 과거 UI 참고 자료이며 현재 버전의 실기기 검증 증거로 간주하지 않는다.
+
+## 최신 상태 (2026-11-10)
+
+- 휴대폰 UI: 보기 설정 패널 X 버튼·바깥 탭 닫기, 문서 없는 첫 화면 버전 표시(`#welcomeVersion`), ☰ 메뉴를 아이콘·묶음·스위치·선택 버튼의 하단 시트로 교체(`src/platform/mobile-ui.js`, `web/mobile.css`).
+- 앱 이름 `모두리더`(영어 `Modu Reader`). 현재 0.1.19(versionCode 20): `build/MinsReader_ver0.1.19.aab`(8.6MB, 업로드 키 서명, `npm.cmd run release:aab`). Play Console 업로드 전.
+- `npm.cmd test` 185개, `test:reader`, `android:sync` 통과. API 35 에뮬레이터에서 설치·실행과 메뉴 표시 확인, 실기기는 아직. 세부는 [WORK_LOG.md](WORK_LOG.md) 끝, 남은 일은 [NEXT_TASKS.md](NEXT_TASKS.md) 첫 항목.
 
 ## 최신 상태 (2026-11-03)
 

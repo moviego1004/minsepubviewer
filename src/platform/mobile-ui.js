@@ -1,6 +1,19 @@
 import { errorText, setAttributeText, setText, t } from "../../web/i18n.js";
 
 const CLOSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const ICON_PATHS = {
+  toc: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
+  sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5a2 2 0 1 0 0 4a2 2 0 1 0 0-4M9 15a2 2 0 1 0 0 4a2 2 0 1 0 0-4',
+  gauge: 'M5.6 18.4a9 9 0 1 1 12.8 0M12 13l4-4',
+  reflow: 'M4 6h16M4 12h12a3 3 0 0 1 0 6h-5M13 15l-3 3l3 3M4 18h3',
+  pages: 'M8 3h9l3 3v12H8zM4 7v14h11',
+  newDocument: 'M6 3h8l4 4v14H6zM14 3v4h4M12 11v6M9 14h6',
+  save: 'M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',
+  export: 'M12 15V4M8 8l4-4l4 4M5 14v6h14v-6',
+  info: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 11v6M12 7.5h.01',
+  chevron: 'M9 6l6 6l-6 6'
+};
+const svgIcon = name => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICON_PATHS[name]}"/></svg>`;
 const KIND_LABELS = { epub: 'EPUB', pdf: 'PDF', markdown: 'MD', document: 'DOC' };
 
 function documentKindLabel(tab) {
@@ -18,6 +31,12 @@ export function installMobileUI({ storage, platform, resize, openFile, tabs, act
   const dialog = document.createElement('dialog');
   dialog.className = 'mobile-menu';
   document.body.append(dialog);
+  // The dialog has padding, so a click targeting it may still be inside the sheet.
+  dialog.addEventListener('click', event => {
+    if (event.target !== dialog) return;
+    const box = dialog.getBoundingClientRect();
+    if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+  });
   const progress = document.createElement('output');
   progress.className = 'mobile-fullscreen-progress';
   document.body.append(progress);
@@ -53,6 +72,49 @@ export function installMobileUI({ storage, platform, resize, openFile, tabs, act
     head.append(title, iconButton('mobile.closePopup', 'mobile-menu-close', () => dialog.close()));
     return head;
   };
+  const menuRow = (iconName, labelKey, action, { chevron = false } = {}) => {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'mobile-menu-row';
+    el.innerHTML = `<span class="mobile-menu-icon">${svgIcon(iconName)}</span>`;
+    const label = document.createElement('span');
+    label.className = 'mobile-menu-label';
+    setText(label, labelKey);
+    el.append(label);
+    if (chevron) el.insertAdjacentHTML('beforeend', `<span class="mobile-menu-chevron">${svgIcon('chevron')}</span>`);
+    el.addEventListener('click', () => Promise.resolve(action(el)).catch(error => window.alert(errorText(error))));
+    return el;
+  };
+  const switchRow = (iconName, labelKey, checked, action) => {
+    const el = menuRow(iconName, labelKey, action);
+    el.setAttribute('role', 'switch');
+    el.setAttribute('aria-checked', String(checked));
+    el.insertAdjacentHTML('beforeend', '<span class="mobile-switch" aria-hidden="true"></span>');
+    return el;
+  };
+  // Two exclusive choices backed by the toolbar buttons with the given ids.
+  const segment = options => {
+    const group = document.createElement('div');
+    group.className = 'mobile-segment';
+    group.setAttribute('role', 'group');
+    for (const [labelKey, id] of options) {
+      const el = button(labelKey, () => click(id));
+      el.setAttribute('aria-pressed', String(document.getElementById(id).classList.contains('is-active')));
+      group.append(el);
+    }
+    return group;
+  };
+  const section = (titleKey, items) => {
+    const wrap = document.createElement('section');
+    wrap.className = 'mobile-menu-section';
+    const title = document.createElement('h3');
+    setText(title, titleKey);
+    const group = document.createElement('div');
+    group.className = 'mobile-menu-group';
+    group.append(...items);
+    wrap.append(title, group);
+    return wrap;
+  };
   const hint = document.createElement('output');
   hint.className = 'mobile-hint';
   hint.hidden = true;
@@ -78,26 +140,37 @@ export function installMobileUI({ storage, platform, resize, openFile, tabs, act
     requestAnimationFrame(resize);
   }
   function menu() {
-    dialog.replaceChildren(header('mobile.menu'));
-    dialog.append(button({ text: t('mobile.progressToggle', { state: t(document.body.classList.contains('show-reading-progress') ? 'common.on' : 'common.off') }) }, () => {
-      const enabled = document.body.classList.toggle('show-reading-progress');
-      storage.setItem(progressKey, String(enabled)); dialog.close(); menu();
-    }));
-    const reflow = document.getElementById('pdfReflowButton');
-    if (reflow && !reflow.hidden) {
-      const state = t(reflow.getAttribute('aria-pressed') === 'true' ? 'common.on' : 'common.off');
-      dialog.append(button({ text: t('mobile.pdfReflowToggle', { state }) }, () => { dialog.close(); reflow.click(); }));
+    const view = [
+      segment([['mobile.paginated', 'paginatedModeButton'], ['mobile.continuous', 'continuousModeButton']]),
+      menuRow('toc', 'mobile.tocBookmarks', () => click('leftPanelToggle'), { chevron: true }),
+      menuRow('sliders', 'mobile.readingSettings', () => click('rightPanelToggle'), { chevron: true }),
+      switchRow('gauge', 'mobile.progressToggle', document.body.classList.contains('show-reading-progress'), el => {
+        const enabled = document.body.classList.toggle('show-reading-progress');
+        storage.setItem(progressKey, String(enabled));
+        el.setAttribute('aria-checked', String(enabled));
+      })
+    ];
+    for (const [id, iconName, labelKey] of [['pdfReflowButton', 'reflow', 'mobile.pdfReflowToggle'], ['hwpPagesButton', 'pages', 'mobile.hwpPagesToggle']]) {
+      const toggle = document.getElementById(id);
+      if (toggle && !toggle.hidden) view.push(switchRow(iconName, labelKey, toggle.getAttribute('aria-pressed') === 'true', () => click(id)));
     }
-    const pages = document.getElementById('hwpPagesButton');
-    if (pages && !pages.hidden) {
-      const state = t(pages.getAttribute('aria-pressed') === 'true' ? 'common.on' : 'common.off');
-      dialog.append(button({ text: t('mobile.hwpPagesToggle', { state }) }, () => { dialog.close(); pages.click(); }));
-    }
-    for (const [label, id] of [['mobile.newMarkdown', 'newMarkdownButton'], ['mobile.tocBookmarks', 'leftPanelToggle'], ['mobile.readingSettings', 'rightPanelToggle'], ['mobile.paginated', 'paginatedModeButton'], ['mobile.continuous', 'continuousModeButton']]) dialog.append(button(label, () => click(id)));
+    const documentItems = [];
     if (document.body.classList.contains('markdown-mode')) {
-      for (const [label, id] of [['mobile.editDocument', 'markdownEditButton'], ['mobile.readMode', 'markdownViewButton'], ['markdown.saveCopy', 'saveMarkdownButton'], ['markdown.exportFile', 'saveMarkdownAsButton']]) dialog.append(button(label, () => click(id)));
-    } else if (!document.getElementById('exportMarkdownButton').disabled) dialog.append(button('mobile.exportMarkdown', () => click('exportMarkdownButton')));
-    dialog.append(button('about.open', () => click('aboutButton')));
+      documentItems.push(
+        segment([['mobile.editDocument', 'markdownEditButton'], ['mobile.readMode', 'markdownViewButton']]),
+        menuRow('save', 'markdown.saveCopy', () => click('saveMarkdownButton')),
+        menuRow('export', 'markdown.exportFile', () => click('saveMarkdownAsButton'))
+      );
+    } else if (!document.getElementById('exportMarkdownButton').disabled) {
+      documentItems.push(menuRow('export', 'mobile.exportMarkdown', () => click('exportMarkdownButton')));
+    }
+    documentItems.push(menuRow('newDocument', 'mobile.newMarkdown', () => click('newMarkdownButton')));
+    dialog.replaceChildren(
+      header('mobile.menu'),
+      section('mobile.sectionView', view),
+      section('mobile.sectionDocument', documentItems),
+      section('mobile.sectionApp', [menuRow('info', 'about.open', () => click('aboutButton'), { chevron: true })])
+    );
     dialog.showModal();
   }
   function documents() {

@@ -33,7 +33,7 @@ export async function openAboutDialog() {
     dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
   }
   const header = element("header", "about-header");
-  const title = element("h2", "", "Mins Reader");
+  const title = element("h2", "", t("app.name"));
   const close = element("button", "secondary-button");
   close.type = "button";
   setText(close, "about.close");

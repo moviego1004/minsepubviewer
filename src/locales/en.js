@@ -1,6 +1,6 @@
 // English UI strings. Keys must match ko.js (checked by test/core/i18n.test.js).
 export default {
-  "app.name": "Mins Reader",
+  "app.name": "Modu Reader",
   "app.platformDesktop": "PC Reader",
   "app.platformAndroid": "Android Reader",
 
@@ -145,7 +145,7 @@ export default {
   "records.importConfirm": "Merge the records of {count} books with this device's? Shared books gain the annotations and keep the position read last.",
   "records.imported": "Imported {booksAdded} new books, updated {booksUpdated}, {annotationsAdded} annotations.",
   "records.importFailed": "Could not import the records: {detail}",
-  "records.invalidFile": "This is not a Mins Reader records file.",
+  "records.invalidFile": "This is not a Modu Reader records file.",
   "records.newerVersion": "This records file comes from a newer version of the app. Please update the app.",
   "sync.heading": "Automatic sync",
   "sync.hint": "Keep a sync file in a folder both devices see (Google Drive, OneDrive): positions and annotations then match when the app starts and when they change. Create it on one device and choose it on the other.",
@@ -161,7 +161,7 @@ export default {
   "about.privacy": "This app does not collect personal data. Documents and reading records stay on this device and are never sent to the developer or any server.",
   "about.hwpHeading": "HWP documents",
   "about.hwpNotice": "This product was developed with reference to the HWP document file (.hwp) specification published by Hancom Inc.",
-  "about.trademark": "\"Hangul\", \"Hancom\" and \"HWP\" are trademarks of Hancom Inc. Mins Reader is not affiliated with Hancom Inc.",
+  "about.trademark": "\"Hangul\", \"Hancom\" and \"HWP\" are trademarks of Hancom Inc. Modu Reader is not affiliated with Hancom Inc.",
   "about.licensesHeading": "Open-source licenses",
   "about.licensesHint": "This app uses the open-source software and fonts below. Tap an item to read its full license.",
   "sync.off": "Sync is off.",
@@ -319,9 +319,12 @@ export default {
   "dialog.saveMarkdown": "Save Markdown file",
 
   "mobile.menu": "Menu",
-  "mobile.progressToggle": "Progress in full screen: {state}",
-  "mobile.pdfReflowToggle": "PDF reflow view: {state}",
-  "mobile.hwpPagesToggle": "HWP original pages: {state}",
+  "mobile.sectionView": "View",
+  "mobile.sectionDocument": "Document",
+  "mobile.sectionApp": "App",
+  "mobile.progressToggle": "Progress in full screen",
+  "mobile.pdfReflowToggle": "PDF reflow view",
+  "mobile.hwpPagesToggle": "HWP original pages",
   "mobile.newMarkdown": "New Markdown document",
   "mobile.tocBookmarks": "Contents & bookmarks",
   "mobile.readingSettings": "Reading settings",

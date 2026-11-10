@@ -1,4 +1,4 @@
-// Shared open-book mark for the Mins Reader store images.
+// Shared open-book mark for the 모두리더 store images.
 // Drawn on a 1024×1024 grid; callers scale it with an SVG transform.
 // Colours follow the MinsScan set: blue-700 background, white paper,
 // blue-300 text lines, blue-200 fold/shade, amber-400 accent.

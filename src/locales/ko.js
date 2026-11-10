@@ -1,6 +1,6 @@
 // 한국어 UI 문구. 키는 en.js와 같아야 한다(test/core/i18n.test.js에서 검사).
 export default {
-  "app.name": "Mins Reader",
+  "app.name": "모두리더",
   "app.platformDesktop": "PC 리더",
   "app.platformAndroid": "Android 리더",
 
@@ -145,7 +145,7 @@ export default {
   "records.importConfirm": "책 {count}권의 기록을 이 기기의 기록과 합칠까요? 같은 책은 주석을 더하고, 더 나중에 읽은 위치를 씁니다.",
   "records.imported": "새 책 {booksAdded}권, 갱신 {booksUpdated}권, 주석 {annotationsAdded}개를 가져왔습니다.",
   "records.importFailed": "기록을 가져오지 못했습니다: {detail}",
-  "records.invalidFile": "Mins Reader 기록 파일이 아닙니다.",
+  "records.invalidFile": "모두리더 기록 파일이 아닙니다.",
   "records.newerVersion": "더 새로운 버전의 앱에서 만든 기록 파일입니다. 앱을 업데이트하세요.",
   "sync.heading": "자동 동기화",
   "sync.hint": "Google Drive·OneDrive처럼 PC와 휴대폰에서 같이 보이는 폴더에 동기화 파일을 두면, 앱을 켤 때와 기록이 바뀔 때 읽던 위치·주석을 자동으로 맞춥니다. 한 기기에서 새로 만들고, 다른 기기에서는 그 파일을 선택하세요.",
@@ -161,7 +161,7 @@ export default {
   "about.privacy": "이 앱은 개인정보를 수집하지 않습니다. 문서와 읽기 기록은 기기 안에만 저장되며, 개발자나 다른 서버로 보내지 않습니다.",
   "about.hwpHeading": "HWP 문서",
   "about.hwpNotice": "본 제품은 한글과컴퓨터의 한/글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.",
-  "about.trademark": "\"한글\", \"한/글\", \"HWP\"는 (주)한글과컴퓨터의 상표입니다. Mins Reader는 (주)한글과컴퓨터와 관련이 없습니다.",
+  "about.trademark": "\"한글\", \"한/글\", \"HWP\"는 (주)한글과컴퓨터의 상표입니다. 모두리더는 (주)한글과컴퓨터와 관련이 없습니다.",
   "about.licensesHeading": "오픈소스 라이선스",
   "about.licensesHint": "이 앱은 아래 오픈소스 소프트웨어와 글꼴을 사용합니다. 항목을 누르면 라이선스 전문을 볼 수 있습니다.",
   "sync.off": "동기화를 쓰지 않습니다.",
@@ -319,10 +319,13 @@ export default {
   "dialog.saveMarkdown": "Markdown 파일 저장",
 
   "mobile.menu": "메뉴",
-  "mobile.progressToggle": "전체 화면 진행 표시: {state}",
-  "mobile.pdfReflowToggle": "PDF 재배치 보기: {state}",
-  "mobile.hwpPagesToggle": "HWP 원본 쪽 보기: {state}",
-  "mobile.newMarkdown": "새 문서 · Markdown 만들기",
+  "mobile.sectionView": "보기",
+  "mobile.sectionDocument": "문서",
+  "mobile.sectionApp": "앱",
+  "mobile.progressToggle": "전체 화면 진행 표시",
+  "mobile.pdfReflowToggle": "PDF 재배치 보기",
+  "mobile.hwpPagesToggle": "HWP 원본 쪽 보기",
+  "mobile.newMarkdown": "새 Markdown 문서",
   "mobile.tocBookmarks": "목차·책갈피",
   "mobile.readingSettings": "읽기 설정",
   "mobile.paginated": "페이지 방식",
